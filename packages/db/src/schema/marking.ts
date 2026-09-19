@@ -424,6 +424,10 @@ export const studentClassAssignmentInsertSchema = createInsertSchema(
   studentClassAssignment,
   scaColumnRefinements
 );
+export const studentClassAssignmentUpdateSchema = createUpdateSchema(
+  studentClassAssignment,
+  scaColumnRefinements
+);
 
 // Student Admission
 const studentAdmissionColumnRefinements = {
@@ -441,6 +445,10 @@ export const studentAdmissionSelectSchema = createSelectSchema(
   studentAdmissionColumnRefinements
 );
 export const studentAdmissionInsertSchema = createInsertSchema(
+  studentAdmission,
+  studentAdmissionColumnRefinements
+);
+export const studentAdmissionUpdateSchema = createUpdateSchema(
   studentAdmission,
   studentAdmissionColumnRefinements
 );
@@ -472,6 +480,10 @@ export const studentSubjectSelectionInsertSchema = createInsertSchema(
   studentSubjectSelection,
   studentSubjectSelectionColumnRefinements
 );
+export const studentSubjectSelectionUpdateSchema = createUpdateSchema(
+  studentSubjectSelection,
+  studentSubjectSelectionColumnRefinements
+);
 
 // Exam Type
 const examTypeColumnRefinements = {
@@ -492,6 +504,10 @@ export const examTypeInsertSchema = createInsertSchema(examType, {
   ...examTypeColumnRefinements,
   gradeLevel: () => gradeLevelSchema,
 });
+export const examTypeUpdateSchema = createUpdateSchema(
+  examType,
+  examTypeColumnRefinements
+);
 
 // Grade Scale
 const gradeScaleColumnRefinements = {
@@ -508,6 +524,10 @@ export const gradeScaleSelectSchema = createSelectSchema(
   gradeScaleColumnRefinements
 );
 export const gradeScaleInsertSchema = createInsertSchema(
+  gradeScale,
+  gradeScaleColumnRefinements
+);
+export const gradeScaleUpdateSchema = createUpdateSchema(
   gradeScale,
   gradeScaleColumnRefinements
 );

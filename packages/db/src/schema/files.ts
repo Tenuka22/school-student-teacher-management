@@ -1,5 +1,9 @@
 import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-valibot";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-valibot";
 import * as v from "valibot";
 
 import { user } from "./auth";
@@ -30,6 +34,13 @@ export const filesSelectSchema = createSelectSchema(files, {
   id: () => fileIdSchema,
 });
 export const filesInsertSchema = createInsertSchema(files, {
+  name: () => v.pipe(v.string(), v.minLength(1)),
+  type: () => v.pipe(v.string(), v.minLength(1)),
+  key: () => v.pipe(v.string(), v.minLength(1)),
+  size: () => v.pipe(v.number(), v.minValue(1)),
+});
+export const filesUpdateSchema = createUpdateSchema(files, {
+  id: () => fileIdSchema,
   name: () => v.pipe(v.string(), v.minLength(1)),
   type: () => v.pipe(v.string(), v.minLength(1)),
   key: () => v.pipe(v.string(), v.minLength(1)),

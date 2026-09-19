@@ -247,6 +247,13 @@ export const academicYearInsertSchema = createInsertSchema(academicYear, {
   structureSubversionKey: () =>
     v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
 });
+export const academicYearUpdateSchema = createUpdateSchema(academicYear, {
+  id: () => academicYearIdSchema,
+  startDate: () => v.optional(v.nullable(isoDatePrimitive)),
+  endDate: () => v.optional(v.nullable(isoDatePrimitive)),
+  structureVersionKey: () => v.optional(v.nullable(v.string())),
+  structureSubversionKey: () => v.optional(v.nullable(v.number())),
+});
 
 const staffPositionColumnRefinements = {
   id: () => staffPositionIdSchema,
@@ -259,6 +266,10 @@ export const staffPositionSelectSchema = createSelectSchema(
   staffPositionColumnRefinements
 );
 export const staffPositionInsertSchema = createInsertSchema(
+  staffPosition,
+  staffPositionColumnRefinements
+);
+export const staffPositionUpdateSchema = createUpdateSchema(
   staffPosition,
   staffPositionColumnRefinements
 );

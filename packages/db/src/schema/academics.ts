@@ -6,7 +6,11 @@ import {
   unique,
   integer,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-valibot";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-valibot";
 import * as v from "valibot";
 
 import { GRADE_LEVELS } from "../constants/grades";
@@ -167,6 +171,10 @@ export const classInsertSchema = createInsertSchema(
   class_,
   classColumnRefinements
 );
+export const classUpdateSchema = createUpdateSchema(
+  class_,
+  classColumnRefinements
+);
 
 const subjectAssignmentColumnRefinements = {
   id: () => subjectAssignmentIdSchema,
@@ -182,6 +190,10 @@ export const subjectAssignmentSelectSchema = createSelectSchema(
   subjectAssignmentColumnRefinements
 );
 export const subjectAssignmentInsertSchema = createInsertSchema(
+  subjectAssignment,
+  subjectAssignmentColumnRefinements
+);
+export const subjectAssignmentUpdateSchema = createUpdateSchema(
   subjectAssignment,
   subjectAssignmentColumnRefinements
 );
@@ -211,6 +223,10 @@ export const gradeSubjectConfigSelectSchema = createSelectSchema(
   gradeSubjectConfigColumnRefinements
 );
 export const gradeSubjectConfigInsertSchema = createInsertSchema(
+  gradeSubjectConfig,
+  gradeSubjectConfigColumnRefinements
+);
+export const gradeSubjectConfigUpdateSchema = createUpdateSchema(
   gradeSubjectConfig,
   gradeSubjectConfigColumnRefinements
 );

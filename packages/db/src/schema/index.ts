@@ -29,8 +29,11 @@ export {
   basketCategorySchema,
   classSelectSchema,
   classInsertSchema,
+  classUpdateSchema,
   subjectAssignmentSelectSchema,
   subjectAssignmentInsertSchema,
+  subjectAssignmentUpdateSchema,
   gradeSubjectConfigSelectSchema,
   gradeSubjectConfigInsertSchema,
+  gradeSubjectConfigUpdateSchema,
 } from "./academics";

@@ -6,7 +6,11 @@ import {
   unique,
   integer,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema, createSelectSchema } from "drizzle-valibot";
+import {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from "drizzle-valibot";
 import * as v from "valibot";
 
 import { QUALIFICATION_LEVELS } from "../constants/teachers";
@@ -101,6 +105,10 @@ export const teacherQualificationSelectSchema = createSelectSchema(
   teacherQualificationColumnRefinements
 );
 export const teacherQualificationInsertSchema = createInsertSchema(
+  teacherQualification,
+  teacherQualificationColumnRefinements
+);
+export const teacherQualificationUpdateSchema = createUpdateSchema(
   teacherQualification,
   teacherQualificationColumnRefinements
 );
