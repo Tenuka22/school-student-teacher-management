@@ -15,14 +15,16 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "drizzle-orm": "catalog:",
+    "drizzle-orm": "^0.45.2",
+    "drizzle-valibot": "^0.4.2",
     "pg": "^8.23.0",
+    "valibot": "^1.5.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@school-student-teacher-management/config": "workspace:*",
     "@types/pg": "^8.23.1",
-    "drizzle-kit": "1.0.0-rc.4",
+    "drizzle-kit": "^0.31.10",
     "typescript": "catalog:",
     "varlock": "catalog:"
   }
