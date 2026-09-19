@@ -1,0 +1,25 @@
+{
+  "name": "@school-student-teacher-management/api",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check-types": "tsc -b"
+  },
+  "dependencies": {
+    "@orpc/client": "catalog:",
+    "@orpc/openapi": "catalog:",
+    "@orpc/server": "catalog:",
+    "@orpc/zod": "catalog:",
+    "@school-student-teacher-management/auth": "workspace:*",
+    "@school-student-teacher-management/db": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@school-student-teacher-management/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

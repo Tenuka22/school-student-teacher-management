@@ -1,0 +1,3 @@
+{
+  "extends": "@school-student-teacher-management/config/tsconfig.base.json"
+}
