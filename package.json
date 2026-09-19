@@ -1,6 +1,46 @@
 {
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@school-student-teacher-management/config": "workspace:*",
+    "@types/node": "^26.4.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
+    "nx": "^23.2.0",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
+    "oxlint-plugin-react-doctor": "^0.9.13",
+    "typescript": "catalog:",
+    "ultracite": "7.12.0",
+    "varlock": "catalog:"
+  },
   "name": "school-student-teacher-management",
-  "private": true,
+  "scripts": {
+    "dev": "bun run db:start && bun run db:migrate && nx run-many -t dev",
+    "build": "nx run-many -t build",
+    "check-types": "nx run-many -t check-types",
+    "dev:web": "bun run db:start && bun run db:migrate && nx run-many -t dev --projects=web",
+    "db:push": "nx run-many -t db:push --projects=@school-student-teacher-management/db",
+    "db:studio": "nx run-many -t db:studio --projects=@school-student-teacher-management/db",
+    "db:generate": "nx run-many -t db:generate --projects=@school-student-teacher-management/db",
+    "db:migrate": "nx run-many -t db:migrate --projects=@school-student-teacher-management/db",
+    "db:start": "docker compose up -d postgres",
+    "db:watch": "docker compose up postgres",
+    "db:stop": "docker compose stop postgres",
+    "db:down": "docker compose down postgres",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "auth:generate": "cd apps/web && bun run auth:generate",
+    "check": "ultracite check",
+    "fix": "ultracite fix",
+    "prepare": "husky"
+  },
+  "type": "module",
   "workspaces": {
     "packages": [
       "apps/*",
@@ -26,37 +66,6 @@
       "drizzle-orm": "1.0.0-rc.4"
     }
   },
-  "type": "module",
-  "scripts": {
-    "dev": "nx run-many -t dev",
-    "build": "nx run-many -t build",
-    "check-types": "nx run-many -t check-types",
-    "dev:web": "nx run-many -t dev --projects=web",
-    "db:push": "nx run-many -t db:push --projects=@school-student-teacher-management/db",
-    "db:studio": "nx run-many -t db:studio --projects=@school-student-teacher-management/db",
-    "db:generate": "nx run-many -t db:generate --projects=@school-student-teacher-management/db",
-    "db:migrate": "nx run-many -t db:migrate --projects=@school-student-teacher-management/db",
-    "db:start": "docker compose up -d postgres",
-    "db:watch": "docker compose up postgres",
-    "db:stop": "docker compose stop postgres",
-    "db:down": "docker compose down postgres",
-    "docker:build": "docker compose build",
-    "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f",
-    "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
-    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
-    "auth:generate": "cd apps/web && bun run auth:generate"
-  },
-  "dependencies": {
-    "zod": "catalog:"
-  },
-  "devDependencies": {
-    "@school-student-teacher-management/config": "workspace:*",
-    "@types/node": "^26.4.1",
-    "nx": "^23.2.0",
-    "typescript": "catalog:",
-    "varlock": "catalog:"
-  },
+  "private": true,
   "packageManager": "bun@1.4.0"
 }

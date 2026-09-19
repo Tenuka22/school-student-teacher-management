@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "ultracite": {
+      "source": "haydenbleasel/ultracite",
+      "sourceType": "github",
+      "skillPath": "skills/ultracite/SKILL.md",
+      "computedHash": "94f8c0b39ae60f00d0d003faa8b853fdbde6fc785f36e3475797035500173da3"
+    }
+  }
+}

@@ -6,7 +6,8 @@
     "types": [],
     "paths": {
       "@school-student-teacher-management/ui/*": ["./src/*"]
-    }
+    },
+    "strictNullChecks": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules"]

@@ -42,7 +42,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     ports:
-      - "5432:5432"
+      - "3000:5432"
     volumes:
       - school-student-teacher-management_postgres_data:/var/lib/postgresql
     healthcheck:

@@ -5,6 +5,9 @@ import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_auth/dashboard")({
   component: RouteComponent,
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(orpc.privateData.queryOptions());
+  },
 });
 
 const RouteComponent = () => {
