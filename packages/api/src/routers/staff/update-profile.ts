@@ -1,5 +1,8 @@
-import { staff, staffUpdateSchema } from "@school-student-teacher-management/db/schema/staff";
 import { ORPCError } from "@orpc/server";
+import {
+  staff,
+  staffUpdateSchema,
+} from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import { pick } from "valibot";
 

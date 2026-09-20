@@ -48,7 +48,7 @@ interface SubjectAssignmentsListProps {
   assignments: SubjectAssignment[];
   staff: Staff[];
   isLoading?: boolean;
-  onCreateClick: () => void;
+  onCreateClick?: () => void;
   onEditClick: (assignment: SubjectAssignment) => void;
   onDeleteClick: (assignment: SubjectAssignment) => void;
   onExportClick: () => void;
@@ -127,14 +127,18 @@ export const SubjectAssignmentsList = ({
       <Empty className="min-h-[60vh] border-none">
         <EmptyTitle>No assignments yet</EmptyTitle>
         <EmptyDescription>
-          Create your first subject assignment to get started
+          {onCreateClick
+            ? "Create your first subject assignment to get started"
+            : "Subject assignments are created when a teacher is set up"}
         </EmptyDescription>
-        <EmptyContent>
-          <Button onClick={onCreateClick} size="sm">
-            <IconPlus className="mr-2 size-4" />
-            New Assignment
-          </Button>
-        </EmptyContent>
+        {onCreateClick && (
+          <EmptyContent>
+            <Button onClick={onCreateClick} size="sm">
+              <IconPlus className="mr-2 size-4" />
+              New Assignment
+            </Button>
+          </EmptyContent>
+        )}
       </Empty>
     );
   }
@@ -155,10 +159,12 @@ export const SubjectAssignmentsList = ({
           <IconFileExport className="mr-2 size-4" />
           Export
         </Button>
-        <Button onClick={onCreateClick} size="sm">
-          <IconPlus className="mr-2 size-4" />
-          New Assignment
-        </Button>
+        {onCreateClick && (
+          <Button onClick={onCreateClick} size="sm">
+            <IconPlus className="mr-2 size-4" />
+            New Assignment
+          </Button>
+        )}
       </div>
 
       <Card>

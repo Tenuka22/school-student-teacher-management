@@ -9,9 +9,11 @@ import { requireAssignmentPermission } from "../../../index";
 
 /**
  * Assign a teacher + subject to a class period slot.
- * Enforces double-booking prevention via DB UNIQUE constraints:
- * - (academicYearId, classId, dayOfWeek, periodNumber) must be unique
- * - (academicYearId, staffId, dayOfWeek, periodNumber) must be unique
+ * Enforces one-subject-per-class-per-slot via a DB UNIQUE constraint on
+ * (academicYearId, classId, dayOfWeek, periodNumber). Deliberately allows a
+ * teacher to be assigned to multiple classes in the same slot (combined
+ * sessions, e.g. one Dance/Music teacher running several classes together) -
+ * use `checkConflict` beforehand if you want to warn about that case.
  */
 export const assignClassPeriod = requireAssignmentPermission("create")
   .input(
@@ -63,15 +65,6 @@ export const assignClassPeriod = requireAssignmentPermission("create")
       ) {
         throw new ORPCError("CONFLICT", {
           message: "This class already has a subject assigned to this period",
-        });
-      }
-      if (
-        error instanceof Error &&
-        error.message.includes("class_period_assignment_teacher_slot_unique")
-      ) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "This teacher is already assigned to another class at this time",
         });
       }
       throw error;

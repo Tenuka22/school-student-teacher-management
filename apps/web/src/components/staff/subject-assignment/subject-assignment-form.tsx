@@ -93,6 +93,7 @@ interface SubjectAssignmentFormContentProps {
   isEditMode: boolean;
   isLoading: boolean;
   staff: Staff[];
+  lockedStaffId?: string;
   filteredSubjects: { subjectKey: string; gradeLevel: number }[];
   gradeOptions: number[];
   filteredClasses: { id: string; name: string }[];
@@ -108,6 +109,7 @@ const SubjectAssignmentFormContent = ({
   isEditMode,
   isLoading,
   staff,
+  lockedStaffId,
   filteredSubjects,
   gradeOptions,
   filteredClasses,
@@ -119,35 +121,44 @@ const SubjectAssignmentFormContent = ({
       </div>
     )}
 
-    {!isEditMode && (
-      <Field>
-        <FieldLabel htmlFor="teacher">Teacher *</FieldLabel>
-        <Select
-          value={formData.staffId}
-          onValueChange={(value) => {
-            if (value) {
-              handleChange("staffId", value);
-            }
-          }}
-        >
-          <SelectTrigger
-            id="teacher"
-            disabled={isLoading}
-            data-invalid={errors.staffId ? true : undefined}
+    {!isEditMode &&
+      (lockedStaffId ? (
+        <Field>
+          <FieldLabel>Teacher</FieldLabel>
+          <div className="bg-muted rounded-md px-3 py-2 text-sm">
+            {staff.find((s) => s.id === lockedStaffId)?.name ??
+              "Selected teacher"}
+          </div>
+        </Field>
+      ) : (
+        <Field>
+          <FieldLabel htmlFor="teacher">Teacher *</FieldLabel>
+          <Select
+            value={formData.staffId}
+            onValueChange={(value) => {
+              if (value) {
+                handleChange("staffId", value);
+              }
+            }}
           >
-            <SelectValue placeholder="Select a teacher" />
-          </SelectTrigger>
-          <SelectContent>
-            {staff.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors.staffId && <FieldError>{errors.staffId}</FieldError>}
-      </Field>
-    )}
+            <SelectTrigger
+              id="teacher"
+              disabled={isLoading}
+              data-invalid={errors.staffId ? true : undefined}
+            >
+              <SelectValue placeholder="Select a teacher" />
+            </SelectTrigger>
+            <SelectContent>
+              {staff.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.staffId && <FieldError>{errors.staffId}</FieldError>}
+        </Field>
+      ))}
 
     <Field>
       <FieldLabel htmlFor="gradeLevel">Grade Level *</FieldLabel>
@@ -243,6 +254,7 @@ interface SubjectAssignmentFormProps {
   formId: string;
   academicYearId: string;
   staff: Staff[];
+  lockedStaffId?: string;
   onSubmit: (data: unknown) => Promise<void>;
   isLoading?: boolean;
   initialData?: {
@@ -259,6 +271,7 @@ export const SubjectAssignmentForm = ({
   formId,
   academicYearId,
   staff,
+  lockedStaffId,
   onSubmit,
   isLoading = false,
   initialData,
@@ -266,7 +279,7 @@ export const SubjectAssignmentForm = ({
   const isEditMode = !!initialData;
 
   const [formData, setFormData] = useState({
-    staffId: initialData?.staffId ?? "",
+    staffId: initialData?.staffId ?? lockedStaffId ?? "",
     academicYearId: initialData?.academicYearId ?? academicYearId,
     subjectKey: initialData?.subjectKey ?? "",
     gradeLevel: initialData?.gradeLevel.toString() ?? "",
@@ -357,6 +370,7 @@ export const SubjectAssignmentForm = ({
       isEditMode={isEditMode}
       isLoading={isLoading}
       staff={staff}
+      lockedStaffId={lockedStaffId}
       filteredSubjects={filteredSubjects}
       gradeOptions={gradeOptions}
       filteredClasses={filteredClasses}

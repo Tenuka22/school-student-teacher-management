@@ -1,8 +1,8 @@
+import { ORPCError } from "@orpc/server";
 import {
   teacherQualification,
   teacherQualificationIdSchema,
 } from "@school-student-teacher-management/db/schema/qualifications";
-import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 

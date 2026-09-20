@@ -1,9 +1,9 @@
+import { ORPCError } from "@orpc/server";
 import {
   class_,
   classIdSchema,
   classUpdateSchema,
 } from "@school-student-teacher-management/db/schema/academics";
-import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { pick } from "valibot";

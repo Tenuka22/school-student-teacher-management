@@ -1,8 +1,8 @@
+import { ORPCError } from "@orpc/server";
 import {
   subjectAssignment,
   subjectAssignmentIdSchema,
 } from "@school-student-teacher-management/db/schema/academics";
-import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 

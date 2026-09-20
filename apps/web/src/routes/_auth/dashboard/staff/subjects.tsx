@@ -4,8 +4,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import * as v from "valibot";
 
-import { SubjectAssignmentCsvImport } from "@/components/staff/subject-assignment/subject-assignment-csv-import";
 import { SubjectAssignmentDialogs } from "@/components/staff/subject-assignment/subject-assignment-dialogs";
 import { SubjectAssignmentsList } from "@/components/staff/subject-assignment/subject-assignments-list";
 import { downloadExportFile } from "@/lib/download-export";
@@ -19,7 +19,13 @@ interface AcademicYear {
   isCurrent: boolean;
 }
 
+const searchSchema = v.object({
+  staffId: v.optional(v.string()),
+});
+
 const RouteComponent = () => {
+  const { staffId } = Route.useSearch();
+
   const currentYearQuery = useQuery(
     orpc.staff.listAcademicYears.queryOptions()
   );
@@ -40,7 +46,7 @@ const RouteComponent = () => {
     orpc.staff.listSubjectAssignments.queryOptions({
       input: {
         academicYearId: currentYear?.id ?? "",
-        staffId: undefined,
+        staffId: staffId as never,
         gradeLevel: undefined,
         subjectKey: undefined,
       },
@@ -70,10 +76,7 @@ const RouteComponent = () => {
   const [selectedAssignment, setSelectedAssignment] =
     useState<SubjectAssignment | null>(null);
 
-  const handleCreateClick = useCallback(() => {
-    setSelectedAssignment(null);
-    setIsCreateDialogOpen(true);
-  }, []);
+  const handleCreateClick = useCallback(() => setIsCreateDialogOpen(true), []);
 
   const handleEditClick = useCallback((assignment: SubjectAssignment) => {
     setSelectedAssignment(assignment);
@@ -157,22 +160,6 @@ const RouteComponent = () => {
     }
   }, [selectedAssignment, deleteMutation, listQuery]);
 
-  const handleImportCreate = useCallback(
-    async (data: Record<string, unknown>) => {
-      await createMutation.mutateAsync(data as never);
-      await listQuery.refetch();
-    },
-    [createMutation, listQuery]
-  );
-
-  const handleImportUpdate = useCallback(
-    async (id: string, data: Record<string, unknown>) => {
-      await updateMutation.mutateAsync({ id, ...data } as never);
-      await listQuery.refetch();
-    },
-    [updateMutation, listQuery]
-  );
-
   const assignmentList = useMemo(() => {
     const data = listQuery.data as unknown[] | undefined;
     return (data || []) as SubjectAssignment[];
@@ -183,30 +170,26 @@ const RouteComponent = () => {
     return (data || []) as Staff[];
   }, [staffQuery.data]);
 
+  const scopedTeacher = staffId
+    ? staffList.find((s) => s.id === staffId)
+    : undefined;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">Subject Assignments</h1>
-          <p className="text-muted-foreground text-sm">
-            Assign subjects to teachers per academic year and grade
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <SubjectAssignmentCsvImport
-            academicYearId={currentYear?.id}
-            assignments={assignmentList}
-            onCreate={handleImportCreate}
-            onUpdate={handleImportUpdate}
-          />
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">Subject Assignments</h1>
+        <p className="text-muted-foreground text-sm">
+          {scopedTeacher
+            ? `Subjects assigned to ${scopedTeacher.name} this academic year - these are their preferred / most valued subjects.`
+            : "View this academic year's subject assignments. New assignments are created as part of setting up a teacher."}
+        </p>
       </div>
 
       <SubjectAssignmentsList
         assignments={assignmentList}
         staff={staffList}
         isLoading={listQuery.isLoading || staffQuery.isLoading}
-        onCreateClick={handleCreateClick}
+        onCreateClick={staffId ? handleCreateClick : undefined}
         onEditClick={handleEditClick}
         onDeleteClick={handleDeleteClick}
         onExportClick={handleExportClick}
@@ -214,7 +197,8 @@ const RouteComponent = () => {
 
       <SubjectAssignmentDialogs
         academicYearId={currentYear?.id}
-        staff={staffList}
+        staff={staffId ? staffList.filter((s) => s.id === staffId) : staffList}
+        lockedStaffId={staffId}
         selectedAssignment={selectedAssignment}
         isCreateOpen={isCreateDialogOpen}
         onCreateOpenChange={setIsCreateDialogOpen}
@@ -235,6 +219,7 @@ const RouteComponent = () => {
 
 export const Route = createFileRoute("/_auth/dashboard/staff/subjects")({
   component: RouteComponent,
+  validateSearch: searchSchema,
   loader: async ({ context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(

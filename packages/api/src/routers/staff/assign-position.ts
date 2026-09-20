@@ -1,8 +1,8 @@
+import { ORPCError } from "@orpc/server";
 import {
   staffPosition,
   staffPositionInsertSchema,
 } from "@school-student-teacher-management/db/schema/staff";
-import { ORPCError } from "@orpc/server";
 import { pick } from "valibot";
 
 import { adminProcedure } from "../../index";

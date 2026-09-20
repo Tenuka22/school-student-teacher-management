@@ -1,4 +1,5 @@
 import { exportAllTimetablesExcel } from "./export-all-timetables-excel";
+import { exportClassTeacherHistoryExcel } from "./export-class-teacher-history-excel";
 import { exportClassTimetablePdf } from "./export-class-timetable-pdf";
 import { exportClassesExcel } from "./export-classes-excel";
 import { exportStaffPositionsExcel } from "./export-staff-positions-excel";
@@ -14,5 +15,6 @@ export const exportsRouter = {
   staffPositionsExcel: exportStaffPositionsExcel,
   classesExcel: exportClassesExcel,
   classTimetablePdf: exportClassTimetablePdf,
+  classTeacherHistoryExcel: exportClassTeacherHistoryExcel,
   allTimetablesExcel: exportAllTimetablesExcel,
 };

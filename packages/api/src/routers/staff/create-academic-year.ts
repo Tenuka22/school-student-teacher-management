@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { isStructureEntryOfferedBySchool } from "@school-student-teacher-management/db/config/school";
 import {
   COMPULSORY_BASKET_CATEGORY,
@@ -10,7 +11,6 @@ import {
   academicYear,
   academicYearInsertSchema,
 } from "@school-student-teacher-management/db/schema/staff";
-import { ORPCError } from "@orpc/server";
 import { desc } from "drizzle-orm";
 import { object, optional, pick } from "valibot";
 
@@ -88,6 +88,12 @@ export const createAcademicYear = adminProcedure
         endDate: input.endDate ?? null,
         structureVersionKey,
         structureSubversionKey: structureSubversionKey ?? null,
+        // The very first academic year ever created has nothing to be
+        // "current" relative to — without this the whole app stays locked
+        // behind "select an academic year" forever, since nothing is ever
+        // marked current. Every subsequent year is created inactive and
+        // switched to explicitly.
+        isCurrent: !mostRecent,
       })
       .returning();
 

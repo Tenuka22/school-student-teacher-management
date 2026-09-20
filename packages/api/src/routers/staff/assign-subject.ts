@@ -1,8 +1,8 @@
+import { ORPCError } from "@orpc/server";
 import {
   subjectAssignment,
   subjectAssignmentInsertSchema,
 } from "@school-student-teacher-management/db/schema/academics";
-import { ORPCError } from "@orpc/server";
 import { pick } from "valibot";
 
 import { adminProcedure } from "../../index";

@@ -22,6 +22,27 @@
       "when": 1789841051217,
       "tag": "0002_eager_kinsey_walden",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789893811771,
+      "tag": "0003_quick_joshua_kane",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789894946277,
+      "tag": "0004_silly_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789896861637,
+      "tag": "0005_broken_maddog",
+      "breakpoints": true
     }
   ]
 }

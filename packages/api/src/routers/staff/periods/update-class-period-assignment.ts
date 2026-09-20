@@ -68,15 +68,6 @@ export const updateClassPeriodAssignment = requireAssignmentPermission("update")
           message: "This class already has a subject assigned to this period",
         });
       }
-      if (
-        error instanceof Error &&
-        error.message.includes("class_period_assignment_teacher_slot_unique")
-      ) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "This teacher is already assigned to another class at this time",
-        });
-      }
       throw error;
     }
   });

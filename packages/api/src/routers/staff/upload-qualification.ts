@@ -1,9 +1,12 @@
+import { ORPCError } from "@orpc/server";
 import {
   teacherQualification,
   teacherQualificationInsertSchema,
 } from "@school-student-teacher-management/db/schema/qualifications";
-import { staff, staffIdSchema } from "@school-student-teacher-management/db/schema/staff";
-import { ORPCError } from "@orpc/server";
+import {
+  staff,
+  staffIdSchema,
+} from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import { pick } from "valibot";
 import * as v from "valibot";

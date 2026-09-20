@@ -14,7 +14,9 @@ import { requireAssignmentPermission } from "../../../index";
  * Returns list of conflicts found (if any).
  * Two types of conflicts:
  * 1. Class already has a different subject/teacher at this slot
- * 2. Teacher already assigned to another class at this time
+ * 2. Teacher already assigned to another class at this time - informational
+ *    only, not blocking: combined sessions (e.g. Dance/Music taught across
+ *    several classes at once) are a legitimate reason for this to happen.
  */
 export const checkConflict = requireAssignmentPermission("read")
   .input(
@@ -71,7 +73,8 @@ export const checkConflict = requireAssignmentPermission("read")
     if (teacherConflict) {
       conflicts.push({
         type: "teacher_slot",
-        message: `Teacher already assigned to another class at this time`,
+        message:
+          "Teacher already assigned to another class at this time. Is this a mistake, or an intentional combined session?",
       });
     }
 

@@ -25,11 +25,12 @@ type Staff = typeof staff.$inferSelect;
 interface SubjectAssignmentDialogsProps {
   academicYearId: string | undefined;
   staff: Staff[];
+  lockedStaffId?: string;
   selectedAssignment: SubjectAssignment | null;
-  isCreateOpen: boolean;
-  onCreateOpenChange: (open: boolean) => void;
-  isCreatePending: boolean;
-  onCreateSubmit: (data: unknown) => Promise<void>;
+  isCreateOpen?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
+  isCreatePending?: boolean;
+  onCreateSubmit?: (data: unknown) => Promise<void>;
   isEditOpen: boolean;
   onEditOpenChange: (open: boolean) => void;
   isEditPending: boolean;
@@ -43,6 +44,7 @@ interface SubjectAssignmentDialogsProps {
 export const SubjectAssignmentDialogs = ({
   academicYearId,
   staff,
+  lockedStaffId,
   selectedAssignment,
   isCreateOpen,
   onCreateOpenChange,
@@ -58,45 +60,48 @@ export const SubjectAssignmentDialogs = ({
   onConfirmDelete,
 }: SubjectAssignmentDialogsProps) => (
   <>
-    {/* Create Dialog */}
-    <Dialog open={isCreateOpen} onOpenChange={onCreateOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
-        <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Create Subject Assignment</DialogTitle>
-          <DialogDescription>
-            Assign a subject to a teacher for this academic year
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
-          {academicYearId && (
-            <SubjectAssignmentForm
-              formId="create-subject-assignment-form"
-              academicYearId={academicYearId}
-              staff={staff}
-              onSubmit={onCreateSubmit}
-              isLoading={isCreatePending}
-            />
-          )}
-        </div>
-        <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onCreateOpenChange(false)}
-            disabled={isCreatePending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form="create-subject-assignment-form"
-            disabled={isCreatePending}
-          >
-            {isCreatePending ? "Saving..." : "Save Assignment"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    {/* Create Dialog - only rendered when the caller wires create handlers */}
+    {onCreateOpenChange && onCreateSubmit && (
+      <Dialog open={!!isCreateOpen} onOpenChange={onCreateOpenChange}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <DialogTitle>Create Subject Assignment</DialogTitle>
+            <DialogDescription>
+              Assign a subject to a teacher for this academic year
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+            {academicYearId && (
+              <SubjectAssignmentForm
+                formId="create-subject-assignment-form"
+                academicYearId={academicYearId}
+                staff={staff}
+                lockedStaffId={lockedStaffId}
+                onSubmit={onCreateSubmit}
+                isLoading={isCreatePending}
+              />
+            )}
+          </div>
+          <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onCreateOpenChange(false)}
+              disabled={isCreatePending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="create-subject-assignment-form"
+              disabled={isCreatePending}
+            >
+              {isCreatePending ? "Saving..." : "Save Assignment"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
 
     {/* Edit Dialog */}
     <Dialog open={isEditOpen} onOpenChange={onEditOpenChange}>

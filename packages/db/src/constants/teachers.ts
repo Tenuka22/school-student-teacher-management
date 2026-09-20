@@ -85,6 +85,26 @@ export const EMPLOYMENT_STATUSES = {
 
 export type EmploymentStatus = keyof typeof EMPLOYMENT_STATUSES;
 
+// ─── Class Teacher Reassignment Reasons ───────────────────────────────────────
+
+/**
+ * Why a class's homeroom teacher was replaced or cleared mid-year. Required
+ * whenever an existing assignment changes (replacement or clearing), never
+ * required for a brand-new assignment onto an empty slot.
+ */
+export const TEACHER_REASSIGNMENT_REASONS = {
+  resigned: { label: "Resigned" },
+  transferred: { label: "Transferred to another school" },
+  retired: { label: "Retired" },
+  extendedLeave: { label: "Extended leave" },
+  restructuring: { label: "Class/section restructuring" },
+  performance: { label: "Performance-related reassignment" },
+  other: { label: "Other" },
+} as const;
+
+export type TeacherReassignmentReason =
+  keyof typeof TEACHER_REASSIGNMENT_REASONS;
+
 // ─── Qualification Levels (Ordered Hierarchy) ─────────────────────────────────
 
 /**

@@ -1,5 +1,4 @@
 import type { class_ as classTable } from "@school-student-teacher-management/db/schema/academics";
-import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,11 +20,9 @@ import { AssignTeacherForm } from "@/components/staff/class-assignment/assign-te
 import { ClassForm } from "@/components/staff/class-assignment/class-form";
 
 type Class = typeof classTable.$inferSelect;
-type Staff = typeof staff.$inferSelect;
 
 interface ClassDialogsProps {
   academicYearId: string | undefined;
-  staff: Staff[];
   selectedClass: Class | null;
   isCreateOpen: boolean;
   onCreateOpenChange: (open: boolean) => void;
@@ -47,7 +44,6 @@ interface ClassDialogsProps {
 
 export const ClassDialogs = ({
   academicYearId,
-  staff,
   selectedClass,
   isCreateOpen,
   onCreateOpenChange,
@@ -153,7 +149,6 @@ export const ClassDialogs = ({
           {selectedClass && (
             <AssignTeacherForm
               formId="assign-teacher-form"
-              staff={staff}
               currentTeacherId={selectedClass.homeroomTeacherId}
               onSubmit={onAssignTeacherSubmit}
               isLoading={isAssignTeacherPending}

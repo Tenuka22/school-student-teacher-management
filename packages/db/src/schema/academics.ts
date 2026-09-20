@@ -78,6 +78,53 @@ export const class_ = pgTable(
   ]
 );
 
+export type ClassTeacherAssignmentHistoryId = Brand<
+  string,
+  "ClassTeacherAssignmentHistoryId"
+>;
+export const classTeacherAssignmentHistoryIdSchema = v.pipe(
+  v.string(),
+  brand<string, "ClassTeacherAssignmentHistoryId">()
+);
+
+const teacherChangeTypeSchema = v.picklist(["assigned", "replaced", "cleared"]);
+export { teacherChangeTypeSchema };
+
+/**
+ * Full audit trail of homeroom teacher changes for a class, independent of
+ * the current `class.homeroomTeacherId` value. Every assignment, replacement,
+ * or clearing action writes one row here for historical compatibility with
+ * year-over-year reporting. `reason`/`note` are required by the API for
+ * "replaced"/"cleared" changes (mid-year teacher changes need an audit
+ * trail), optional for a first-time "assigned" onto an empty slot.
+ */
+export const classTeacherAssignmentHistory = pgTable(
+  "class_teacher_assignment_history",
+  {
+    id: text("id").primaryKey(),
+    classId: text("class_id")
+      .notNull()
+      .references(() => class_.id, { onDelete: "cascade" }),
+    academicYearId: text("academic_year_id")
+      .notNull()
+      .references(() => academicYear.id, { onDelete: "cascade" }),
+    previousTeacherId: text("previous_teacher_id").references(() => staff.id, {
+      onDelete: "set null",
+    }),
+    newTeacherId: text("new_teacher_id").references(() => staff.id, {
+      onDelete: "set null",
+    }),
+    changeType: text("change_type").notNull(),
+    reason: text("reason"),
+    note: text("note"),
+    changedAt: timestamp("changed_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("class_teacher_history_class_idx").on(table.classId),
+    index("class_teacher_history_year_idx").on(table.academicYearId),
+  ]
+);
+
 /**
  * What a teacher teaches in a given year.
  * `subjectKey` maps to a constant from the subject enums.
@@ -174,6 +221,26 @@ export const classInsertSchema = createInsertSchema(
 export const classUpdateSchema = createUpdateSchema(
   class_,
   classColumnRefinements
+);
+
+const classTeacherAssignmentHistoryColumnRefinements = {
+  id: () => classTeacherAssignmentHistoryIdSchema,
+  classId: () => classIdSchema,
+  academicYearId: () => academicYearIdSchema,
+  previousTeacherId: () => v.optional(v.nullable(staffIdSchema)),
+  newTeacherId: () => v.optional(v.nullable(staffIdSchema)),
+  changeType: () => teacherChangeTypeSchema,
+  reason: () => v.optional(v.nullable(v.string())),
+  note: () => v.optional(v.nullable(v.string())),
+};
+
+export const classTeacherAssignmentHistorySelectSchema = createSelectSchema(
+  classTeacherAssignmentHistory,
+  classTeacherAssignmentHistoryColumnRefinements
+);
+export const classTeacherAssignmentHistoryInsertSchema = createInsertSchema(
+  classTeacherAssignmentHistory,
+  classTeacherAssignmentHistoryColumnRefinements
 );
 
 const subjectAssignmentColumnRefinements = {

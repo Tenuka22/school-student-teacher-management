@@ -1,9 +1,13 @@
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
+import { Button } from "@school-student-teacher-management/ui/components/button";
+import { IconUsersPlus } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { NewTeacherNextStepsDialog } from "@/components/staff/teacher-management/new-teacher-next-steps-dialog";
+import { PortTeachersDialog } from "@/components/staff/teacher-management/port-teachers-dialog";
 import { TeacherCsvImport } from "@/components/staff/teacher-management/teacher-csv-import";
 import { TeacherDialogs } from "@/components/staff/teacher-management/teacher-dialogs";
 import { TeachersList } from "@/components/staff/teacher-management/teachers-list";
@@ -11,9 +15,26 @@ import { downloadExportFile } from "@/lib/download-export";
 import { orpc } from "@/utils/orpc";
 
 type Staff = typeof staff.$inferSelect;
+interface AcademicYear {
+  id: string;
+  year: number;
+  isCurrent: boolean;
+}
 
 const RouteComponent = () => {
+  const navigate = useNavigate();
   const listQuery = useQuery(orpc.staff.listStaff.queryOptions());
+  const currentYearQuery = useQuery(
+    orpc.staff.listAcademicYears.queryOptions()
+  );
+  const currentYear = useMemo(() => {
+    const years = currentYearQuery.data as unknown[] | undefined;
+    return (
+      (years?.find(
+        (y) => (y as Record<string, unknown>).isCurrent === true
+      ) as AcademicYear) || undefined
+    );
+  }, [currentYearQuery.data]);
   const createMutation = useMutation(orpc.staff.createStaff.mutationOptions());
   const updateMutation = useMutation(orpc.staff.updateStaff.mutationOptions());
   const deleteMutation = useMutation(orpc.staff.deleteStaff.mutationOptions());
@@ -28,6 +49,8 @@ const RouteComponent = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isPortDialogOpen, setIsPortDialogOpen] = useState(false);
+  const [newTeacher, setNewTeacher] = useState<Staff | null>(null);
 
   const [selectedTeacher, setSelectedTeacher] = useState<Staff | null>(null);
 
@@ -43,6 +66,26 @@ const RouteComponent = () => {
     setIsEditDialogOpen(true);
   }, []);
 
+  const handleAssignSubjectsClick = useCallback(
+    (teacher: Staff) => {
+      navigate({
+        to: "/dashboard/staff/subjects",
+        search: { staffId: teacher.id },
+      });
+    },
+    [navigate]
+  );
+
+  const handleManageTimetableClick = useCallback(
+    (teacher: Staff) => {
+      navigate({
+        to: "/dashboard/staff/teacher-timetable",
+        search: { staffId: teacher.id },
+      });
+    },
+    [navigate]
+  );
+
   const handleViewClick = useCallback((teacher: Staff) => {
     setSelectedTeacher(teacher);
     setIsViewDialogOpen(true);
@@ -55,9 +98,12 @@ const RouteComponent = () => {
 
   const handleCreateSubmit = useCallback(
     async (data: unknown) => {
-      await createMutation.mutateAsync(data as never);
+      const created = (await createMutation.mutateAsync(
+        data as never
+      )) as unknown as Staff;
       await listQuery.refetch();
       setIsCreateDialogOpen(false);
+      setNewTeacher(created);
     },
     [createMutation, listQuery]
   );
@@ -153,6 +199,10 @@ const RouteComponent = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setIsPortDialogOpen(true)}>
+            <IconUsersPlus className="mr-2 size-4" />
+            Import from Previous Year
+          </Button>
           <TeacherCsvImport
             teachers={teachers}
             onCreate={handleImportCreate}
@@ -168,6 +218,8 @@ const RouteComponent = () => {
         onEditClick={handleEditClick}
         onViewClick={handleViewClick}
         onDeleteClick={handleDeleteClick}
+        onAssignSubjectsClick={handleAssignSubjectsClick}
+        onManageTimetableClick={handleManageTimetableClick}
         onExportClick={handleExportClick}
       />
 
@@ -188,6 +240,29 @@ const RouteComponent = () => {
         isDeleteOpen={isDeleteDialogOpen}
         onDeleteOpenChange={setIsDeleteDialogOpen}
         onConfirmDelete={handleConfirmDelete}
+      />
+
+      <PortTeachersDialog
+        isOpen={isPortDialogOpen}
+        onOpenChange={setIsPortDialogOpen}
+        academicYearId={currentYear?.id}
+      />
+
+      <NewTeacherNextStepsDialog
+        teacher={newTeacher}
+        onOpenChange={(open) => {
+          if (!open) {
+            setNewTeacher(null);
+          }
+        }}
+        onAssignSubjectsClick={(teacher) => {
+          setNewTeacher(null);
+          handleAssignSubjectsClick(teacher);
+        }}
+        onManageTimetableClick={(teacher) => {
+          setNewTeacher(null);
+          handleManageTimetableClick(teacher);
+        }}
       />
     </div>
   );

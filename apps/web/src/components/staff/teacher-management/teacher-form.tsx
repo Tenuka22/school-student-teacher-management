@@ -30,6 +30,8 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import * as v from "valibot";
 
+import { DatePicker } from "@/components/date-picker";
+
 type Staff = typeof staff.$inferSelect;
 
 interface TeacherFormProps {
@@ -209,12 +211,13 @@ export const TeacherForm = ({
           </Field>
 
           <Field>
-            <FieldLabel>Birth Date</FieldLabel>
-            <Input
-              type="date"
+            <FieldLabel htmlFor="birthDate">Birth Date</FieldLabel>
+            <DatePicker
+              id="birthDate"
               value={formData.birthDate}
-              onChange={(e) => handleChange("birthDate", e.target.value)}
+              onChange={(isoDate) => handleChange("birthDate", isoDate)}
               disabled={isLoading}
+              disableFuture
             />
           </Field>
         </FieldGroup>

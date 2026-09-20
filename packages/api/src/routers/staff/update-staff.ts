@@ -1,5 +1,8 @@
-import { staff, staffUpdateSchema } from "@school-student-teacher-management/db/schema/staff";
 import { ORPCError } from "@orpc/server";
+import {
+  staff,
+  staffUpdateSchema,
+} from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { pick } from "valibot";
@@ -53,11 +56,24 @@ export const updateStaff = adminProcedure
 
     const { id, ...updates } = input;
 
-    const [record] = await context.db
-      .update(staff)
-      .set(updates)
-      .where(eq(staff.id, id))
-      .returning();
+    let record: typeof staff.$inferSelect | undefined;
+    try {
+      [record] = await context.db
+        .update(staff)
+        .set(updates)
+        .where(eq(staff.id, id))
+        .returning();
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("staff_nic_unique")
+      ) {
+        throw new ORPCError("CONFLICT", {
+          message: "A staff member with this NIC already exists",
+        });
+      }
+      throw error;
+    }
 
     if (!record) {
       throw new ORPCError("INTERNAL_SERVER_ERROR");

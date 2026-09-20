@@ -5,19 +5,13 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
 } from "@school-student-teacher-management/ui/components/sidebar";
-import {
-  IconCommand,
-  IconLayoutDashboard,
-  IconUsers,
-} from "@tabler/icons-react";
+import { IconLayoutDashboard, IconUsers } from "@tabler/icons-react";
 import * as React from "react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { AcademicYearSwitcher } from "@/components/staff/academic-year-switcher/academic-year-switcher";
 
 const navMain = [
   {
@@ -48,6 +42,10 @@ const navMain = [
         url: "/dashboard/staff/periods",
       },
       {
+        title: "Teacher Timetable",
+        url: "/dashboard/staff/teacher-timetable",
+      },
+      {
         title: "Historical Data",
         url: "/dashboard/staff/history",
       },
@@ -66,22 +64,7 @@ export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 export const AppSidebar = ({ user, ...props }: AppSidebarProps) => (
   <Sidebar variant="inset" {...props}>
     <SidebarHeader>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            size="lg"
-            render={<a href="/dashboard" aria-label="School Management" />}
-          >
-            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-              <IconCommand className="size-4" />
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">School</span>
-              <span className="truncate text-xs">Management</span>
-            </div>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      <AcademicYearSwitcher />
     </SidebarHeader>
     <SidebarContent>
       <NavMain items={navMain} />

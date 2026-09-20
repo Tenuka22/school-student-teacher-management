@@ -30,6 +30,8 @@ import {
   IconFileExport,
   IconPlus,
   IconAlertCircle,
+  IconBook,
+  IconCalendarTime,
 } from "@tabler/icons-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -43,6 +45,8 @@ interface TeachersListProps {
   onEditClick: (teacher: Staff) => void;
   onViewClick: (teacher: Staff) => void;
   onDeleteClick: (teacher: Staff) => void;
+  onAssignSubjectsClick: (teacher: Staff) => void;
+  onManageTimetableClick: (teacher: Staff) => void;
   onExportClick: () => void;
 }
 
@@ -82,6 +86,8 @@ const TeacherRow = ({
   onEditClick,
   onViewClick,
   onDeleteClick,
+  onAssignSubjectsClick,
+  onManageTimetableClick,
 }: {
   teacher: Staff;
   isSelected: boolean;
@@ -89,6 +95,8 @@ const TeacherRow = ({
   onEditClick: () => void;
   onViewClick: () => void;
   onDeleteClick: () => void;
+  onAssignSubjectsClick: () => void;
+  onManageTimetableClick: () => void;
 }) => (
   <TableRow>
     <TableCell>
@@ -130,6 +138,14 @@ const TeacherRow = ({
           <DropdownMenuItem onClick={onEditClick}>
             Edit Details
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={onAssignSubjectsClick}>
+            <IconBook className="mr-2 size-4" />
+            Assign Subjects
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onManageTimetableClick}>
+            <IconCalendarTime className="mr-2 size-4" />
+            Manage Timetable
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={onDeleteClick}
             className="text-destructive"
@@ -149,6 +165,8 @@ export const TeachersList = ({
   onEditClick,
   onViewClick,
   onDeleteClick,
+  onAssignSubjectsClick,
+  onManageTimetableClick,
   onExportClick,
 }: TeachersListProps) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -347,6 +365,8 @@ export const TeachersList = ({
               onEditClick={() => onEditClick(teacher)}
               onViewClick={() => onViewClick(teacher)}
               onDeleteClick={() => onDeleteClick(teacher)}
+              onAssignSubjectsClick={() => onAssignSubjectsClick(teacher)}
+              onManageTimetableClick={() => onManageTimetableClick(teacher)}
             />
           ))}
         </TableBody>

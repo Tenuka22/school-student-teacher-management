@@ -80,10 +80,15 @@ export const periodConfig = pgTable(
 );
 
 /**
- * Class period assignment: maps (class, day, period) → (teacher, subject) for a given academic year.
- * Core timetable table. Enforces no double-booking at the database level via UNIQUE constraints.
+ * Class period assignment: maps (class, day, period) -> (teacher, subject) for a given academic year.
+ * Core timetable table. Enforces no double-booking of a *class* at the database
+ * level via a UNIQUE constraint (a class can't have two subjects in the same
+ * slot). Deliberately does NOT enforce single-class-per-teacher-per-slot:
+ * combined sessions (e.g. one Dance/Music teacher running the same period
+ * across multiple classes at once) are a legitimate, intentional overlap.
+ * `checkConflict` still surfaces this as a warning so an overlap is never
+ * created by accident.
  * - (academicYearId, classId, dayOfWeek, periodNumber) UNIQUE: no duplicate slots for a class.
- * - (academicYearId, staffId, dayOfWeek, periodNumber) UNIQUE: no teacher teaching two classes at once.
  */
 export const classPeriodAssignment = pgTable(
   "class_period_assignment",
@@ -114,12 +119,6 @@ export const classPeriodAssignment = pgTable(
     unique("class_period_assignment_class_slot_unique").on(
       table.academicYearId,
       table.classId,
-      table.dayOfWeek,
-      table.periodNumber
-    ),
-    unique("class_period_assignment_teacher_slot_unique").on(
-      table.academicYearId,
-      table.staffId,
       table.dayOfWeek,
       table.periodNumber
     ),

@@ -67,7 +67,10 @@ export const staff = pgTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    email: text("email").unique(),
+    // Not unique: schools may legitimately reuse a family/shared email across
+    // staff, or re-add a former teacher whose email was already recorded on
+    // an unrelated record. NIC (below) is the real unique identity.
+    email: text("email"),
 
     // Personal information (optional - teacher can fill or skip)
     nic: text("nic").unique(),

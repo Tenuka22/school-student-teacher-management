@@ -1,5 +1,8 @@
-import { staff, staffInsertSchema } from "@school-student-teacher-management/db/schema/staff";
 import { ORPCError } from "@orpc/server";
+import {
+  staff,
+  staffInsertSchema,
+} from "@school-student-teacher-management/db/schema/staff";
 import { pick } from "valibot";
 
 import { requireStaffPermission } from "../../index";
@@ -18,18 +21,31 @@ export const createStaff = requireStaffPermission("create")
   .handler(async ({ input, context }) => {
     const id = crypto.randomUUID();
 
-    const [record] = await context.db
-      .insert(staff)
-      .values({
-        id,
-        name: input.name,
-        email: input.email,
-        nic: input.nic,
-        phone: input.phone,
-        gender: input.gender,
-        birthDate: input.birthDate,
-      })
-      .returning();
+    let record: typeof staff.$inferSelect | undefined;
+    try {
+      [record] = await context.db
+        .insert(staff)
+        .values({
+          id,
+          name: input.name,
+          email: input.email,
+          nic: input.nic,
+          phone: input.phone,
+          gender: input.gender,
+          birthDate: input.birthDate,
+        })
+        .returning();
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("staff_nic_unique")
+      ) {
+        throw new ORPCError("CONFLICT", {
+          message: "A staff member with this NIC already exists",
+        });
+      }
+      throw error;
+    }
 
     if (!record) {
       throw new ORPCError("INTERNAL_SERVER_ERROR");
