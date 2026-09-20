@@ -1,18 +1,15 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  eachDayOfInterval,
-  endOfMonth,
   format,
+  getDate,
   getDay,
+  getDaysInMonth,
   getMonth,
   getYear,
-  parseISO,
-  startOfMonth,
 } from "date-fns";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import type { AttendanceTeacher } from "@/components/staff/attendance/attendance-teacher-groups";
 import { orpc } from "@/utils/orpc";
 
 interface AcademicYear {
@@ -21,91 +18,57 @@ interface AcademicYear {
   isCurrent: boolean;
 }
 
-interface TeacherTimetableEntry {
+interface PeriodConfigRow {
+  periodNumber: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface AttendanceTeacher {
   id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  gradeLevels: number[];
+}
+
+interface ScheduleRow {
+  staffId: string;
+  periodNumber: number;
   classId: string;
   className: string;
-  gradeLevel: number;
-  dayOfWeek: number;
-  periodNumber: number;
   subjectKey: string;
 }
 
-export type DayStatus = "present" | "partial" | "absent";
-
-interface PeriodAbsenceDraft {
-  periodNumber: number;
-  reason: string;
+export interface ScheduleCell {
+  classId: string;
+  className: string;
+  subjectKey: string;
 }
 
-interface AttendanceRecord {
-  status: DayStatus;
+interface AttendanceForDateRow {
+  staffId: string;
+  status: "present" | "partial" | "absent";
   reason: string | null;
   absentPeriods: { periodNumber: number; reason: string }[];
 }
 
-interface Draft {
-  status: DayStatus;
-  reason: string;
-  periods: Map<number, PeriodAbsenceDraft>;
-}
+export type RowStatus = "present" | "partial" | "absent";
 
-export interface ScheduledPeriod {
-  periodNumber: number;
-  classes: TeacherTimetableEntry[];
-}
-
-export interface AttendanceDateStripEntry {
-  date: string;
-  status: DayStatus | "unmarked";
+/** A teacher missing from `draft` is fully present. An entry here means
+ * something is off: "absent" cancels every scheduled period for the day
+ * regardless of what `periods` enumerates (the whole point of the status
+ * being explicit is that a full-day absence doesn't need one row per
+ * period); "partial" cancels exactly the periods listed in `periods`. */
+interface AbsenceEntry {
+  status: "partial" | "absent";
+  periods: Map<number, string>;
 }
 
 export interface MonthOption {
   value: number;
   label: string;
 }
-
-export interface AttendancePageApi {
-  staffId: string;
-  setStaffId: (staffId: string) => void;
-  teachers: AttendanceTeacher[];
-  isLoadingTeachers: boolean;
-  date: string;
-  setDate: (date: string) => void;
-  month: number;
-  year: number;
-  setMonth: (month: number) => void;
-  setYear: (year: number) => void;
-  monthOptions: MonthOption[];
-  yearOptions: number[];
-  currentYear: AcademicYear | undefined;
-  dayOfWeek: number | null;
-  scheduledPeriods: ScheduledPeriod[];
-  isLoadingSchedule: boolean;
-  isLoadingAttendance: boolean;
-  dateStrip: AttendanceDateStripEntry[];
-  dayStatus: DayStatus;
-  dayReason: string;
-  setDayReason: (reason: string) => void;
-  periodAbsences: Map<number, PeriodAbsenceDraft>;
-  togglePeriodAbsent: (periodNumber: number) => void;
-  setPeriodReason: (periodNumber: number, reason: string) => void;
-  markWholeDayAbsent: () => void;
-  markWholeDayPresent: () => void;
-  handleSave: () => Promise<void>;
-  isSaving: boolean;
-}
-
-const EMPTY_DRAFT: Draft = {
-  status: "present",
-  reason: "",
-  periods: new Map(),
-};
-
-const WEEKDAY_MIN = 1;
-const WEEKDAY_MAX = 5;
-const YEARS_BEFORE = 1;
-const YEARS_AFTER = 1;
 
 const MONTH_LABELS = [
   "January",
@@ -122,34 +85,77 @@ const MONTH_LABELS = [
   "December",
 ];
 
-const draftFromRecord = (
-  record: AttendanceRecord | null | undefined
-): Draft => {
-  if (!record) {
-    return EMPTY_DRAFT;
-  }
-  return {
-    status: record.status,
-    reason: record.reason ?? "",
-    periods: new Map(record.absentPeriods.map((p) => [p.periodNumber, p])),
-  };
-};
+const WEEKDAY_MIN = 1;
+const WEEKDAY_MAX = 5;
+const YEARS_BEFORE = 1;
+const YEARS_AFTER = 1;
 
-/** Monday-Friday map to the 1-5 `dayOfWeek` used by the timetable; weekends
- * have no scheduled periods at all. */
 const dayOfWeekForDate = (isoDate: string): number | null => {
-  const jsDay = getDay(parseISO(isoDate));
+  const jsDay = getDay(new Date(`${isoDate}T00:00:00`));
   return jsDay >= WEEKDAY_MIN && jsDay <= WEEKDAY_MAX ? jsDay : null;
 };
 
-export const useAttendancePage = (): AttendancePageApi => {
-  const [staffIdValue, setStaffIdValue] = useState("");
+export interface AttendancePageApi {
+  date: string;
+  day: number;
+  month: number;
+  year: number;
+  setDay: (day: number) => void;
+  setMonth: (month: number) => void;
+  setYear: (year: number) => void;
+  dayOptions: MonthOption[];
+  monthOptions: MonthOption[];
+  yearOptions: number[];
+  dayOfWeek: number | null;
+  currentYear: AcademicYear | undefined;
+  teachers: AttendanceTeacher[];
+  isLoadingTeachers: boolean;
+  periods: PeriodConfigRow[];
+  isLoadingSchedule: boolean;
+  isLoadingAttendance: boolean;
+  scheduleByStaff: Map<string, Map<number, ScheduleCell[]>>;
+  pendingCells: Set<string>;
+  rowStatus: (staffId: string) => RowStatus;
+  isPeriodAbsent: (staffId: string, periodNumber: number) => boolean;
+  periodReason: (staffId: string, periodNumber: number) => string;
+  togglePeriod: (staffId: string, periodNumber: number) => Promise<void>;
+  toggleSchool: (staffId: string) => Promise<void>;
+  dayReason: (staffId: string) => string;
+  /** `periodNumber: null` saves the whole-day reason; otherwise saves that
+   * one period's reason. Applies the value immediately - no separate
+   * draft-then-commit step, so there's no window where a just-typed
+   * reason could be saved stale. */
+  saveReason: (
+    staffId: string,
+    periodNumber: number | null,
+    reason: string
+  ) => Promise<void>;
+}
 
+export const useAttendancePage = (): AttendancePageApi => {
   const today = useMemo(() => new Date(), []);
+  const [dayValue, setDayValue] = useState(() => getDate(today));
   const [monthValue, setMonthValue] = useState(() => getMonth(today));
   const [yearValue, setYearValue] = useState(() => getYear(today));
-  const [dateValue, setDateValue] = useState(() => format(today, "yyyy-MM-dd"));
 
+  const daysInMonth = useMemo(
+    () => getDaysInMonth(new Date(yearValue, monthValue, 1)),
+    [yearValue, monthValue]
+  );
+  const clampedDay = Math.min(dayValue, daysInMonth);
+  const date = format(
+    new Date(yearValue, monthValue, clampedDay),
+    "yyyy-MM-dd"
+  );
+
+  const dayOptions = useMemo(
+    () =>
+      Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => ({
+        value: d,
+        label: String(d),
+      })),
+    [daysInMonth]
+  );
   const monthOptions = useMemo(
     () => MONTH_LABELS.map((label, value) => ({ value, label })),
     []
@@ -189,256 +195,350 @@ export const useAttendancePage = (): AttendancePageApi => {
     [teachersQuery.data]
   );
 
-  const timetableQuery = useQuery(
-    orpc.staff.periods.listTeacherTimetable.queryOptions({
+  const periodConfigQuery = useQuery(
+    orpc.staff.periods.listPeriodConfig.queryOptions({
+      input: { academicYearId: currentYear?.id ?? "" },
+      enabled: !!currentYear?.id,
+    })
+  );
+  const periods = useMemo(
+    () =>
+      ((periodConfigQuery.data || []) as unknown as PeriodConfigRow[]).toSorted(
+        (a, b) => a.periodNumber - b.periodNumber
+      ),
+    [periodConfigQuery.data]
+  );
+
+  const dayOfWeek = useMemo(() => dayOfWeekForDate(date), [date]);
+
+  const scheduleQuery = useQuery(
+    orpc.staff.attendance.listScheduleForDay.queryOptions({
       input: {
         academicYearId: currentYear?.id ?? "",
-        staffId: staffIdValue || "",
+        dayOfWeek: dayOfWeek ?? 1,
       },
-      enabled: !!(currentYear?.id && staffIdValue),
+      enabled: !!(currentYear?.id && dayOfWeek !== null),
     })
   );
 
-  const entries = useMemo(
-    () => (timetableQuery.data || []) as unknown as TeacherTimetableEntry[],
-    [timetableQuery.data]
-  );
-
-  const dayOfWeek = useMemo(() => dayOfWeekForDate(dateValue), [dateValue]);
-
-  /** Every period the teacher is scheduled to teach on the selected date's
-   * weekday, one row per (period, class) - combined sessions mean a period
-   * can list more than one class. */
-  const scheduledPeriods = useMemo(() => {
+  /** staffId -> periodNumber -> the class(es) taught then (combined
+   * sessions can stack more than one). */
+  const scheduleByStaff = useMemo(() => {
+    const map = new Map<string, Map<number, ScheduleCell[]>>();
     if (dayOfWeek === null) {
-      return [];
+      return map;
     }
-    const byPeriod = new Map<number, TeacherTimetableEntry[]>();
-    for (const entry of entries) {
-      if (entry.dayOfWeek !== dayOfWeek) {
-        continue;
-      }
-      const list = byPeriod.get(entry.periodNumber) ?? [];
-      list.push(entry);
-      byPeriod.set(entry.periodNumber, list);
+    const rows = (scheduleQuery.data || []) as unknown as ScheduleRow[];
+    for (const row of rows) {
+      const staffMap =
+        map.get(row.staffId) ?? new Map<number, ScheduleCell[]>();
+      const cells = staffMap.get(row.periodNumber) ?? [];
+      cells.push({
+        classId: row.classId,
+        className: row.className,
+        subjectKey: row.subjectKey,
+      });
+      staffMap.set(row.periodNumber, cells);
+      map.set(row.staffId, staffMap);
     }
-    return [...byPeriod.entries()]
-      .toSorted(([a], [b]) => a - b)
-      .map(([periodNumber, classes]) => ({ periodNumber, classes }));
-  }, [entries, dayOfWeek]);
+    return map;
+  }, [scheduleQuery.data, dayOfWeek]);
 
   const attendanceQuery = useQuery(
-    orpc.staff.attendance.getTeacherAttendance.queryOptions({
-      input: { staffId: staffIdValue || "", date: dateValue },
-      enabled: !!staffIdValue,
+    orpc.staff.attendance.listAttendanceForDate.queryOptions({
+      input: { date },
     })
   );
 
-  const monthStart = useMemo(
-    () => startOfMonth(new Date(yearValue, monthValue, 1)),
-    [yearValue, monthValue]
-  );
-  const monthEnd = useMemo(
-    () => endOfMonth(new Date(yearValue, monthValue, 1)),
-    [yearValue, monthValue]
-  );
-  const monthStartIso = format(monthStart, "yyyy-MM-dd");
-  const monthEndIso = format(monthEnd, "yyyy-MM-dd");
-
-  const rangeQuery = useQuery(
-    orpc.staff.attendance.listTeacherAttendanceRange.queryOptions({
-      input: {
-        staffId: staffIdValue || "",
-        startDate: monthStartIso,
-        endDate: monthEndIso,
-      },
-      enabled: !!staffIdValue,
-    })
-  );
-
-  const dateStrip = useMemo<AttendanceDateStripEntry[]>(() => {
-    const records = (rangeQuery.data || []) as unknown as {
-      date: string;
-      status: DayStatus;
-    }[];
-    const statusByDate = new Map<string, DayStatus>();
-    for (const record of records) {
-      statusByDate.set(record.date, record.status);
-    }
-    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    const result: AttendanceDateStripEntry[] = [];
-    for (const d of days) {
-      const iso = format(d, "yyyy-MM-dd");
-      const status: DayStatus | "unmarked" =
-        statusByDate.get(iso) ?? "unmarked";
-      result.push({ date: iso, status });
-    }
-    return result;
-  }, [rangeQuery.data, monthStart, monthEnd]);
-
-  // Local editable draft, re-derived (not effect-synced) whenever the
-  // selected teacher/date - or the record loaded for it - changes.
-  const recordKey = `${staffIdValue}|${dateValue}`;
-  const [syncedKey, setSyncedKey] = useState("");
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  // Local grid draft: staffId -> absence entry (missing = fully present).
+  // Re-derived (not effect-synced) whenever the selected date - or the
+  // data loaded for it - changes, so ticking a checkbox updates
+  // immediately without waiting on a network round trip.
+  const [syncedDate, setSyncedDate] = useState("");
+  const [draft, setDraft] = useState<Map<string, AbsenceEntry>>(new Map());
+  const [dayReasonDraftValue, setDayReasonDraftValue] = useState<
+    Map<string, string>
+  >(new Map());
+  const [pendingCells, setPendingCells] = useState<Set<string>>(new Set());
 
   if (
-    staffIdValue &&
-    recordKey !== syncedKey &&
+    date !== syncedDate &&
     !attendanceQuery.isFetching &&
     attendanceQuery.data !== undefined
   ) {
-    setSyncedKey(recordKey);
-    setDraft(draftFromRecord(attendanceQuery.data as AttendanceRecord | null));
+    setSyncedDate(date);
+    const rows = attendanceQuery.data as unknown as AttendanceForDateRow[];
+    const next = new Map<string, AbsenceEntry>();
+    const nextReasons = new Map<string, string>();
+    for (const row of rows) {
+      if (row.status === "partial" || row.status === "absent") {
+        const periodMap = new Map<number, string>();
+        for (const absence of row.absentPeriods) {
+          periodMap.set(absence.periodNumber, absence.reason);
+        }
+        next.set(row.staffId, { status: row.status, periods: periodMap });
+      }
+      if (row.reason) {
+        nextReasons.set(row.staffId, row.reason);
+      }
+    }
+    setDraft(next);
+    setDayReasonDraftValue(nextReasons);
   }
 
-  const togglePeriodAbsent = useCallback((periodNumber: number) => {
-    setDraft((prev) => {
-      const periods = new Map(prev.periods);
-      if (periods.has(periodNumber)) {
-        periods.delete(periodNumber);
-      } else {
-        periods.set(periodNumber, { periodNumber, reason: "" });
-      }
-      return { ...prev, status: "partial", periods };
-    });
-  }, []);
-
-  const setPeriodReason = useCallback(
-    (periodNumber: number, reason: string) => {
-      setDraft((prev) => {
-        const existing = prev.periods.get(periodNumber);
-        if (!existing) {
-          return prev;
-        }
-        const periods = new Map(prev.periods);
-        return {
-          ...prev,
-          periods: new Map([
-            ...periods,
-            [periodNumber, { ...existing, reason }],
-          ]),
-        };
-      });
-    },
-    []
-  );
-
-  const markWholeDayAbsent = useCallback(() => {
-    setDraft({ status: "absent", reason: "", periods: new Map() });
-  }, []);
-
-  const markWholeDayPresent = useCallback(() => {
-    setDraft(EMPTY_DRAFT);
-  }, []);
-
-  const setDayReason = useCallback((reason: string) => {
-    setDraft((prev) => ({ ...prev, reason }));
-  }, []);
-
+  const queryClient = useQueryClient();
   const markMutation = useMutation(
     orpc.staff.attendance.markAttendance.mutationOptions()
   );
 
-  const handleSave = useCallback(async () => {
-    if (!(staffIdValue && currentYear?.id)) {
-      return;
-    }
-    if (draft.status === "absent" && !draft.reason.trim()) {
-      toast.error("A reason is required for a full-day absence");
-      return;
-    }
-    const absentPeriods = [...draft.periods.values()];
-    if (
-      draft.status === "partial" &&
-      (absentPeriods.length === 0 ||
-        absentPeriods.some((p) => !p.reason.trim()))
-    ) {
-      toast.error("Every absent period needs a reason");
-      return;
-    }
-    try {
-      await markMutation.mutateAsync({
-        staffId: staffIdValue,
-        academicYearId: currentYear.id,
-        date: dateValue,
-        status: draft.status,
-        reason: draft.status === "absent" ? draft.reason.trim() : undefined,
-        absentPeriods: draft.status === "partial" ? absentPeriods : [],
-      } as never);
-      await Promise.all([attendanceQuery.refetch(), rangeQuery.refetch()]);
-      toast.success("Attendance saved");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save attendance"
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  const dayReasonRef = useRef(dayReasonDraftValue);
+  useEffect(() => {
+    dayReasonRef.current = dayReasonDraftValue;
+  }, [dayReasonDraftValue]);
+
+  const scheduleByStaffRef = useRef(scheduleByStaff);
+  useEffect(() => {
+    scheduleByStaffRef.current = scheduleByStaff;
+  }, [scheduleByStaff]);
+
+  /** Every scheduled period for this teacher today, currently marked
+   * absent - explicit `periods` entries, or every scheduled period at
+   * once if the row is a whole-day "absent". */
+  const expandedAbsentPeriods = useCallback(
+    (staffId: string): Map<number, string> => {
+      const entry = draftRef.current.get(staffId);
+      if (!entry) {
+        return new Map();
+      }
+      if (entry.status === "absent" && entry.periods.size === 0) {
+        const scheduled = scheduleByStaffRef.current.get(staffId);
+        return new Map(
+          [...(scheduled?.keys() ?? [])].map((periodNumber) => [
+            periodNumber,
+            "",
+          ])
+        );
+      }
+      return new Map(entry.periods);
+    },
+    []
+  );
+
+  const saveTeacherDay = useCallback(
+    async (
+      staffId: string,
+      absentPeriods: Map<number, string>,
+      dayReason?: string
+    ) => {
+      if (!currentYear?.id) {
+        return;
+      }
+      const scheduledCount = scheduleByStaffRef.current.get(staffId)?.size ?? 0;
+      let status: RowStatus = "partial";
+      if (absentPeriods.size === 0) {
+        status = "present";
+      } else if (scheduledCount > 0 && absentPeriods.size >= scheduledCount) {
+        status = "absent";
+      }
+      try {
+        await markMutation.mutateAsync({
+          staffId,
+          academicYearId: currentYear.id,
+          date,
+          status,
+          reason: status === "absent" ? (dayReason ?? "") : undefined,
+          absentPeriods:
+            status === "partial"
+              ? [...absentPeriods.entries()].map(([periodNumber, reason]) => ({
+                  periodNumber,
+                  reason,
+                }))
+              : [],
+        } as never);
+        await queryClient.invalidateQueries({
+          queryKey: orpc.staff.attendance.listAttendanceForDate.queryOptions({
+            input: { date },
+          }).queryKey,
+        });
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to save attendance"
+        );
+      }
+    },
+    [currentYear, date, markMutation, queryClient]
+  );
+
+  const applyLocalAbsence = useCallback(
+    (staffId: string, absentPeriods: Map<number, string>) => {
+      const scheduledCount = scheduleByStaffRef.current.get(staffId)?.size ?? 0;
+      const nextDraft = new Map(draftRef.current);
+      if (absentPeriods.size === 0) {
+        nextDraft.delete(staffId);
+      } else if (scheduledCount > 0 && absentPeriods.size >= scheduledCount) {
+        nextDraft.set(staffId, { status: "absent", periods: absentPeriods });
+      } else {
+        nextDraft.set(staffId, { status: "partial", periods: absentPeriods });
+      }
+      setDraft(nextDraft);
+    },
+    []
+  );
+
+  const togglePeriod = useCallback(
+    async (staffId: string, periodNumber: number) => {
+      const key = `${staffId}:${periodNumber}`;
+      const current = expandedAbsentPeriods(staffId);
+      if (current.has(periodNumber)) {
+        current.delete(periodNumber);
+      } else {
+        current.set(periodNumber, "");
+      }
+      applyLocalAbsence(staffId, current);
+      setPendingCells((prev) => new Set(prev).add(key));
+      await saveTeacherDay(staffId, current, dayReasonRef.current.get(staffId));
+      setPendingCells((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    },
+    [expandedAbsentPeriods, applyLocalAbsence, saveTeacherDay]
+  );
+
+  const toggleSchool = useCallback(
+    async (staffId: string) => {
+      const key = `${staffId}:school`;
+      const currentlyPresent = !draftRef.current.has(staffId);
+      let nextPeriods: Map<number, string>;
+      if (currentlyPresent) {
+        const scheduled = scheduleByStaffRef.current.get(staffId);
+        nextPeriods = new Map(
+          [...(scheduled?.keys() ?? [])].map((periodNumber) => [
+            periodNumber,
+            "",
+          ])
+        );
+      } else {
+        nextPeriods = new Map();
+      }
+      applyLocalAbsence(staffId, nextPeriods);
+      setPendingCells((prev) => new Set(prev).add(key));
+      await saveTeacherDay(
+        staffId,
+        nextPeriods,
+        dayReasonRef.current.get(staffId)
       );
-    }
-  }, [
-    staffIdValue,
-    currentYear,
-    dateValue,
-    draft,
-    markMutation,
-    attendanceQuery,
-    rangeQuery,
-  ]);
-
-  const handleSetStaffId = useCallback((next: string) => {
-    setStaffIdValue(next);
-    setSyncedKey("");
-  }, []);
-
-  const handleSetDate = useCallback((next: string) => {
-    setDateValue(next);
-    setSyncedKey("");
-  }, []);
-
-  const handleSetMonth = useCallback(
-    (next: number) => {
-      setMonthValue(next);
-      setDateValue(format(new Date(yearValue, next, 1), "yyyy-MM-dd"));
-      setSyncedKey("");
+      setPendingCells((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     },
-    [yearValue]
+    [applyLocalAbsence, saveTeacherDay]
   );
 
-  const handleSetYear = useCallback(
-    (next: number) => {
-      setYearValue(next);
-      setDateValue(format(new Date(next, monthValue, 1), "yyyy-MM-dd"));
-      setSyncedKey("");
+  const saveReason = useCallback(
+    async (staffId: string, periodNumber: number | null, reason: string) => {
+      if (periodNumber === null) {
+        setDayReasonDraftValue((prev) => new Map([...prev, [staffId, reason]]));
+        const key = `${staffId}:dayReason`;
+        setPendingCells((prev) => new Set(prev).add(key));
+        await saveTeacherDay(staffId, expandedAbsentPeriods(staffId), reason);
+        setPendingCells((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        return;
+      }
+      const current = expandedAbsentPeriods(staffId);
+      if (!current.has(periodNumber)) {
+        return;
+      }
+      current.set(periodNumber, reason);
+      applyLocalAbsence(staffId, current);
+      const key = `${staffId}:${periodNumber}:reason`;
+      setPendingCells((prev) => new Set(prev).add(key));
+      await saveTeacherDay(staffId, current, dayReasonRef.current.get(staffId));
+      setPendingCells((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     },
-    [monthValue]
+    [expandedAbsentPeriods, applyLocalAbsence, saveTeacherDay]
   );
+
+  const rowStatus = useCallback(
+    (staffId: string): RowStatus => draft.get(staffId)?.status ?? "present",
+    [draft]
+  );
+
+  const isPeriodAbsent = useCallback(
+    (staffId: string, periodNumber: number): boolean => {
+      const entry = draft.get(staffId);
+      if (!entry) {
+        return false;
+      }
+      if (entry.status === "absent" && entry.periods.size === 0) {
+        return true;
+      }
+      return entry.periods.has(periodNumber);
+    },
+    [draft]
+  );
+
+  const periodReason = useCallback(
+    (staffId: string, periodNumber: number): string =>
+      draft.get(staffId)?.periods.get(periodNumber) ?? "",
+    [draft]
+  );
+
+  const dayReason = useCallback(
+    (staffId: string): string => dayReasonDraftValue.get(staffId) ?? "",
+    [dayReasonDraftValue]
+  );
+
+  const handleSetDay = useCallback((next: number) => setDayValue(next), []);
+  const handleSetMonth = useCallback((next: number) => {
+    setMonthValue(next);
+  }, []);
+  const handleSetYear = useCallback((next: number) => {
+    setYearValue(next);
+  }, []);
 
   return {
-    staffId: staffIdValue,
-    setStaffId: handleSetStaffId,
-    teachers,
-    isLoadingTeachers: teachersQuery.isLoading,
-    date: dateValue,
-    setDate: handleSetDate,
+    date,
+    day: clampedDay,
     month: monthValue,
     year: yearValue,
+    setDay: handleSetDay,
     setMonth: handleSetMonth,
     setYear: handleSetYear,
+    dayOptions,
     monthOptions,
     yearOptions,
-    currentYear,
     dayOfWeek,
-    scheduledPeriods,
-    isLoadingSchedule: timetableQuery.isLoading,
+    currentYear,
+    teachers,
+    isLoadingTeachers: teachersQuery.isLoading,
+    periods,
+    isLoadingSchedule: scheduleQuery.isLoading,
     isLoadingAttendance: attendanceQuery.isFetching,
-    dateStrip,
-    dayStatus: draft.status,
-    dayReason: draft.reason,
-    setDayReason,
-    periodAbsences: draft.periods,
-    togglePeriodAbsent,
-    setPeriodReason,
-    markWholeDayAbsent,
-    markWholeDayPresent,
-    handleSave,
-    isSaving: markMutation.isPending,
+    scheduleByStaff,
+    pendingCells,
+    rowStatus,
+    isPeriodAbsent,
+    periodReason,
+    togglePeriod,
+    toggleSchool,
+    dayReason,
+    saveReason,
   };
 };

@@ -16,7 +16,7 @@ import { requireAssignmentPermission } from "../../../index";
 
 const absentPeriodSchema = v.object({
   periodNumber: periodNumberSchema,
-  reason: v.pipe(v.string(), v.minLength(1, "Reason is required")),
+  reason: v.optional(v.string(), ""),
 });
 
 /**

@@ -156,7 +156,7 @@ const teacherPeriodAbsenceColumnRefinements = {
   id: () => teacherPeriodAbsenceIdSchema,
   teacherAttendanceId: () => teacherAttendanceIdSchema,
   periodNumber: () => periodNumberSchema,
-  reason: () => v.pipe(v.string(), v.minLength(1, "Reason is required")),
+  reason: () => v.optional(v.string(), ""),
   substituteStaffId: () => v.optional(v.nullable(staffIdSchema)),
 };
 

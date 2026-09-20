@@ -1,4 +1,6 @@
 import { getTeacherAttendance } from "./get-teacher-attendance";
+import { listAttendanceForDate } from "./list-attendance-for-date";
+import { listScheduleForDay } from "./list-schedule-for-day";
 import { listTeacherAttendanceRange } from "./list-teacher-attendance-range";
 import { listTeachersForAttendance } from "./list-teachers-for-attendance";
 import { markAttendance } from "./mark-attendance";
@@ -9,7 +11,9 @@ import { markAttendance } from "./mark-attendance";
  */
 export const attendanceRouter = {
   getTeacherAttendance,
+  listAttendanceForDate,
   listTeacherAttendanceRange,
   listTeachersForAttendance,
+  listScheduleForDay,
   markAttendance,
 };
