@@ -88,14 +88,17 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 ### Framework-Specific Guidance
 
 **Next.js:**
+
 - Use Next.js `<Image>` component for images
 - Use `next/head` or App Router metadata API for head elements
 - Use Server Components for async data fetching instead of async Client Components
 
 **React 19+:**
+
 - Use ref as a prop instead of `React.forwardRef`
 
 **Solid/Svelte/Vue/Qwik:**
+
 - Use `class` and `for` attributes (not `className` or `htmlFor`)
 
 ---
@@ -195,12 +198,14 @@ All procedures follow the existing pattern: oRPC handler + valibot schema valida
 ### Database Schema Design
 
 **Period Configuration:**
+
 - `period_config` table: Stores school day periods (7:40 AM – 1:30 PM, 8 periods with tea/lunch breaks).
 - Columns: `id`, `academicYearId`, `periodNumber` (1–8), `startTime` (HH:MM), `endTime` (HH:MM), timestamps.
 - Unique constraint: `(academicYearId, periodNumber)` — one config per year+period.
 - Immutable once created (no update procedure); if periods change, create new academic year.
 
 **Class Period Assignment:**
+
 - `class_period_assignment` table: Core timetable table mapping class + day + period → teacher + subject.
 - Columns: `id`, `academicYearId`, `classId`, `dayOfWeek` (1–5, Mon–Fri), `periodNumber` (1–8), `subjectKey`, `staffId`, timestamps.
 - Unique constraints (enforced at DB level):
@@ -209,11 +214,13 @@ All procedures follow the existing pattern: oRPC handler + valibot schema valida
 - Indexes: Composite indexes on (academicYearId, classId) and (academicYearId, staffId) for fast weekly-grid lookups.
 
 **Valibot & Branding:**
+
 - New schemas in `packages/db/src/schema/periods.ts`: `PeriodConfigId`, `ClassPeriodAssignmentId`, and their valibot counterparts.
 - Branded types follow the existing pattern: `export type PeriodConfigId = Brand<string, "PeriodConfigId">` + `v.pipe(v.string(), brand<...>())`.
 - Time validation schema: `HH:MM` ISO format regex + parsing.
 
 **Historical Scope:**
+
 - All assignment tables are `academicYearId`-scoped. Changing years isolates data automatically.
 - No archiving needed; past years are queried with their `academicYearId`. The `academicYear` table already exists and tracks `isCurrent`.
 
@@ -224,6 +231,7 @@ See `packages/db/src/schema/PERIOD_SCHEMA_PLAN.md` (detailed planning doc) for f
 Each feature folder contains a `UI.md` file documenting the complete interaction design, shadcn component choices, keyboard shortcuts, export options, and accessibility considerations. Implementation should closely follow these specs.
 
 **shadcn Component Usage (Maximize Coverage):**
+
 - **Tables:** Use shadcn `Table` (composition-based) + optional `DataTable` helper pattern for sorting/filtering. Never hand-roll table markup.
 - **Forms:** All form controls wrapped in `FieldGroup` + `Field` + `FieldLabel` + `FieldError` (already in UI package). Never use raw `input` + `label`.
 - **Dialogs/Modals:** Use `Dialog` (centered modal) or `Sheet` (side panel slide-in) for create/edit flows. Keep users on the list page during mutations.
@@ -239,18 +247,21 @@ No hand-rolled modals, dropdowns, or custom table logic. If shadcn doesn't have 
 ### Export Strategy
 
 **Excel Exports (Multiple Records):**
+
 - Use `exceljs` library (to be added: `bun add exceljs`).
 - Supports styling, columns, multiple sheets.
 - Server-side (oRPC procedure) generates Excel in-memory, streams to client.
 - Examples: All teachers' timetables in one file (one sheet per teacher), all classes' timetables, full subject assignment roster.
 
 **PDF Exports (Single Record or Print-Friendly):**
+
 - Use `@react-pdf/renderer` library (to be added: `bun add @react-pdf/renderer`).
 - Component-based PDF generation; can reuse React components.
 - Examples: One teacher's full profile + qualifications (PDF), one class's timetable (printable), conflict report (formatted PDF).
 - Alternatively, for simple text-heavy reports, use the browser's native `print` stylesheet (via Tailwind's `@print:` utilities) and let user Cmd+P to PDF.
 
 **Word/DOCX Exports (Optional Future):**
+
 - Use `docx` library (programmatic) or `docxtemplater` (template-based).
 - Not required for MVP; prioritize Excel + PDF.
 
@@ -283,6 +294,7 @@ Documented per-feature in each `UI.md` file.
 ### Responsive Behavior
 
 **Desktop-first design.** Do NOT spend effort on mobile/phone layouts for admin staff features.
+
 - **md breakpoint (TailwindCSS):** Sidebar and main content adjust. Sidebar collapses to hamburger icon on smaller screens (handled by shadcn Sidebar component already integrated in the shell).
 - **Tables:** On smaller screens (below md), some columns hide; users can swipe/scroll to reveal. Use TailwindCSS's responsive utilities (`hidden md:table-cell`, etc.).
 - **Dialogs/Sheets:** Full-screen on mobile, centered on desktop (handled by `Dialog` and `Sheet` components).
