@@ -10,7 +10,6 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import {
   AssignPeriodDialog,
-  ConflictCheckDialog,
   DeleteConfirmDialog,
   EditPeriodDialog,
 } from "@/components/staff/period-management/period-dialogs";
@@ -25,6 +24,48 @@ const RouteComponent = () => {
     <div className="space-y-4">
       <div className="flex items-end gap-2">
         <Select
+          value={page.category}
+          onValueChange={(value: string | null) => {
+            if (value) {
+              page.setCategory(value);
+            }
+          }}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Select section" />
+          </SelectTrigger>
+          <SelectContent>
+            {page.categoryOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={page.grade}
+          onValueChange={(value: string | null) => {
+            if (value) {
+              page.setGrade(value);
+            }
+          }}
+        >
+          <SelectTrigger className="w-36" disabled={!page.category}>
+            <SelectValue
+              placeholder={
+                page.category ? "Select grade" : "Select section first"
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {page.gradeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
           value={page.selectedClassId}
           onValueChange={(value: string | null) => {
             if (value) {
@@ -32,20 +73,19 @@ const RouteComponent = () => {
             }
           }}
         >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Select a class" />
+          <SelectTrigger className="w-36" disabled={!page.grade}>
+            <SelectValue
+              placeholder={page.grade ? "Select class" : "Select grade first"}
+            />
           </SelectTrigger>
           <SelectContent>
-            {page.classesData.map((cls) => (
-              <SelectItem key={cls.id} value={cls.id}>
-                {cls.name}
+            {page.classOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => page.handleCheckConflict()}>
-          Check Conflicts
-        </Button>
         <Button
           onClick={page.handleExportAllTimetables}
           disabled={
@@ -101,12 +141,6 @@ const RouteComponent = () => {
         onOpenChange={(open) => page.setIsDeleteDialogOpen(open)}
         onConfirm={page.handleConfirmDelete}
         isLoading={page.deleteMutation.isPending}
-      />
-
-      <ConflictCheckDialog
-        isOpen={page.isConflictCheckDialogOpen}
-        onOpenChange={(open) => page.setIsConflictCheckDialogOpen(open)}
-        conflicts={page.conflictCheckResults}
       />
     </div>
   );

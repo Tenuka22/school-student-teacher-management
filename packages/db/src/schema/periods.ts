@@ -86,8 +86,6 @@ export const periodConfig = pgTable(
  * slot). Deliberately does NOT enforce single-class-per-teacher-per-slot:
  * combined sessions (e.g. one Dance/Music teacher running the same period
  * across multiple classes at once) are a legitimate, intentional overlap.
- * `checkConflict` still surfaces this as a warning so an overlap is never
- * created by accident.
  * - (academicYearId, classId, dayOfWeek, periodNumber) UNIQUE: no duplicate slots for a class.
  */
 export const classPeriodAssignment = pgTable(

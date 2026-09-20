@@ -2,7 +2,6 @@ import { exportAllTimetablesExcel } from "./export-all-timetables-excel";
 import { exportClassTeacherHistoryExcel } from "./export-class-teacher-history-excel";
 import { exportClassTimetablePdf } from "./export-class-timetable-pdf";
 import { exportClassesExcel } from "./export-classes-excel";
-import { exportStaffPositionsExcel } from "./export-staff-positions-excel";
 import { exportTeacherProfilePdf } from "./export-teacher-profile-pdf";
 import { exportTeachersExcel } from "./export-teachers-excel";
 
@@ -10,7 +9,6 @@ import { exportTeachersExcel } from "./export-teachers-excel";
 export const exportsRouter = {
   teachersExcel: exportTeachersExcel,
   teacherProfilePdf: exportTeacherProfilePdf,
-  staffPositionsExcel: exportStaffPositionsExcel,
   classesExcel: exportClassesExcel,
   classTimetablePdf: exportClassTimetablePdf,
   classTeacherHistoryExcel: exportClassTeacherHistoryExcel,

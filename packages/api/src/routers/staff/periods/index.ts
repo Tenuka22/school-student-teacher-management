@@ -1,5 +1,4 @@
 import { assignClassPeriod } from "./assign-class-period";
-import { checkConflict } from "./check-conflict";
 import { createPeriodConfig } from "./create-period-config";
 import { deleteClassPeriodAssignment } from "./delete-class-period-assignment";
 import { listClassTimetable } from "./list-class-timetable";
@@ -26,7 +25,4 @@ export const periodsRouter = {
   listClassTimetable,
   listTeacherTimetable,
   listUnassignedSlots,
-
-  // Conflict detection
-  checkConflict,
 };

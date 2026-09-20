@@ -7,6 +7,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { CLASS_CATEGORIES } from "@/components/staff/class-assignment/class-categories";
 import type {
   AcademicYear,
   PeriodClass,
@@ -47,17 +48,67 @@ export const usePeriodsPage = () => {
 
   const [selectedClassId, setSelectedClassId] = useState<string>("");
 
+  const classesData = useMemo(() => {
+    const data = classesQuery.data as unknown[] | undefined;
+    return (data || []) as PeriodClass[];
+  }, [classesQuery.data]);
+
+  const [categoryValue, setCategoryValue] = useState<string>("");
+  const [gradeValue, setGradeValue] = useState<string>("");
+
+  const setCategory = useCallback((value: string) => {
+    setCategoryValue(value);
+    setGradeValue("");
+    setSelectedClassId("");
+  }, []);
+
+  const setGrade = useCallback((value: string) => {
+    setGradeValue(value);
+    setSelectedClassId("");
+  }, []);
+
+  const categoryOptions = useMemo(
+    () => CLASS_CATEGORIES.map((c) => ({ value: c.key, label: c.label })),
+    []
+  );
+
+  const gradeOptions = useMemo(() => {
+    const activeCategory = CLASS_CATEGORIES.find(
+      (c) => c.key === categoryValue
+    );
+    if (!activeCategory) {
+      return [];
+    }
+    const gradesWithClasses = new Set(classesData.map((cls) => cls.gradeLevel));
+    const options: { value: string; label: string }[] = [];
+    for (const g of activeCategory.grades) {
+      if (gradesWithClasses.has(g)) {
+        options.push({ value: String(g), label: `Grade ${g}` });
+      }
+    }
+    return options;
+  }, [classesData, categoryValue]);
+
+  const classOptions = useMemo(() => {
+    const gradeNumber = Number(gradeValue);
+    if (!gradeValue) {
+      return [];
+    }
+    const options: { value: string; label: string }[] = [];
+    for (const cls of classesData) {
+      if (cls.gradeLevel === gradeNumber) {
+        options.push({ value: cls.id, label: cls.name });
+      }
+    }
+    return options;
+  }, [classesData, gradeValue]);
+
   const selectedClass = useMemo(() => {
-    const classes = classesQuery.data as unknown[] | undefined;
-    if (!classes || !selectedClassId) {
+    if (!selectedClassId) {
       return null;
     }
-    return (
-      (classes.find(
-        (c) => (c as Record<string, unknown>).id === selectedClassId
-      ) as PeriodClass) || undefined
-    );
-  }, [classesQuery.data, selectedClassId]);
+    return classesData.find((c) => c.id === selectedClassId) || undefined;
+  }, [classesData, selectedClassId]);
 
   const periodConfigQuery = useQuery(
     orpc.staff.periods.listPeriodConfig.queryOptions({
@@ -99,9 +150,6 @@ export const usePeriodsPage = () => {
   const deleteMutation = useMutation(
     orpc.staff.periods.deleteClassPeriodAssignment.mutationOptions()
   );
-  const checkConflictMutation = useMutation(
-    orpc.staff.periods.checkConflict.mutationOptions()
-  );
   const exportTimetablePdfMutation = useMutation(
     orpc.staff.exports.classTimetablePdf.mutationOptions()
   );
@@ -112,11 +160,6 @@ export const usePeriodsPage = () => {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isConflictCheckDialogOpen, setIsConflictCheckDialogOpen] =
-    useState(false);
-  const [conflictCheckResults, setConflictCheckResults] = useState<
-    Record<string, unknown>[] | null
-  >(null);
 
   const [selectedSlot, setSelectedSlot] = useState<{
     dayOfWeek: number;
@@ -231,26 +274,6 @@ export const usePeriodsPage = () => {
     }
   }, [selectedAssignment, deleteMutation, timetableQuery]);
 
-  const handleCheckConflict = useCallback(async () => {
-    if (!selectedClass || !currentYear) {
-      return;
-    }
-    try {
-      const result = await checkConflictMutation.mutateAsync({
-        classId: selectedClass.id,
-        academicYearId: currentYear.id,
-      } as never);
-      const conflicts = (result as Record<string, unknown>).conflicts as Record<
-        string,
-        unknown
-      >[];
-      setConflictCheckResults(conflicts);
-      setIsConflictCheckDialogOpen(true);
-    } catch (error) {
-      handleMutationError(error, "Failed to check conflicts");
-    }
-  }, [selectedClass, currentYear, checkConflictMutation]);
-
   const periodConfig = useMemo(() => {
     const data = periodConfigQuery.data as unknown[] | undefined;
     if (!data || !Array.isArray(data)) {
@@ -264,14 +287,15 @@ export const usePeriodsPage = () => {
     return (data || []) as PeriodAssignment[];
   }, [timetableQuery.data]);
 
-  const classesData = useMemo(() => {
-    const data = classesQuery.data as unknown[] | undefined;
-    return (data || []) as PeriodClass[];
-  }, [classesQuery.data]);
-
   return {
     currentYear,
-    classesData,
+    category: categoryValue,
+    setCategory,
+    grade: gradeValue,
+    setGrade,
+    categoryOptions,
+    gradeOptions,
+    classOptions,
     selectedClassId,
     setSelectedClassId,
     selectedClass,
@@ -284,9 +308,6 @@ export const usePeriodsPage = () => {
     setIsEditDialogOpen,
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
-    isConflictCheckDialogOpen,
-    setIsConflictCheckDialogOpen,
-    conflictCheckResults,
     selectedSlot,
     selectedAssignment,
     assignMutation,
@@ -302,6 +323,5 @@ export const usePeriodsPage = () => {
     handleAssignSubmit,
     handleEditSubmit,
     handleConfirmDelete,
-    handleCheckConflict,
   };
 };

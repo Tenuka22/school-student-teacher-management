@@ -41,10 +41,6 @@ const navMain = [
         title: "Teacher Timetable",
         url: "/dashboard/staff/teacher-timetable",
       },
-      {
-        title: "Historical Data",
-        url: "/dashboard/staff/history",
-      },
     ],
   },
 ];

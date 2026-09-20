@@ -176,39 +176,3 @@ export const DeleteConfirmDialog = ({
     </AlertDialogContent>
   </AlertDialog>
 );
-
-export const ConflictCheckDialog = ({
-  isOpen,
-  onOpenChange,
-  conflicts,
-}: {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  conflicts: Record<string, unknown>[] | null;
-}) => (
-  <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-    <AlertDialogContent>
-      <AlertDialogTitle>Conflict Check Results</AlertDialogTitle>
-      <AlertDialogDescription>
-        {conflicts && conflicts.length > 0
-          ? `Found ${conflicts.length} conflict(s)`
-          : "No conflicts found"}
-      </AlertDialogDescription>
-      {conflicts && conflicts.length > 0 && (
-        <div className="space-y-2">
-          {conflicts.map((conflict) => (
-            <div
-              key={JSON.stringify(conflict)}
-              className="text-muted-foreground text-sm"
-            >
-              {JSON.stringify(conflict)}
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex justify-end">
-        <AlertDialogAction>OK</AlertDialogAction>
-      </div>
-    </AlertDialogContent>
-  </AlertDialog>
-);

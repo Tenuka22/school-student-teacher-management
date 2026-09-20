@@ -12,8 +12,8 @@ import { requireAssignmentPermission } from "../../../index";
  * Enforces one-subject-per-class-per-slot via a DB UNIQUE constraint on
  * (academicYearId, classId, dayOfWeek, periodNumber). Deliberately allows a
  * teacher to be assigned to multiple classes in the same slot (combined
- * sessions, e.g. one Dance/Music teacher running several classes together) -
- * use `checkConflict` beforehand if you want to warn about that case.
+ * sessions, e.g. one Dance/Music teacher running several classes together)
+ * as an intentional overlap.
  */
 export const assignClassPeriod = requireAssignmentPermission("create")
   .input(
