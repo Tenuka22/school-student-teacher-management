@@ -14,6 +14,9 @@ export * from "./brand";
 // this barrel re-exports every other `academics.ts` symbol explicitly and
 // omits its `gradeLevelSchema` from this barrel. The picklist itself still
 // lives in and is importable from `@school-student-teacher-management/db/schema/academics` directly.
+
+// Similarly, `periods.ts` defines `periodNumberSchema` and `dayOfWeekSchema`
+// which are module-scoped constants; explicitly re-export to avoid ambiguity.
 export {
   type ClassId,
   classIdSchema,
@@ -37,3 +40,18 @@ export {
   gradeSubjectConfigInsertSchema,
   gradeSubjectConfigUpdateSchema,
 } from "./academics";
+
+export {
+  type PeriodConfigId,
+  periodConfigIdSchema,
+  type ClassPeriodAssignmentId,
+  classPeriodAssignmentIdSchema,
+  periodConfig,
+  classPeriodAssignment,
+  periodConfigSelectSchema,
+  periodConfigInsertSchema,
+  periodConfigUpdateSchema,
+  classPeriodAssignmentSelectSchema,
+  classPeriodAssignmentInsertSchema,
+  classPeriodAssignmentUpdateSchema,
+} from "./periods";

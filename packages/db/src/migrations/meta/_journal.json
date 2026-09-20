@@ -15,6 +15,13 @@
       "when": 1789838326739,
       "tag": "0001_melted_leopardon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789841051217,
+      "tag": "0002_eager_kinsey_walden",
+      "breakpoints": true
     }
   ]
 }

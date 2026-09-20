@@ -10,19 +10,22 @@
     "check-types": "tsc -b"
   },
   "dependencies": {
-    "@school-student-teacher-management/auth": "workspace:*",
-    "@school-student-teacher-management/db": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/valibot": "^1.15.0",
     "@orpc/zod": "catalog:",
+    "@school-student-teacher-management/auth": "workspace:*",
+    "@school-student-teacher-management/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
+    "exceljs": "^4.4.0",
+    "pdfmake": "^0.3.11",
     "valibot": "^1.5.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@school-student-teacher-management/config": "workspace:*",
+    "@types/pdfmake": "^0.3.3",
     "typescript": "catalog:"
   }
 }

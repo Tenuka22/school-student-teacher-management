@@ -1,4 +1,5 @@
 import { Toaster } from "@school-student-teacher-management/ui/components/sonner";
+import { TooltipProvider } from "@school-student-teacher-management/ui/components/tooltip";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import {
@@ -24,7 +25,9 @@ const RootDocument = () => (
       <HeadContent />
     </head>
     <body>
-      <Outlet />
+      <TooltipProvider>
+        <Outlet />
+      </TooltipProvider>
       <Toaster richColors />
       <TanStackRouterDevtools position="bottom-left" />
       <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />

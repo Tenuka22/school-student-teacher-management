@@ -39,15 +39,12 @@ const buttonVariants = cva(
   }
 )
 
-// eslint-disable-next-line react-doctor/only-export-components
-export type ButtonProps = ButtonPrimitive.Props & VariantProps<typeof buttonVariants>
-
-const Button = ({
+function Button({
   className,
   variant = "default",
   size = "default",
   ...props
-}: ButtonProps) => {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
     <ButtonPrimitive
       data-slot="button"

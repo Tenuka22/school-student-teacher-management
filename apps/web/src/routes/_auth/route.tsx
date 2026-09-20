@@ -1,5 +1,12 @@
+import { Separator } from "@school-student-teacher-management/ui/components/separator";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@school-student-teacher-management/ui/components/sidebar";
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 
+import { AppSidebar } from "@/components/app-sidebar";
 import { getUser } from "@/functions/get-user";
 
 export const Route = createFileRoute("/_auth")({
@@ -22,4 +29,31 @@ export const Route = createFileRoute("/_auth")({
   },
 });
 
-const AuthLayout = () => <Outlet />;
+const AuthLayout = () => {
+  const { session } = Route.useRouteContext();
+
+  return (
+    <SidebarProvider>
+      <AppSidebar
+        user={
+          session && "user" in session
+            ? {
+                name: session.user.name || "User",
+                email: session.user.email || "",
+                avatar: session.user.image || undefined,
+              }
+            : undefined
+        }
+      />
+      <SidebarInset>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="h-4" />
+        </header>
+        <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+          <Outlet />
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+};
