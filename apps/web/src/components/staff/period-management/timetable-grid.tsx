@@ -96,12 +96,12 @@ export const TimetableGrid = ({
                   <TableCell
                     key={key}
                     className={`relative p-1 text-center ${
-                      assignment ? "bg-blue-50" : "bg-gray-50"
+                      assignment ? "bg-primary/5" : "bg-muted/30"
                     }`}
                   >
                     {assignment && assignedStaff ? (
                       <button
-                        className="group w-full cursor-pointer rounded border border-blue-200 bg-white p-2 text-left text-xs"
+                        className="group bg-card w-full cursor-pointer rounded border p-2 text-left text-xs"
                         onClick={() => onEditClick(assignment)}
                         type="button"
                       >

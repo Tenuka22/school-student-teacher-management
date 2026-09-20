@@ -17,6 +17,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import * as v from "valibot";
 
+import {
+  CLASS_CATEGORIES,
+  categoryForGrade,
+} from "@/components/staff/class-assignment/class-categories";
 import { orpc } from "@/utils/orpc";
 
 interface Class {
@@ -33,9 +37,10 @@ type PeriodConfig = typeof periodConfigTable.$inferSelect;
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 /** Subjects this teacher already prefers / has previously taught for the
- * selected class's grade - not the full school-wide subject catalog - so
- * period assignment stays consistent with what was set up in "Assign
- * Subjects". */
+ * selected class's grade, preferring what was set up in "Assign Subjects".
+ * Falls back to the full grade-appropriate catalog (from the school's
+ * curriculum structure version) when the teacher hasn't set any preferred
+ * subjects yet, so period assignment is never a hard dead end. */
 const usePreferredSubjects = (
   staffId: string,
   academicYearId: string,
@@ -52,7 +57,9 @@ const usePreferredSubjects = (
     })
   );
 
-  return useMemo(() => {
+  const catalogQuery = useQuery(orpc.staff.listSubjects.queryOptions({}));
+
+  const preferred = useMemo(() => {
     const subjects = subjectsQuery.data as unknown[] | undefined;
     if (!(selectedClass && subjects)) {
       return [];
@@ -68,6 +75,19 @@ const usePreferredSubjects = (
       gradeLevel: selectedClass.gradeLevel,
     }));
   }, [selectedClass, subjectsQuery.data]);
+
+  return useMemo(() => {
+    if (preferred.length > 0) {
+      return preferred;
+    }
+    const catalog = catalogQuery.data as unknown[] | undefined;
+    if (!(selectedClass && catalog)) {
+      return [];
+    }
+    return (catalog as Subject[]).filter(
+      (s) => s.gradeLevel === selectedClass.gradeLevel
+    );
+  }, [preferred, selectedClass, catalogQuery.data]);
 };
 
 const extractFieldErrors = (
@@ -171,21 +191,48 @@ const SelectField = ({
 const useSelectOptions = (
   classes: Class[],
   periodConfig: PeriodConfig[],
-  filteredSubjects: Subject[]
+  filteredSubjects: Subject[],
+  category: string,
+  grade: string
 ) => {
   const sortedPeriods = useMemo(
     () => periodConfig.toSorted((a, b) => a.periodNumber - b.periodNumber),
     [periodConfig]
   );
 
-  const classOptions = useMemo(
-    () =>
-      classes.map((cls) => ({
-        value: cls.id,
-        label: `${cls.name} (Grade ${cls.gradeLevel})`,
-      })),
-    [classes]
+  const categoryOptions = useMemo(
+    () => CLASS_CATEGORIES.map((c) => ({ value: c.key, label: c.label })),
+    []
   );
+
+  const gradeOptions = useMemo(() => {
+    const activeCategory = CLASS_CATEGORIES.find((c) => c.key === category);
+    if (!activeCategory) {
+      return [];
+    }
+    const gradesWithClasses = new Set(classes.map((cls) => cls.gradeLevel));
+    const options: SelectFieldOption[] = [];
+    for (const g of activeCategory.grades) {
+      if (gradesWithClasses.has(g)) {
+        options.push({ value: String(g), label: `Grade ${g}` });
+      }
+    }
+    return options;
+  }, [classes, category]);
+
+  const classOptions = useMemo(() => {
+    const gradeNumber = Number(grade);
+    if (!grade) {
+      return [];
+    }
+    const options: SelectFieldOption[] = [];
+    for (const cls of classes) {
+      if (cls.gradeLevel === gradeNumber) {
+        options.push({ value: cls.id, label: cls.name });
+      }
+    }
+    return options;
+  }, [classes, grade]);
 
   const dayOptions = useMemo(
     () =>
@@ -214,7 +261,14 @@ const useSelectOptions = (
     [filteredSubjects]
   );
 
-  return { classOptions, dayOptions, periodOptions, subjectOptions };
+  return {
+    categoryOptions,
+    gradeOptions,
+    classOptions,
+    dayOptions,
+    periodOptions,
+    subjectOptions,
+  };
 };
 
 interface TeacherPeriodAssignmentFormContentProps {
@@ -227,6 +281,12 @@ interface TeacherPeriodAssignmentFormContentProps {
   isLoading: boolean;
   isEditMode: boolean;
   isSlotLocked: boolean;
+  category: string;
+  grade: string;
+  onCategoryChange: (value: string) => void;
+  onGradeChange: (value: string) => void;
+  categoryOptions: SelectFieldOption[];
+  gradeOptions: SelectFieldOption[];
   classOptions: SelectFieldOption[];
   dayOptions: SelectFieldOption[];
   periodOptions: SelectFieldOption[];
@@ -243,6 +303,12 @@ const TeacherPeriodAssignmentFormContent = ({
   isLoading,
   isEditMode,
   isSlotLocked,
+  category,
+  grade,
+  onCategoryChange,
+  onGradeChange,
+  categoryOptions,
+  gradeOptions,
   classOptions,
   dayOptions,
   periodOptions,
@@ -256,13 +322,33 @@ const TeacherPeriodAssignmentFormContent = ({
     )}
 
     <SelectField
+      id="classCategory"
+      label="Section *"
+      value={category}
+      onValueChange={onCategoryChange}
+      options={categoryOptions}
+      placeholder="Select Primary/Secondary/Collegiate"
+      disabled={isLoading || isEditMode}
+    />
+
+    <SelectField
+      id="classGrade"
+      label="Grade *"
+      value={grade}
+      onValueChange={onGradeChange}
+      options={gradeOptions}
+      placeholder={category ? "Select grade" : "Select a section first"}
+      disabled={isLoading || isEditMode || !category}
+    />
+
+    <SelectField
       id="classId"
       label="Class *"
       value={formData.classId}
       onValueChange={(value) => handleChange("classId", value)}
       options={classOptions}
-      placeholder="Select class"
-      disabled={isLoading || isEditMode}
+      placeholder={grade ? "Select class" : "Select a grade first"}
+      disabled={isLoading || isEditMode || !grade}
       error={errors.classId}
     />
 
@@ -298,12 +384,6 @@ const TeacherPeriodAssignmentFormContent = ({
       disabled={isLoading || subjectOptions.length === 0}
       error={errors.subjectKey}
     />
-    {formData.classId && subjectOptions.length === 0 && (
-      <p className="text-muted-foreground text-sm">
-        This teacher has no preferred subjects for this grade yet. Assign their
-        subjects first.
-      </p>
-    )}
   </form>
 );
 
@@ -359,6 +439,34 @@ export const TeacherPeriodAssignmentForm = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
 
+  const initialClass = initialData
+    ? classes.find((c) => c.id === initialData.classId)
+    : undefined;
+  const [category, setCategory] = useState(
+    initialClass ? categoryForGrade(initialClass.gradeLevel) : ""
+  );
+  const [grade, setGrade] = useState(
+    initialClass ? String(initialClass.gradeLevel) : ""
+  );
+
+  const handleChange = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([k]) => k !== field))
+    );
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setCategory(value);
+    setGrade("");
+    handleChange("classId", "");
+  };
+
+  const handleGradeChange = (value: string) => {
+    setGrade(value);
+    handleChange("classId", "");
+  };
+
   const selectedClass = useMemo(
     () => classes.find((c) => c.id === formData.classId),
     [classes, formData.classId]
@@ -370,8 +478,20 @@ export const TeacherPeriodAssignmentForm = ({
     selectedClass
   );
 
-  const { classOptions, dayOptions, periodOptions, subjectOptions } =
-    useSelectOptions(classes, periodConfig, filteredSubjects);
+  const {
+    categoryOptions,
+    gradeOptions,
+    classOptions,
+    dayOptions,
+    periodOptions,
+    subjectOptions,
+  } = useSelectOptions(
+    classes,
+    periodConfig,
+    filteredSubjects,
+    category,
+    grade
+  );
 
   const schema = v.object({
     classId: v.pipe(v.string(), v.minLength(1, "Class is required")),
@@ -379,13 +499,6 @@ export const TeacherPeriodAssignmentForm = ({
     periodNumber: v.pipe(v.string(), v.minLength(1, "Period is required")),
     subjectKey: v.pipe(v.string(), v.minLength(1, "Subject is required")),
   });
-
-  const handleChange = (field: keyof typeof formData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) =>
-      Object.fromEntries(Object.entries(prev).filter(([k]) => k !== field))
-    );
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -412,6 +525,12 @@ export const TeacherPeriodAssignmentForm = ({
       isLoading={isLoading}
       isEditMode={isEditMode}
       isSlotLocked={isSlotLocked}
+      category={category}
+      grade={grade}
+      onCategoryChange={handleCategoryChange}
+      onGradeChange={handleGradeChange}
+      categoryOptions={categoryOptions}
+      gradeOptions={gradeOptions}
       classOptions={classOptions}
       dayOptions={dayOptions}
       periodOptions={periodOptions}

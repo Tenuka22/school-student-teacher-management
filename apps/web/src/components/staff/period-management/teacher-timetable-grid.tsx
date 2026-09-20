@@ -99,14 +99,14 @@ export const TeacherTimetableGrid = ({
                   <TableCell
                     key={key}
                     className={`p-1 align-top ${
-                      slotEntries.length > 0 ? "bg-blue-50" : "bg-gray-50"
+                      slotEntries.length > 0 ? "bg-primary/5" : "bg-muted/30"
                     }`}
                   >
                     <div className="flex flex-col gap-1">
                       {slotEntries.map((entry) => (
                         <div
                           key={entry.id}
-                          className="group relative rounded border border-blue-200 bg-white p-2 text-left text-xs"
+                          className="group bg-card relative rounded border p-2 text-left text-xs"
                         >
                           <button
                             type="button"

@@ -22,6 +22,7 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TableHeader,
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
 import {
@@ -335,9 +336,9 @@ export const TeachersList = ({
 
       {/* Table */}
       <Table>
-        <TableHead>
+        <TableHeader>
           <TableRow>
-            <TableCell className="w-8">
+            <TableHead className="w-8">
               <Checkbox
                 checked={
                   selectedIds.size > 0 &&
@@ -345,14 +346,14 @@ export const TeachersList = ({
                 }
                 onCheckedChange={handleSelectAll}
               />
-            </TableCell>
-            <TableCell>Name</TableCell>
-            <TableCell>Email</TableCell>
-            <TableCell className="hidden sm:table-cell">Phone</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell className="w-10" />
+            </TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead className="hidden sm:table-cell">Phone</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="w-10" />
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
           {filteredTeachers.map((teacher) => (
             <TeacherRow

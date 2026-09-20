@@ -69,8 +69,8 @@ const RouteComponent = () => {
   const handleAssignSubjectsClick = useCallback(
     (teacher: Staff) => {
       navigate({
-        to: "/dashboard/staff/subjects",
-        search: { staffId: teacher.id },
+        to: "/dashboard/staff/subjects/$staffId",
+        params: { staffId: teacher.id },
       });
     },
     [navigate]
@@ -79,8 +79,8 @@ const RouteComponent = () => {
   const handleManageTimetableClick = useCallback(
     (teacher: Staff) => {
       navigate({
-        to: "/dashboard/staff/teacher-timetable",
-        search: { staffId: teacher.id },
+        to: "/dashboard/staff/teacher-timetable/$staffId",
+        params: { staffId: teacher.id },
       });
     },
     [navigate]
