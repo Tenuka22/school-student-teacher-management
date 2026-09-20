@@ -41,6 +41,10 @@ const navMain = [
         title: "Teacher Timetable",
         url: "/dashboard/staff/teacher-timetable",
       },
+      {
+        title: "Attendance",
+        url: "/dashboard/staff/attendance",
+      },
     ],
   },
 ];
