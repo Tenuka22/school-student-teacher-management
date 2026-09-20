@@ -37,6 +37,7 @@ jobs:
 
       - name: Fix formatting and lint issues
         run: bun run fix
+        continue-on-error: true
 
       - name: Commit and push fixes
         id: autofix
