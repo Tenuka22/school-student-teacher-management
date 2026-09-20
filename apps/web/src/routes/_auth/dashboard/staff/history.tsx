@@ -36,13 +36,6 @@ interface StaffPosition {
   staffId: string;
   position: string;
 }
-interface SubjectAssignment {
-  id: string;
-  staffId: string;
-  subjectKey: string;
-  gradeLevel: number;
-}
-
 const RouteComponent = () => {
   const yearsQuery = useQuery(orpc.staff.listAcademicYears.queryOptions());
   const [selectedYear, setSelectedYear] = useState<string>("");
@@ -66,25 +59,10 @@ const RouteComponent = () => {
     })
   );
 
-  const subjectAssignmentsQuery = useQuery(
-    orpc.staff.listSubjectAssignments.queryOptions({
-      input: {
-        academicYearId: selectedYear ?? "",
-        staffId: undefined,
-        gradeLevel: undefined,
-        subjectKey: undefined,
-      },
-      enabled: !!selectedYear,
-    })
-  );
-
   const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
 
   const exportStaffPositionsMutation = useMutation(
     orpc.staff.exports.staffPositionsExcel.mutationOptions()
-  );
-  const exportSubjectAssignmentsMutation = useMutation(
-    orpc.staff.exports.subjectAssignmentsExcel.mutationOptions()
   );
 
   const handleExportStaffPositions = async () => {
@@ -99,22 +77,6 @@ const RouteComponent = () => {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to export positions"
-      );
-    }
-  };
-
-  const handleExportSubjectAssignments = async () => {
-    if (!selectedYear) {
-      return;
-    }
-    try {
-      const file = await exportSubjectAssignmentsMutation.mutateAsync({
-        academicYearId: selectedYear,
-      } as never);
-      downloadExportFile(file);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to export assignments"
       );
     }
   };
@@ -138,11 +100,6 @@ const RouteComponent = () => {
     const data = staffPositionsQuery.data as unknown[] | undefined;
     return (data || []) as StaffPosition[];
   }, [staffPositionsQuery.data]);
-
-  const subjectAssignmentsData = useMemo(() => {
-    const data = subjectAssignmentsQuery.data as unknown[] | undefined;
-    return (data || []) as SubjectAssignment[];
-  }, [subjectAssignmentsQuery.data]);
 
   const renderStaffPositionsContent = () => {
     if (staffPositionsQuery.isLoading) {
@@ -168,39 +125,6 @@ const RouteComponent = () => {
                 {staffMap.get(position.staffId)?.name || "Unknown"}
               </TableCell>
               <TableCell>{position.position}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    );
-  };
-
-  const renderSubjectAssignmentsContent = () => {
-    if (subjectAssignmentsQuery.isLoading) {
-      return (
-        <div className="text-muted-foreground text-center">Loading...</div>
-      );
-    }
-    if (subjectAssignmentsData.length === 0) {
-      return <div className="text-muted-foreground text-center">No data</div>;
-    }
-    return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Teacher</TableHead>
-            <TableHead>Subject</TableHead>
-            <TableHead>Grade Level</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {subjectAssignmentsData.map((assignment) => (
-            <TableRow key={assignment.id}>
-              <TableCell>
-                {staffMap.get(assignment.staffId)?.name || "Unknown"}
-              </TableCell>
-              <TableCell>{assignment.subjectKey}</TableCell>
-              <TableCell>{assignment.gradeLevel}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -255,25 +179,6 @@ const RouteComponent = () => {
             </Button>
           </div>
           {renderStaffPositionsContent()}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Subject Assignments</h2>
-            <Button
-              onClick={handleExportSubjectAssignments}
-              disabled={
-                !selectedYear || exportSubjectAssignmentsMutation.isPending
-              }
-              variant="outline"
-              size="sm"
-            >
-              Export
-            </Button>
-          </div>
-          {renderSubjectAssignmentsContent()}
         </CardContent>
       </Card>
     </div>

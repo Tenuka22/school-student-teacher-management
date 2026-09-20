@@ -7,24 +7,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
-import { IconBook, IconCalendarTime } from "@tabler/icons-react";
+import { IconCalendarTime } from "@tabler/icons-react";
 
 type Staff = typeof staff.$inferSelect;
 
 interface NewTeacherNextStepsDialogProps {
   teacher: Staff | null;
   onOpenChange: (open: boolean) => void;
-  onAssignSubjectsClick: (teacher: Staff) => void;
   onManageTimetableClick: (teacher: Staff) => void;
 }
 
-/** Shown right after a teacher is created: the two natural next steps —
- * pick their preferred subjects, then set up their timetable — are one
- * click away instead of buried back in the general list. */
+/** Shown right after a teacher is created: the natural next step — setting
+ * up their timetable, where subjects are assigned per period directly — is
+ * one click away instead of buried back in the general list. */
 export const NewTeacherNextStepsDialog = ({
   teacher,
   onOpenChange,
-  onAssignSubjectsClick,
   onManageTimetableClick,
 }: NewTeacherNextStepsDialogProps) => (
   <Dialog open={!!teacher} onOpenChange={onOpenChange}>
@@ -32,19 +30,11 @@ export const NewTeacherNextStepsDialog = ({
       <DialogHeader>
         <DialogTitle>{teacher?.name} was created</DialogTitle>
         <DialogDescription>
-          Next, pick their preferred subjects and set up their timetable. Both
-          can be done later from the teacher&apos;s row menu.
+          Next, set up their timetable. This can be done later from the
+          teacher&apos;s row menu.
         </DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-2">
-        <Button
-          variant="outline"
-          className="justify-start"
-          onClick={() => teacher && onAssignSubjectsClick(teacher)}
-        >
-          <IconBook className="mr-2 size-4" />
-          Assign Subjects
-        </Button>
         <Button
           variant="outline"
           className="justify-start"

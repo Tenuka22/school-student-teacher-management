@@ -52,8 +52,6 @@ export const TeacherTimetablePageContent = ({
           />
 
           <TeacherTimetableDialogs
-            staffId={page.staffId}
-            academicYearId={page.currentYear.id}
             classes={page.classes}
             periodConfig={page.periodConfig}
             selectedEntry={page.selectedEntry}

@@ -31,7 +31,6 @@ import {
   IconFileExport,
   IconPlus,
   IconAlertCircle,
-  IconBook,
   IconCalendarTime,
 } from "@tabler/icons-react";
 import { useCallback, useMemo, useState } from "react";
@@ -46,7 +45,6 @@ interface TeachersListProps {
   onEditClick: (teacher: Staff) => void;
   onViewClick: (teacher: Staff) => void;
   onDeleteClick: (teacher: Staff) => void;
-  onAssignSubjectsClick: (teacher: Staff) => void;
   onManageTimetableClick: (teacher: Staff) => void;
   onExportClick: () => void;
 }
@@ -87,7 +85,6 @@ const TeacherRow = ({
   onEditClick,
   onViewClick,
   onDeleteClick,
-  onAssignSubjectsClick,
   onManageTimetableClick,
 }: {
   teacher: Staff;
@@ -96,7 +93,6 @@ const TeacherRow = ({
   onEditClick: () => void;
   onViewClick: () => void;
   onDeleteClick: () => void;
-  onAssignSubjectsClick: () => void;
   onManageTimetableClick: () => void;
 }) => (
   <TableRow>
@@ -139,10 +135,6 @@ const TeacherRow = ({
           <DropdownMenuItem onClick={onEditClick}>
             Edit Details
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onAssignSubjectsClick}>
-            <IconBook className="mr-2 size-4" />
-            Assign Subjects
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={onManageTimetableClick}>
             <IconCalendarTime className="mr-2 size-4" />
             Manage Timetable
@@ -166,7 +158,6 @@ export const TeachersList = ({
   onEditClick,
   onViewClick,
   onDeleteClick,
-  onAssignSubjectsClick,
   onManageTimetableClick,
   onExportClick,
 }: TeachersListProps) => {
@@ -366,7 +357,6 @@ export const TeachersList = ({
               onEditClick={() => onEditClick(teacher)}
               onViewClick={() => onViewClick(teacher)}
               onDeleteClick={() => onDeleteClick(teacher)}
-              onAssignSubjectsClick={() => onAssignSubjectsClick(teacher)}
               onManageTimetableClick={() => onManageTimetableClick(teacher)}
             />
           ))}

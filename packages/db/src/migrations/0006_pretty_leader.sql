@@ -1,0 +1,1 @@
+DROP TABLE "subject_assignment" CASCADE;

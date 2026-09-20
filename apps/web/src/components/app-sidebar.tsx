@@ -30,10 +30,6 @@ const navMain = [
         url: "/dashboard/staff/teachers",
       },
       {
-        title: "Subject Assignment",
-        url: "/dashboard/staff/subjects",
-      },
-      {
         title: "Class Assignment",
         url: "/dashboard/staff/classes",
       },

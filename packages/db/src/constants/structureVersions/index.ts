@@ -239,7 +239,7 @@ export const resolveEntries = (
 
 /**
  * Every subject key used by any registered version, deduplicated. Used as
- * the closed set `gradeSubjectConfig`/`subjectAssignment` subject keys are
+ * the closed set `gradeSubjectConfig`/`classPeriodAssignment` subject keys are
  * validated against, since there's no standalone curriculum constants file
  * — the versions themselves are the source of truth.
  */

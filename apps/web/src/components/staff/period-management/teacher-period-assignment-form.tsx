@@ -36,50 +36,12 @@ type PeriodConfig = typeof periodConfigTable.$inferSelect;
 
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-/** Subjects this teacher already prefers / has previously taught for the
- * selected class's grade, preferring what was set up in "Assign Subjects".
- * Falls back to the full grade-appropriate catalog (from the school's
- * curriculum structure version) when the teacher hasn't set any preferred
- * subjects yet, so period assignment is never a hard dead end. */
-const usePreferredSubjects = (
-  staffId: string,
-  academicYearId: string,
-  selectedClass: Class | undefined
-) => {
-  const subjectsQuery = useQuery(
-    orpc.staff.listSubjectAssignments.queryOptions({
-      input: {
-        academicYearId,
-        staffId: staffId as never,
-        gradeLevel: undefined,
-        subjectKey: undefined,
-      },
-    })
-  );
-
+/** Subjects available for the selected class's grade, from the school's full
+ * curriculum catalog (the current structure version). */
+const useSubjectsForGrade = (selectedClass: Class | undefined) => {
   const catalogQuery = useQuery(orpc.staff.listSubjects.queryOptions({}));
 
-  const preferred = useMemo(() => {
-    const subjects = subjectsQuery.data as unknown[] | undefined;
-    if (!(selectedClass && subjects)) {
-      return [];
-    }
-    const subjectKeys = new Set<string>();
-    for (const s of subjects as Subject[]) {
-      if (s.gradeLevel === selectedClass.gradeLevel) {
-        subjectKeys.add(s.subjectKey);
-      }
-    }
-    return [...subjectKeys].map((subjectKey) => ({
-      subjectKey,
-      gradeLevel: selectedClass.gradeLevel,
-    }));
-  }, [selectedClass, subjectsQuery.data]);
-
   return useMemo(() => {
-    if (preferred.length > 0) {
-      return preferred;
-    }
     const catalog = catalogQuery.data as unknown[] | undefined;
     if (!(selectedClass && catalog)) {
       return [];
@@ -87,7 +49,7 @@ const usePreferredSubjects = (
     return (catalog as Subject[]).filter(
       (s) => s.gradeLevel === selectedClass.gradeLevel
     );
-  }, [preferred, selectedClass, catalogQuery.data]);
+  }, [selectedClass, catalogQuery.data]);
 };
 
 const extractFieldErrors = (
@@ -389,8 +351,6 @@ const TeacherPeriodAssignmentFormContent = ({
 
 interface TeacherPeriodAssignmentFormProps {
   formId: string;
-  staffId: string;
-  academicYearId: string;
   classes: Class[];
   periodConfig: PeriodConfig[];
   onSubmit: (data: unknown) => Promise<void>;
@@ -411,8 +371,6 @@ interface TeacherPeriodAssignmentFormProps {
 
 export const TeacherPeriodAssignmentForm = ({
   formId,
-  staffId,
-  academicYearId,
   classes,
   periodConfig,
   onSubmit,
@@ -472,11 +430,7 @@ export const TeacherPeriodAssignmentForm = ({
     [classes, formData.classId]
   );
 
-  const filteredSubjects = usePreferredSubjects(
-    staffId,
-    academicYearId,
-    selectedClass
-  );
+  const filteredSubjects = useSubjectsForGrade(selectedClass);
 
   const {
     categoryOptions,

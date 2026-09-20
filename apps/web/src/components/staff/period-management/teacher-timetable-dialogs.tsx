@@ -36,8 +36,6 @@ interface TeacherTimetableEntry {
 }
 
 interface TeacherTimetableDialogsProps {
-  staffId: string;
-  academicYearId: string;
   classes: Class[];
   periodConfig: PeriodConfig[];
   selectedEntry: TeacherTimetableEntry | null;
@@ -57,8 +55,6 @@ interface TeacherTimetableDialogsProps {
 }
 
 export const TeacherTimetableDialogs = ({
-  staffId,
-  academicYearId,
   classes,
   periodConfig,
   selectedEntry,
@@ -91,8 +87,6 @@ export const TeacherTimetableDialogs = ({
         <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
           <TeacherPeriodAssignmentForm
             formId="add-teacher-period-form"
-            staffId={staffId}
-            academicYearId={academicYearId}
             classes={classes}
             periodConfig={periodConfig}
             onSubmit={onAddSubmit}
@@ -133,8 +127,6 @@ export const TeacherTimetableDialogs = ({
           {selectedEntry && (
             <TeacherPeriodAssignmentForm
               formId="edit-teacher-period-form"
-              staffId={staffId}
-              academicYearId={academicYearId}
               classes={classes}
               periodConfig={periodConfig}
               onSubmit={onEditSubmit}

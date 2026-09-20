@@ -28,12 +28,6 @@ import {
 export type ClassId = Brand<string, "ClassId">;
 export const classIdSchema = v.pipe(v.string(), brand<string, "ClassId">());
 
-export type SubjectAssignmentId = Brand<string, "SubjectAssignmentId">;
-export const subjectAssignmentIdSchema = v.pipe(
-  v.string(),
-  brand<string, "SubjectAssignmentId">()
-);
-
 export type GradeSubjectConfigId = Brand<string, "GradeSubjectConfigId">;
 export const gradeSubjectConfigIdSchema = v.pipe(
   v.string(),
@@ -126,42 +120,6 @@ export const classTeacherAssignmentHistory = pgTable(
 );
 
 /**
- * What a teacher teaches in a given year.
- * `subjectKey` maps to a constant from the subject enums.
- * `gradeLevel` is integer (1-13).
- * `classId` is nullable: null = teaches all classes of that grade.
- */
-export const subjectAssignment = pgTable(
-  "subject_assignment",
-  {
-    id: text("id").primaryKey(),
-    staffId: text("staff_id")
-      .notNull()
-      .references(() => staff.id, { onDelete: "cascade" }),
-    academicYearId: text("academic_year_id")
-      .notNull()
-      .references(() => academicYear.id, { onDelete: "cascade" }),
-    subjectKey: text("subject_key").notNull(),
-    gradeLevel: integer("grade_level").notNull(),
-    classId: text("class_id").references(() => class_.id, {
-      onDelete: "cascade",
-    }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => [
-    index("subject_assignment_staff_idx").on(table.staffId),
-    index("subject_assignment_year_idx").on(table.academicYearId),
-    index("subject_assignment_subject_idx").on(table.subjectKey),
-    unique("subject_assignment_unique").on(
-      table.staffId,
-      table.academicYearId,
-      table.subjectKey,
-      table.classId
-    ),
-  ]
-);
-
-/**
  * Defines which subjects are available per grade per academic year.
  * Seeded by code with defaults but stored in DB so basket layout changes
  * (e.g. 3→4 baskets) don't require a code deploy.
@@ -241,28 +199,6 @@ export const classTeacherAssignmentHistorySelectSchema = createSelectSchema(
 export const classTeacherAssignmentHistoryInsertSchema = createInsertSchema(
   classTeacherAssignmentHistory,
   classTeacherAssignmentHistoryColumnRefinements
-);
-
-const subjectAssignmentColumnRefinements = {
-  id: () => subjectAssignmentIdSchema,
-  staffId: () => staffIdSchema,
-  academicYearId: () => academicYearIdSchema,
-  subjectKey: () => subjectKeySchema,
-  gradeLevel: () => gradeLevelSchema,
-  classId: () => v.optional(v.nullable(classIdSchema)),
-};
-
-export const subjectAssignmentSelectSchema = createSelectSchema(
-  subjectAssignment,
-  subjectAssignmentColumnRefinements
-);
-export const subjectAssignmentInsertSchema = createInsertSchema(
-  subjectAssignment,
-  subjectAssignmentColumnRefinements
-);
-export const subjectAssignmentUpdateSchema = createUpdateSchema(
-  subjectAssignment,
-  subjectAssignmentColumnRefinements
 );
 
 /**

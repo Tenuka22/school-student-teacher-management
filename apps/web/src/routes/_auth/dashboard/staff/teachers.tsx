@@ -66,16 +66,6 @@ const RouteComponent = () => {
     setIsEditDialogOpen(true);
   }, []);
 
-  const handleAssignSubjectsClick = useCallback(
-    (teacher: Staff) => {
-      navigate({
-        to: "/dashboard/staff/subjects/$staffId",
-        params: { staffId: teacher.id },
-      });
-    },
-    [navigate]
-  );
-
   const handleManageTimetableClick = useCallback(
     (teacher: Staff) => {
       navigate({
@@ -218,7 +208,6 @@ const RouteComponent = () => {
         onEditClick={handleEditClick}
         onViewClick={handleViewClick}
         onDeleteClick={handleDeleteClick}
-        onAssignSubjectsClick={handleAssignSubjectsClick}
         onManageTimetableClick={handleManageTimetableClick}
         onExportClick={handleExportClick}
       />
@@ -254,10 +243,6 @@ const RouteComponent = () => {
           if (!open) {
             setNewTeacher(null);
           }
-        }}
-        onAssignSubjectsClick={(teacher) => {
-          setNewTeacher(null);
-          handleAssignSubjectsClick(teacher);
         }}
         onManageTimetableClick={(teacher) => {
           setNewTeacher(null);
