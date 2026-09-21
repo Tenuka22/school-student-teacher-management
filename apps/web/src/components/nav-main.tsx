@@ -18,13 +18,17 @@ import { IconChevronRight } from "@tabler/icons-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 export const NavMain = ({
+  label = "Platform",
   items,
 }: {
+  label?: string;
   items: {
     title: string;
     url: string;
     icon: React.ReactNode;
     isActive?: boolean;
+    disabled?: boolean;
+    tag?: string;
     items?: {
       title: string;
       url: string;
@@ -44,7 +48,9 @@ export const NavMain = ({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupLabel className="text-sidebar-foreground/40 text-xs font-extrabold tracking-[0.18em]">
+        {label}
+      </SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <Collapsible
@@ -58,13 +64,21 @@ export const NavMain = ({
             <SidebarMenuButton
               tooltip={item.title}
               isActive={isItemActive(item.url)}
+              disabled={item.disabled}
               className={isItemActive(item.url) ? "bg-sidebar-accent" : ""}
               onClick={() =>
-                item.url !== "#" && navigate({ to: item.url as never })
+                !item.disabled &&
+                item.url !== "#" &&
+                navigate({ to: item.url as never })
               }
             >
               {item.icon}
-              <span>{item.title}</span>
+              <span className="flex-1">{item.title}</span>
+              {item.tag && (
+                <span className="border-sidebar-foreground/25 text-sidebar-foreground/50 shrink-0 border px-1.5 py-0.5 text-[8.5px] font-extrabold tracking-[0.1em]">
+                  {item.tag}
+                </span>
+              )}
             </SidebarMenuButton>
             {item.items?.length ? (
               <>

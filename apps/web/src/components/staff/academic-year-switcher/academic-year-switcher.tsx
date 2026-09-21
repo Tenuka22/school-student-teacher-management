@@ -12,7 +12,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@school-student-teacher-management/ui/components/sidebar";
-import { IconCalendar, IconChevronDown, IconPlus } from "@tabler/icons-react";
+import { IconChevronDown, IconPlus } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -91,29 +91,30 @@ export const AcademicYearSwitcher = () => {
     toast.success(`Academic year ${data.year} created`);
   };
 
-  const label = currentYear
-    ? `Academic Year ${currentYear.year}`
-    : "No Academic Year";
-
   return (
     <SidebarMenu>
+      <div className="text-sidebar-foreground/50 mb-1 px-2 text-xs font-extrabold tracking-[0.18em]">
+        ACADEMIC YEAR
+      </div>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <SidebarMenuButton size="lg">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <IconCalendar className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{label}</span>
-                  <span className="truncate text-xs">
+              <SidebarMenuButton
+                size="lg"
+                className="border-sidebar-primary/45 bg-sidebar-primary/10 hover:bg-sidebar-primary/15 data-[state=open]:bg-sidebar-primary/15 h-auto border py-2.5"
+              >
+                <div className="grid flex-1 text-left leading-tight">
+                  <span className="font-heading text-sidebar-primary truncate text-xl leading-none font-semibold">
+                    {currentYear?.year ?? "—"}
+                  </span>
+                  <span className="text-sidebar-foreground/70 mt-1 truncate text-xs">
                     {currentYear?.startDate && currentYear?.endDate
                       ? `${currentYear.startDate} – ${currentYear.endDate}`
                       : "Select an academic year"}
                   </span>
                 </div>
-                <IconChevronDown className="ml-auto size-4" />
+                <IconChevronDown className="text-sidebar-primary ml-auto size-4" />
               </SidebarMenuButton>
             }
           />
