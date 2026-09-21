@@ -93,9 +93,6 @@ export const AcademicYearSwitcher = () => {
 
   return (
     <SidebarMenu>
-      <div className="text-sidebar-foreground/50 mb-1 px-2 text-xs font-extrabold tracking-[0.18em]">
-        ACADEMIC YEAR
-      </div>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -118,26 +115,38 @@ export const AcademicYearSwitcher = () => {
               </SidebarMenuButton>
             }
           />
-          <DropdownMenuContent className="w-64" align="start">
+          <DropdownMenuContent
+            className="border-primary/15 w-64 rounded-none border p-1.5 shadow-none"
+            align="start"
+          >
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-muted-foreground text-xs">
-                Academic Years
+              <DropdownMenuLabel className="text-muted-foreground px-2 pt-1 pb-2 text-xs font-extrabold tracking-[0.18em]">
+                ACADEMIC YEARS
               </DropdownMenuLabel>
               {windowedYears.map((year) => (
                 <DropdownMenuItem
                   key={year.id}
                   onClick={() => handleSwitchYear(year.id)}
-                  className="justify-between"
+                  className={
+                    year.isCurrent
+                      ? "bg-primary/8 text-primary justify-between rounded-none py-2 font-semibold"
+                      : "justify-between rounded-none py-2"
+                  }
                 >
-                  <span>{year.year}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {year.isCurrent ? "Active" : ""}
-                  </span>
+                  <span className="font-heading text-base">{year.year}</span>
+                  {year.isCurrent && (
+                    <span className="text-[10px] font-bold tracking-wider">
+                      ACTIVE
+                    </span>
+                  )}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setIsAddDialogOpen(true)}>
+            <DropdownMenuSeparator className="bg-primary/10" />
+            <DropdownMenuItem
+              onClick={() => setIsAddDialogOpen(true)}
+              className="text-primary rounded-none py-2 font-semibold"
+            >
               <IconPlus className="mr-2 size-4" />
               Add Academic Year
             </DropdownMenuItem>

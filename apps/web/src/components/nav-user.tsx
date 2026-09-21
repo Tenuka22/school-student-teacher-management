@@ -68,41 +68,47 @@ export const NavUser = ({
               />
             }
           >
-            <Avatar className="h-8 w-8 rounded-lg">
+            <Avatar className="bg-sidebar-primary/15 text-sidebar-primary size-8 rounded-none font-bold">
               <AvatarImage src={user.avatar} alt={user.name} />
-              <AvatarFallback className="rounded-lg">
+              <AvatarFallback className="bg-sidebar-primary/15 text-sidebar-primary rounded-none font-bold">
                 {getAvatarFallback(user.name)}
               </AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{user.name}</span>
-              <span className="truncate text-xs">{user.email}</span>
+            <div className="grid flex-1 text-left leading-tight">
+              <span className="text-sidebar-foreground truncate text-[12.5px] font-bold">
+                {user.name}
+              </span>
+              <span className="text-sidebar-foreground/50 truncate text-xs">
+                {user.email}
+              </span>
             </div>
-            <IconSelector className="ml-auto size-4" />
+            <IconSelector className="text-sidebar-foreground/50 ml-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="min-w-56 rounded-lg"
+            className="border-primary/15 min-w-60 rounded-none border p-1.5 shadow-none"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
           >
-            <div className="flex items-center gap-2 px-2 py-1.5 text-sm">
-              <Avatar className="h-8 w-8 rounded-lg">
+            <div className="flex items-center gap-2.5 px-2 py-2">
+              <Avatar className="bg-primary/10 text-primary size-9 rounded-none font-bold">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">
+                <AvatarFallback className="bg-primary/10 text-primary rounded-none font-bold">
                   {getAvatarFallback(user.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs">{user.email}</span>
+              <div className="grid flex-1 text-left leading-tight">
+                <span className="truncate text-sm font-bold">{user.name}</span>
+                <span className="text-muted-foreground truncate text-xs">
+                  {user.email}
+                </span>
               </div>
             </div>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-primary/10" />
             <button
               type="button"
               onClick={handleSignOut}
-              className="hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+              className="text-destructive hover:bg-destructive/8 flex w-full items-center gap-2 px-2 py-2 text-left text-sm font-semibold"
             >
               <IconLogout className="size-4" />
               Log out

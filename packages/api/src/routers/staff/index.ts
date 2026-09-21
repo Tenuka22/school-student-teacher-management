@@ -4,6 +4,7 @@ import { assignPosition } from "./assign-position";
 import { createAcademicYear } from "./create-academic-year";
 import { createClass } from "./create-class";
 import { createStaff } from "./create-staff";
+import { deleteAcademicYear } from "./delete-academic-year";
 import { deleteClass } from "./delete-class";
 import { deleteStaff } from "./delete-staff";
 import { exportsRouter } from "./exports";
@@ -39,6 +40,7 @@ export const staffRouter = {
   // Academic years
   listAcademicYears,
   createAcademicYear,
+  deleteAcademicYear,
   setCurrentYear,
   listPreviousYearTeachers,
   portTeachersFromPreviousYear,
