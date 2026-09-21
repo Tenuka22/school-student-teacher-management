@@ -70,6 +70,20 @@ export interface MonthOption {
   label: string;
 }
 
+/** A period/day toggle or reason save requested for a date before today.
+ * Past edits aren't applied immediately - the caller must confirm via
+ * `confirmPastEdit` first, since backdating attendance is unusual enough
+ * to warrant an explicit "are you sure" rather than a silent write. */
+export type PendingPastEdit =
+  | { kind: "school"; staffId: string }
+  | { kind: "period"; staffId: string; periodNumber: number }
+  | {
+      kind: "reason";
+      staffId: string;
+      periodNumber: number | null;
+      reason: string;
+    };
+
 const MONTH_LABELS = [
   "January",
   "February",
@@ -107,7 +121,17 @@ export interface AttendancePageApi {
   monthOptions: MonthOption[];
   yearOptions: number[];
   dayOfWeek: number | null;
+  /** True when the selected date is before today - edits go through the
+   * pending-confirmation flow instead of applying immediately. */
+  isPastDate: boolean;
+  pendingPastEdit: PendingPastEdit | null;
+  confirmPastEdit: () => Promise<void>;
+  cancelPastEdit: () => void;
   currentYear: AcademicYear | undefined;
+  /** True when an academic year for `currentYear.year - 1` exists - lets
+   * the page offer "import teachers from previous year" when this year
+   * has no teachers ported forward yet. */
+  hasPreviousYear: boolean;
   teachers: AttendanceTeacher[];
   isLoadingTeachers: boolean;
   periods: PeriodConfigRow[];
@@ -148,6 +172,9 @@ export const useAttendancePage = (): AttendancePageApi => {
     "yyyy-MM-dd"
   );
 
+  const todayIso = useMemo(() => format(today, "yyyy-MM-dd"), [today]);
+  const isPastDate = date < todayIso;
+
   const dayOptions = useMemo(
     () =>
       Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => ({
@@ -183,6 +210,16 @@ export const useAttendancePage = (): AttendancePageApi => {
       ) as AcademicYear) || undefined
     );
   }, [currentYearQuery.data]);
+
+  const hasPreviousYear = useMemo(() => {
+    const years = currentYearQuery.data as unknown[] | undefined;
+    if (!(years && currentYear)) {
+      return false;
+    }
+    return years.some(
+      (y) => (y as Record<string, unknown>).year === currentYear.year - 1
+    );
+  }, [currentYearQuery.data, currentYear]);
 
   const teachersQuery = useQuery(
     orpc.staff.attendance.listTeachersForAttendance.queryOptions({
@@ -390,7 +427,7 @@ export const useAttendancePage = (): AttendancePageApi => {
     []
   );
 
-  const togglePeriod = useCallback(
+  const performTogglePeriod = useCallback(
     async (staffId: string, periodNumber: number) => {
       const key = `${staffId}:${periodNumber}`;
       const current = expandedAbsentPeriods(staffId);
@@ -411,7 +448,7 @@ export const useAttendancePage = (): AttendancePageApi => {
     [expandedAbsentPeriods, applyLocalAbsence, saveTeacherDay]
   );
 
-  const toggleSchool = useCallback(
+  const performToggleSchool = useCallback(
     async (staffId: string) => {
       const key = `${staffId}:school`;
       const currentlyPresent = !draftRef.current.has(staffId);
@@ -443,7 +480,7 @@ export const useAttendancePage = (): AttendancePageApi => {
     [applyLocalAbsence, saveTeacherDay]
   );
 
-  const saveReason = useCallback(
+  const performSaveReason = useCallback(
     async (staffId: string, periodNumber: number | null, reason: string) => {
       if (periodNumber === null) {
         setDayReasonDraftValue((prev) => new Map([...prev, [staffId, reason]]));
@@ -474,6 +511,68 @@ export const useAttendancePage = (): AttendancePageApi => {
     },
     [expandedAbsentPeriods, applyLocalAbsence, saveTeacherDay]
   );
+
+  const [pendingPastEdit, setPendingPastEdit] =
+    useState<PendingPastEdit | null>(null);
+
+  const togglePeriod = useCallback(
+    async (staffId: string, periodNumber: number) => {
+      if (isPastDate) {
+        setPendingPastEdit({ kind: "period", staffId, periodNumber });
+        return;
+      }
+      await performTogglePeriod(staffId, periodNumber);
+    },
+    [isPastDate, performTogglePeriod]
+  );
+
+  const toggleSchool = useCallback(
+    async (staffId: string) => {
+      if (isPastDate) {
+        setPendingPastEdit({ kind: "school", staffId });
+        return;
+      }
+      await performToggleSchool(staffId);
+    },
+    [isPastDate, performToggleSchool]
+  );
+
+  const saveReason = useCallback(
+    async (staffId: string, periodNumber: number | null, reason: string) => {
+      if (isPastDate) {
+        setPendingPastEdit({ kind: "reason", staffId, periodNumber, reason });
+        return;
+      }
+      await performSaveReason(staffId, periodNumber, reason);
+    },
+    [isPastDate, performSaveReason]
+  );
+
+  const confirmPastEdit = useCallback(async () => {
+    const pending = pendingPastEdit;
+    setPendingPastEdit(null);
+    if (!pending) {
+      return;
+    }
+    if (pending.kind === "school") {
+      await performToggleSchool(pending.staffId);
+    } else if (pending.kind === "period") {
+      await performTogglePeriod(pending.staffId, pending.periodNumber);
+    } else {
+      await performSaveReason(
+        pending.staffId,
+        pending.periodNumber,
+        pending.reason
+      );
+    }
+  }, [
+    pendingPastEdit,
+    performToggleSchool,
+    performTogglePeriod,
+    performSaveReason,
+  ]);
+
+  const cancelPastEdit = useCallback(() => setPendingPastEdit(null), []);
 
   const rowStatus = useCallback(
     (staffId: string): RowStatus => draft.get(staffId)?.status ?? "present",
@@ -525,7 +624,12 @@ export const useAttendancePage = (): AttendancePageApi => {
     monthOptions,
     yearOptions,
     dayOfWeek,
+    isPastDate,
+    pendingPastEdit,
+    confirmPastEdit,
+    cancelPastEdit,
     currentYear,
+    hasPreviousYear,
     teachers,
     isLoadingTeachers: teachersQuery.isLoading,
     periods,

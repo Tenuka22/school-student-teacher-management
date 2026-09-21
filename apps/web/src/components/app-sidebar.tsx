@@ -71,6 +71,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     },
     { title: "Period Assignment", url: "/dashboard/staff/periods" },
     { title: "Teacher Timetable", url: "/dashboard/staff/teacher-timetable" },
+    { title: "Attendance", url: "/dashboard/staff/attendance" },
     {
       title: "Qualifications",
       url: "/dashboard/staff/teachers",
