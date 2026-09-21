@@ -38,6 +38,16 @@ import { toast } from "sonner";
 
 type Staff = typeof staff.$inferSelect;
 
+const getInitials = (name: string) =>
+  name
+    .replace(/^(?<prefix>Mr\.|Mrs\.|Ms\.|Dr\.)\s*/iu, "")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
 interface TeachersListProps {
   teachers: Staff[] | undefined;
   isLoading: boolean;
@@ -102,10 +112,13 @@ const TeacherRow = ({
     <TableCell className="font-medium">
       <button
         type="button"
-        className="text-left hover:underline"
+        className="flex items-center gap-3 text-left"
         onClick={onViewClick}
       >
-        {teacher.name}
+        <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center text-xs font-bold">
+          {getInitials(teacher.name)}
+        </span>
+        <span className="hover:underline">{teacher.name}</span>
       </button>
     </TableCell>
     <TableCell>{teacher.email}</TableCell>
@@ -226,50 +239,21 @@ export const TeachersList = ({
     );
   }
 
-  if (!filteredTeachers || filteredTeachers.length === 0) {
-    return (
-      <Empty className="min-h-[60vh] border-none">
-        <EmptyTitle>
-          {searchQuery ? "No teachers found" : "No teachers yet"}
-        </EmptyTitle>
-        <EmptyDescription>
-          {searchQuery
-            ? "Try adjusting your search"
-            : "Create your first teacher record to get started"}
-        </EmptyDescription>
-        <EmptyContent>
-          <Button onClick={onCreateClick} className="mt-4">
-            <IconPlus className="mr-2 h-4 w-4" />
-            Create Teacher
-          </Button>
-        </EmptyContent>
-      </Empty>
-    );
-  }
+  const hasResults = !!filteredTeachers && filteredTeachers.length > 0;
+  const hasAnyTeachers = !!teachers && teachers.length > 0;
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <IconSearch className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-          <Input
-            placeholder="Search teachers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={onExportClick}>
-            <IconFileExport className="mr-2 h-4 w-4" />
-            Export as Excel
-          </Button>
-          <Button onClick={onCreateClick} size="sm">
-            <IconPlus className="mr-2 h-4 w-4" />
-            Add Teacher
-          </Button>
-        </div>
+      {/* Page-level actions */}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onExportClick}>
+          <IconFileExport className="mr-2 h-4 w-4" />
+          Export as Excel
+        </Button>
+        <Button onClick={onCreateClick} size="sm">
+          <IconPlus className="mr-2 h-4 w-4" />
+          Add Teacher
+        </Button>
       </div>
 
       {/* Bulk selection toolbar */}
@@ -292,7 +276,7 @@ export const TeachersList = ({
       {/* Delete warning dialog */}
       {showDeleteWarning && (
         <div className="border-destructive/30 bg-destructive/10 flex items-center gap-3 rounded-lg border p-3">
-          <IconAlertCircle className="text-destructive h-5 w-5 flex-shrink-0" />
+          <IconAlertCircle className="text-destructive h-5 w-5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium">
               Delete {selectedIds.size} teacher
@@ -326,42 +310,87 @@ export const TeachersList = ({
       )}
 
       {/* Table */}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-8">
-              <Checkbox
-                checked={
-                  selectedIds.size > 0 &&
-                  selectedIds.size === filteredTeachers.length
-                }
-                onCheckedChange={handleSelectAll}
-              />
-            </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead className="hidden sm:table-cell">Phone</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="w-10" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filteredTeachers.map((teacher) => (
-            <TeacherRow
-              key={teacher.id}
-              teacher={teacher}
-              isSelected={selectedIds.has(teacher.id)}
-              onSelect={(checked) =>
-                handleSelectRow(teacher.id, checked as boolean)
-              }
-              onEditClick={() => onEditClick(teacher)}
-              onViewClick={() => onViewClick(teacher)}
-              onDeleteClick={() => onDeleteClick(teacher)}
-              onManageTimetableClick={() => onManageTimetableClick(teacher)}
+      {hasAnyTeachers ? (
+        <div className="border-primary/14 overflow-hidden border">
+          <div className="border-primary/12 flex items-center gap-2 border-b p-3">
+            <IconSearch className="text-muted-foreground h-4 w-4 shrink-0" />
+            <Input
+              placeholder="Search by name, email, phone or NIC…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
             />
-          ))}
-        </TableBody>
-      </Table>
+          </div>
+          {hasResults ? (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-primary hover:bg-primary border-none">
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={
+                        selectedIds.size > 0 &&
+                        selectedIds.size === filteredTeachers.length
+                      }
+                      onCheckedChange={handleSelectAll}
+                      className="border-primary-foreground/40 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                    />
+                  </TableHead>
+                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                    NAME
+                  </TableHead>
+                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                    EMAIL
+                  </TableHead>
+                  <TableHead className="text-accent hidden h-11 text-xs font-extrabold tracking-[0.16em] sm:table-cell">
+                    PHONE
+                  </TableHead>
+                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                    STATUS
+                  </TableHead>
+                  <TableHead className="text-accent h-11 w-10 text-xs font-extrabold tracking-[0.16em]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTeachers.map((teacher) => (
+                  <TeacherRow
+                    key={teacher.id}
+                    teacher={teacher}
+                    isSelected={selectedIds.has(teacher.id)}
+                    onSelect={(checked) =>
+                      handleSelectRow(teacher.id, checked as boolean)
+                    }
+                    onEditClick={() => onEditClick(teacher)}
+                    onViewClick={() => onViewClick(teacher)}
+                    onDeleteClick={() => onDeleteClick(teacher)}
+                    onManageTimetableClick={() =>
+                      onManageTimetableClick(teacher)
+                    }
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-muted-foreground p-10 text-center text-sm">
+              No teachers found. Try adjusting your search.
+            </div>
+          )}
+        </div>
+      ) : (
+        <Empty className="border-primary/22 min-h-[50vh] border border-dashed">
+          <EmptyTitle className="font-heading text-2xl">
+            No teachers yet
+          </EmptyTitle>
+          <EmptyDescription>
+            Create your first teacher record to get started
+          </EmptyDescription>
+          <EmptyContent>
+            <Button onClick={onCreateClick} className="mt-4">
+              <IconPlus className="mr-2 h-4 w-4" />
+              Create Teacher
+            </Button>
+          </EmptyContent>
+        </Empty>
+      )}
     </div>
   );
 };

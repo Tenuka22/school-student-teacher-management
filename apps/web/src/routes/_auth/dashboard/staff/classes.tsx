@@ -13,7 +13,9 @@ const RouteComponent = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold">Classes</h1>
+          <h1 className="font-heading text-4xl font-semibold">
+            Class Assignment
+          </h1>
           <p className="text-muted-foreground mt-2">
             Create classes and assign homeroom teachers for the academic year
           </p>

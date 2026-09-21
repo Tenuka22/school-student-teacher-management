@@ -83,17 +83,11 @@ const RouteComponent = () => {
       return;
     }
     const target = deleteTarget;
-    const queryKey = orpc.staff.listAcademicYears.queryKey();
     try {
       await deleteMutation.mutateAsync({ id: target.id } as never);
-      queryClient.setQueryData(queryKey, (data: unknown) =>
-        Array.isArray(data)
-          ? data.filter((y: AcademicYear) => y.id !== target.id)
-          : data
-      );
+      await queryClient.invalidateQueries();
       setDeleteTarget(null);
       toast.success(`Academic year ${target.year} deleted`);
-      await queryClient.invalidateQueries({ queryKey });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete year"

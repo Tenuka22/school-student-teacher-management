@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   pgTable,
   text,
@@ -107,6 +108,11 @@ export const classPeriodAssignment = pgTable(
     staffId: text("staff_id")
       .notNull()
       .references(() => staff.id, { onDelete: "cascade" }),
+    // Explicitly marks an intentional same-teacher/same-slot overlap (e.g. a
+    // Dance/Music teacher running several classes at once) so it can be
+    // excluded from double-booking conflict detection. Unmarked overlaps are
+    // treated as accidental double-bookings.
+    isCombinedSession: boolean("is_combined_session").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

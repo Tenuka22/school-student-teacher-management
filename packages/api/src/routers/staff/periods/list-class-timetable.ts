@@ -38,6 +38,7 @@ export const listClassTimetable = requireAssignmentPermission("read")
       periodNumber: record.periodNumber,
       subjectKey: record.subjectKey,
       staffId: record.staffId,
+      isCombinedSession: record.isCombinedSession,
       createdAt: record.createdAt.toISOString(),
     }));
   });

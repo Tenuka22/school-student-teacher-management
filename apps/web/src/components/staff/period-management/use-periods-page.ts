@@ -127,6 +127,18 @@ export const usePeriodsPage = () => {
     })
   );
 
+  const conflictsQuery = useQuery({
+    ...orpc.staff.periods.listPeriodConflicts.queryOptions({
+      input: { academicYearId: currentYear?.id ?? "" },
+    }),
+    enabled: !!currentYear?.id,
+  });
+
+  const conflictingAssignmentIds = useMemo(
+    () => new Set(conflictsQuery.data?.conflictingAssignmentIds),
+    [conflictsQuery.data]
+  );
+
   const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
 
   const staffMap = useMemo(() => {
@@ -232,12 +244,20 @@ export const usePeriodsPage = () => {
         } as never);
         setIsAssignDialogOpen(false);
         await timetableQuery.refetch();
+        await conflictsQuery.refetch();
         toast.success("Period assigned successfully");
       } catch (error) {
         handleMutationError(error, "Failed to assign period");
       }
     },
-    [selectedSlot, selectedClass, currentYear, assignMutation, timetableQuery]
+    [
+      selectedSlot,
+      selectedClass,
+      currentYear,
+      assignMutation,
+      timetableQuery,
+      conflictsQuery,
+    ]
   );
 
   const handleEditSubmit = useCallback(
@@ -252,12 +272,13 @@ export const usePeriodsPage = () => {
         } as never);
         setIsEditDialogOpen(false);
         await timetableQuery.refetch();
+        await conflictsQuery.refetch();
         toast.success("Assignment updated successfully");
       } catch (error) {
         handleMutationError(error, "Failed to update assignment");
       }
     },
-    [selectedAssignment, updateMutation, timetableQuery]
+    [selectedAssignment, updateMutation, timetableQuery, conflictsQuery]
   );
 
   const handleConfirmDelete = useCallback(async () => {
@@ -268,11 +289,12 @@ export const usePeriodsPage = () => {
       await deleteMutation.mutateAsync({ id: selectedAssignment.id } as never);
       setIsDeleteDialogOpen(false);
       await timetableQuery.refetch();
+      await conflictsQuery.refetch();
       toast.success("Assignment deleted successfully");
     } catch (error) {
       handleMutationError(error, "Failed to delete assignment");
     }
-  }, [selectedAssignment, deleteMutation, timetableQuery]);
+  }, [selectedAssignment, deleteMutation, timetableQuery, conflictsQuery]);
 
   const periodConfig = useMemo(() => {
     const data = periodConfigQuery.data as unknown[] | undefined;
@@ -301,6 +323,7 @@ export const usePeriodsPage = () => {
     selectedClass,
     periodConfig,
     timetableData,
+    conflictingAssignmentIds,
     staffMap,
     isAssignDialogOpen,
     setIsAssignDialogOpen,

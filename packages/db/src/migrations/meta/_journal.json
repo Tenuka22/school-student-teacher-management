@@ -57,6 +57,13 @@
       "when": 1789916604065,
       "tag": "0007_fat_dreaming_celestial",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790005193649,
+      "tag": "0008_wise_slayback",
+      "breakpoints": true
     }
   ]
 }

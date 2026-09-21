@@ -43,6 +43,7 @@ export const AssignPeriodDialog = ({
   staff,
   selectedClass,
   selectedSlot,
+  academicYearId,
   isLoading,
 }: {
   isOpen: boolean;
@@ -51,6 +52,7 @@ export const AssignPeriodDialog = ({
   staff: Staff[];
   selectedClass: PeriodClass | undefined;
   selectedSlot: { dayOfWeek: number; periodNumber: number } | null;
+  academicYearId: string | undefined;
   isLoading: boolean;
 }) => (
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -68,6 +70,7 @@ export const AssignPeriodDialog = ({
             gradeLevel={selectedClass.gradeLevel}
             dayOfWeek={selectedSlot.dayOfWeek}
             periodNumber={selectedSlot.periodNumber}
+            academicYearId={academicYearId}
             staff={staff}
             onSubmit={onSubmit}
             isLoading={isLoading}
@@ -98,6 +101,7 @@ export const EditPeriodDialog = ({
   selectedAssignment,
   staff,
   selectedClass,
+  academicYearId,
   isLoading,
 }: {
   isOpen: boolean;
@@ -106,6 +110,7 @@ export const EditPeriodDialog = ({
   selectedAssignment: PeriodAssignment | null;
   staff: Staff[];
   selectedClass: PeriodClass | undefined;
+  academicYearId: string | undefined;
   isLoading: boolean;
 }) => (
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -121,6 +126,8 @@ export const EditPeriodDialog = ({
             gradeLevel={selectedClass.gradeLevel}
             dayOfWeek={selectedAssignment.dayOfWeek}
             periodNumber={selectedAssignment.periodNumber}
+            academicYearId={academicYearId}
+            currentAssignmentId={selectedAssignment.id}
             staff={staff}
             initialData={selectedAssignment}
             onSubmit={onSubmit}

@@ -22,98 +22,163 @@ const RouteComponent = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end gap-2">
-        <Select
-          value={page.category}
-          onValueChange={(value: string | null) => {
-            if (value) {
-              page.setCategory(value);
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="font-heading text-4xl font-semibold">
+            Period Assignment
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Weekly timetable for one class. Click any empty slot to fill it.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={page.handleExportAllTimetables}
+            disabled={
+              !page.currentYear?.id ||
+              page.exportAllTimetablesMutation.isPending
             }
-          }}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Select section" />
-          </SelectTrigger>
-          <SelectContent>
-            {page.categoryOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={page.grade}
-          onValueChange={(value: string | null) => {
-            if (value) {
-              page.setGrade(value);
+          >
+            Export all (Excel)
+          </Button>
+          <Button
+            variant="outline"
+            onClick={page.handleExportTimetablePdf}
+            disabled={
+              !(page.currentYear?.id && page.selectedClass?.id) ||
+              page.exportTimetablePdfMutation.isPending
             }
-          }}
-        >
-          <SelectTrigger className="w-36" disabled={!page.category}>
-            <SelectValue
-              placeholder={
-                page.category ? "Select grade" : "Select section first"
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {page.gradeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={page.selectedClassId}
-          onValueChange={(value: string | null) => {
-            if (value) {
-              page.setSelectedClassId(value);
-            }
-          }}
-        >
-          <SelectTrigger className="w-36" disabled={!page.grade}>
-            <SelectValue
-              placeholder={page.grade ? "Select class" : "Select grade first"}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {page.classOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          onClick={page.handleExportAllTimetables}
-          disabled={
-            !page.currentYear?.id || page.exportAllTimetablesMutation.isPending
-          }
-        >
-          Export All Timetables (Excel)
-        </Button>
-        <Button
-          onClick={page.handleExportTimetablePdf}
-          disabled={
-            !(page.currentYear?.id && page.selectedClass?.id) ||
-            page.exportTimetablePdfMutation.isPending
-          }
-        >
-          Export This Class Timetable (PDF)
-        </Button>
+          >
+            This class (PDF)
+          </Button>
+        </div>
       </div>
 
-      {page.selectedClass && page.periodConfig && page.timetableData && (
+      <div className="border-primary/14 bg-card flex flex-wrap items-end gap-3 border p-4">
+        <div className="block min-w-0 flex-1 basis-44">
+          <span className="text-muted-foreground mb-1.5 block text-xs font-extrabold tracking-[0.16em]">
+            SECTION
+          </span>
+          <Select
+            value={page.category}
+            onValueChange={(value: string | null) => {
+              if (value) {
+                page.setCategory(value);
+              }
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select section" />
+            </SelectTrigger>
+            <SelectContent>
+              {page.categoryOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="block min-w-0 flex-1 basis-36">
+          <span className="text-muted-foreground mb-1.5 block text-xs font-extrabold tracking-[0.16em]">
+            GRADE
+          </span>
+          <Select
+            value={page.grade}
+            onValueChange={(value: string | null) => {
+              if (value) {
+                page.setGrade(value);
+              }
+            }}
+          >
+            <SelectTrigger className="w-full" disabled={!page.category}>
+              <SelectValue
+                placeholder={
+                  page.category ? "Select grade" : "Select section first"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {page.gradeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="block min-w-0 flex-1 basis-36">
+          <span className="text-muted-foreground mb-1.5 block text-xs font-extrabold tracking-[0.16em]">
+            CLASS
+          </span>
+          <Select
+            value={page.selectedClassId}
+            onValueChange={(value: string | null) => {
+              if (value) {
+                page.setSelectedClassId(value);
+              }
+            }}
+          >
+            <SelectTrigger className="w-full" disabled={!page.grade}>
+              <SelectValue
+                placeholder={page.grade ? "Select class" : "Select grade first"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {page.classOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {page.periodConfig.length > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-4">
+            <div>
+              <div className="text-muted-foreground text-xs font-extrabold tracking-[0.16em]">
+                SLOTS FILLED
+              </div>
+              <div className="font-heading mt-1 text-2xl leading-none font-semibold">
+                {page.timetableData.length}{" "}
+                <span className="text-muted-foreground text-sm">
+                  / {page.periodConfig.length * 5}
+                </span>
+              </div>
+            </div>
+            <div className="bg-primary/14 h-9 w-px" />
+            <div>
+              <div className="text-destructive text-xs font-extrabold tracking-[0.16em]">
+                CONFLICTS
+              </div>
+              <div className="font-heading text-destructive mt-1 text-2xl leading-none font-semibold">
+                {
+                  page.timetableData.filter((a) =>
+                    page.conflictingAssignmentIds.has(a.id)
+                  ).length
+                }
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {page.selectedClass && page.periodConfig && page.timetableData ? (
         <TimetableGrid
           assignments={page.timetableData}
           periodConfig={page.periodConfig}
           staff={page.staffMap}
+          conflictingAssignmentIds={page.conflictingAssignmentIds}
           onAssignClick={page.handleAssignClick}
           onEditClick={page.handleEditClick}
           onDeleteClick={page.handleDeleteClick}
         />
+      ) : (
+        <div className="border-primary/22 text-muted-foreground flex min-h-[40vh] items-center justify-center border border-dashed text-sm">
+          Select a section, grade and class above to view its timetable.
+        </div>
       )}
 
       <AssignPeriodDialog
@@ -123,6 +188,7 @@ const RouteComponent = () => {
         staff={[...page.staffMap.values()]}
         selectedClass={page.selectedClass ?? undefined}
         selectedSlot={page.selectedSlot}
+        academicYearId={page.currentYear?.id}
         isLoading={page.assignMutation.isPending}
       />
 
@@ -133,6 +199,7 @@ const RouteComponent = () => {
         selectedAssignment={page.selectedAssignment}
         staff={[...page.staffMap.values()]}
         selectedClass={page.selectedClass ?? undefined}
+        academicYearId={page.currentYear?.id}
         isLoading={page.updateMutation.isPending}
       />
 

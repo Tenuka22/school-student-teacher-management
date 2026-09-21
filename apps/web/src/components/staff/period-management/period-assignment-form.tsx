@@ -1,6 +1,7 @@
 "use client";
 
 import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
+import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
   Field,
   FieldError,
@@ -24,6 +25,11 @@ interface Subject {
   subjectKey: string;
   gradeLevel: number;
 }
+interface TeacherTimetableEntry {
+  dayOfWeek: number;
+  periodNumber: number;
+  className: string;
+}
 
 interface PeriodAssignmentFormProps {
   formId: string;
@@ -31,15 +37,52 @@ interface PeriodAssignmentFormProps {
   gradeLevel: number;
   dayOfWeek: number;
   periodNumber: number;
+  academicYearId: string | undefined;
+  currentAssignmentId?: string;
   onSubmit: (data: unknown) => Promise<void>;
   isLoading?: boolean;
   initialData?: {
     staffId: string;
     subjectKey: string;
+    isCombinedSession?: boolean;
   };
 }
 
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+const AvailabilityNotice = ({
+  teacherName,
+  hasSlotClash,
+  sameSlotElsewhere,
+  weeklyPeriodCount,
+}: {
+  teacherName: string;
+  hasSlotClash: boolean;
+  sameSlotElsewhere: string[];
+  weeklyPeriodCount: number;
+}) => (
+  <div
+    className={
+      hasSlotClash
+        ? "bg-accent/14 border-accent/50 border p-3 text-sm leading-relaxed"
+        : "bg-muted border-border border p-3 text-sm leading-relaxed"
+    }
+  >
+    {hasSlotClash ? (
+      <>
+        <strong>Availability:</strong> {teacherName} is already assigned to{" "}
+        {sameSlotElsewhere.join(", ")} at this exact slot. Currently teaches{" "}
+        {weeklyPeriodCount} periods this week. If this is intentional (e.g. a
+        combined session across classes), mark it below.
+      </>
+    ) : (
+      <>
+        <strong>Availability:</strong> {teacherName} is free this slot.
+        Currently teaches {weeklyPeriodCount} periods this week.
+      </>
+    )}
+  </div>
+);
 
 export const PeriodAssignmentForm = ({
   formId,
@@ -47,6 +90,8 @@ export const PeriodAssignmentForm = ({
   gradeLevel,
   dayOfWeek,
   periodNumber,
+  academicYearId,
+  currentAssignmentId,
   onSubmit,
   isLoading = false,
   initialData,
@@ -55,6 +100,9 @@ export const PeriodAssignmentForm = ({
     staffId: initialData?.staffId || "",
     subjectKey: initialData?.subjectKey || "",
   });
+  const [isCombinedSession, setIsCombinedSession] = useState(
+    initialData?.isCombinedSession ?? false
+  );
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
@@ -68,6 +116,44 @@ export const PeriodAssignmentForm = ({
     }
     return (subjects as Subject[]).filter((s) => s.gradeLevel === gradeLevel);
   }, [gradeLevel, subjectsQuery.data]);
+
+  const teacherTimetableQuery = useQuery({
+    ...orpc.staff.periods.listTeacherTimetable.queryOptions({
+      input: {
+        academicYearId: academicYearId ?? "",
+        staffId: formData.staffId,
+      },
+    }),
+    enabled: !!academicYearId && !!formData.staffId,
+  });
+
+  const selectedTeacher = staff.find((s) => s.id === formData.staffId);
+
+  const { weeklyPeriodCount, sameSlotElsewhere } = useMemo(() => {
+    const entries = (teacherTimetableQuery.data ?? []) as
+      | (TeacherTimetableEntry & { id: string })[]
+      | undefined;
+    if (!entries) {
+      return { weeklyPeriodCount: 0, sameSlotElsewhere: [] as string[] };
+    }
+    const clash = entries.filter(
+      (e) =>
+        e.dayOfWeek === dayOfWeek &&
+        e.periodNumber === periodNumber &&
+        e.id !== currentAssignmentId
+    );
+    return {
+      weeklyPeriodCount: entries.length,
+      sameSlotElsewhere: clash.map((c) => c.className),
+    };
+  }, [
+    teacherTimetableQuery.data,
+    dayOfWeek,
+    periodNumber,
+    currentAssignmentId,
+  ]);
+
+  const hasSlotClash = sameSlotElsewhere.length > 0;
 
   const schema = v.object({
     staffId: v.pipe(v.string(), v.minLength(1, "Staff is required")),
@@ -107,7 +193,7 @@ export const PeriodAssignmentForm = ({
     }
 
     try {
-      await onSubmit(result.output);
+      await onSubmit({ ...result.output, isCombinedSession });
     } catch (error) {
       setGeneralError(
         error instanceof Error ? error.message : "Failed to assign period"
@@ -185,6 +271,31 @@ export const PeriodAssignmentForm = ({
         </Select>
         {errors.subjectKey && <FieldError>{errors.subjectKey}</FieldError>}
       </Field>
+
+      {selectedTeacher && !teacherTimetableQuery.isLoading && (
+        <AvailabilityNotice
+          hasSlotClash={hasSlotClash}
+          sameSlotElsewhere={sameSlotElsewhere}
+          teacherName={selectedTeacher.name}
+          weeklyPeriodCount={weeklyPeriodCount}
+        />
+      )}
+
+      {hasSlotClash && (
+        <Field orientation="horizontal">
+          <Checkbox
+            id="isCombinedSession"
+            checked={isCombinedSession}
+            onCheckedChange={(checked) =>
+              setIsCombinedSession(checked === true)
+            }
+            disabled={isLoading}
+          />
+          <FieldLabel htmlFor="isCombinedSession" className="font-normal">
+            This is an intentional combined session, not a scheduling mistake
+          </FieldLabel>
+        </Field>
+      )}
     </form>
   );
 };

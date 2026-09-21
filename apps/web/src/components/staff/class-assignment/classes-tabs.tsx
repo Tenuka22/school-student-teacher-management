@@ -139,8 +139,10 @@ export const ClassesTabs = ({
 
   if (classes.length === 0) {
     return (
-      <Empty className="min-h-[60vh] border-none">
-        <EmptyTitle>No classes yet</EmptyTitle>
+      <Empty className="border-primary/22 min-h-[60vh] border border-dashed">
+        <EmptyTitle className="font-heading text-2xl">
+          No classes yet
+        </EmptyTitle>
         <EmptyDescription>
           Seed the default class structure or create your first class manually
           to get started
@@ -216,12 +218,19 @@ export const ClassesTabs = ({
       </div>
 
       <Tabs defaultValue={CLASS_CATEGORIES[0].key}>
-        <TabsList>
+        <TabsList
+          variant="line"
+          className="border-primary/18 h-auto w-full justify-start gap-0.5 rounded-none border-b p-0"
+        >
           {CLASS_CATEGORIES.map((category) => (
-            <TabsTrigger key={category.key} value={category.key}>
+            <TabsTrigger
+              key={category.key}
+              value={category.key}
+              className="group data-active:border-primary/18 data-active:bg-card -mb-px gap-2 rounded-none border border-b-0 border-transparent px-4 py-2.5 font-semibold after:hidden"
+            >
               {category.label}
-              <span className="text-muted-foreground ml-1.5">
-                ({classesByCategory.get(category.key)?.length ?? 0})
+              <span className="group-data-active:bg-primary group-data-active:text-accent bg-muted text-muted-foreground px-1.5 py-0.5 font-mono text-xs">
+                {classesByCategory.get(category.key)?.length ?? 0}
               </span>
             </TabsTrigger>
           ))}
@@ -236,8 +245,10 @@ export const ClassesTabs = ({
               className="space-y-6 pt-4"
             >
               {categoryClasses.length === 0 ? (
-                <Empty className="min-h-[30vh] border-none">
-                  <EmptyTitle>No classes in this category</EmptyTitle>
+                <Empty className="border-primary/22 min-h-[30vh] border border-dashed">
+                  <EmptyTitle className="font-heading text-xl">
+                    No classes in this category
+                  </EmptyTitle>
                   <EmptyDescription>
                     {category.key === "collegiate"
                       ? "A/L class counts vary by year and are always created manually"

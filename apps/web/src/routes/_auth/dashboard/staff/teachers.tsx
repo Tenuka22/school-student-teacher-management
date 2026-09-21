@@ -183,7 +183,7 @@ const RouteComponent = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Teachers</h1>
+          <h1 className="font-heading text-4xl font-semibold">Teachers</h1>
           <p className="text-muted-foreground mt-2">
             Manage teacher records, qualifications, and assignments
           </p>

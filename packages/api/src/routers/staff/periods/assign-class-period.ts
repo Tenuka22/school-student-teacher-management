@@ -24,6 +24,7 @@ export const assignClassPeriod = requireAssignmentPermission("create")
       "periodNumber",
       "subjectKey",
       "staffId",
+      "isCombinedSession",
     ])
   )
   .handler(async ({ input, context }) => {
@@ -40,6 +41,7 @@ export const assignClassPeriod = requireAssignmentPermission("create")
           periodNumber: input.periodNumber,
           subjectKey: input.subjectKey,
           staffId: input.staffId,
+          isCombinedSession: input.isCombinedSession ?? false,
         })
         .returning();
 
@@ -55,6 +57,7 @@ export const assignClassPeriod = requireAssignmentPermission("create")
         periodNumber: record.periodNumber,
         subjectKey: record.subjectKey,
         staffId: record.staffId,
+        isCombinedSession: record.isCombinedSession,
         createdAt: record.createdAt.toISOString(),
       };
     } catch (error) {

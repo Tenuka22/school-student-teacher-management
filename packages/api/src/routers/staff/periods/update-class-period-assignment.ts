@@ -18,8 +18,11 @@ export const updateClassPeriodAssignment = requireAssignmentPermission("update")
   .input(
     v.object({
       id: classPeriodAssignmentIdSchema,
-      ...pick(classPeriodAssignmentUpdateSchema, ["subjectKey", "staffId"])
-        .entries,
+      ...pick(classPeriodAssignmentUpdateSchema, [
+        "subjectKey",
+        "staffId",
+        "isCombinedSession",
+      ]).entries,
     })
   )
   .handler(async ({ input, context }) => {
@@ -40,6 +43,8 @@ export const updateClassPeriodAssignment = requireAssignmentPermission("update")
         .set({
           subjectKey: input.subjectKey,
           staffId: input.staffId,
+          isCombinedSession:
+            input.isCombinedSession ?? existing.isCombinedSession,
         })
         .where(eq(classPeriodAssignment.id, input.id))
         .returning();
@@ -56,6 +61,7 @@ export const updateClassPeriodAssignment = requireAssignmentPermission("update")
         periodNumber: record.periodNumber,
         subjectKey: record.subjectKey,
         staffId: record.staffId,
+        isCombinedSession: record.isCombinedSession,
         createdAt: record.createdAt.toISOString(),
         updatedAt: record.updatedAt.toISOString(),
       };

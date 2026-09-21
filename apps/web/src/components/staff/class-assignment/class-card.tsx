@@ -32,6 +32,16 @@ const MEDIUM_LABEL: Record<string, string> = {
   tamil: "Tamil",
 };
 
+const getInitials = (name: string) =>
+  name
+    .replace(/^(?<prefix>Mr\.|Mrs\.|Ms\.|Dr\.)\s*/iu, "")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
 interface ClassCardProps {
   cls: Class;
   teacher?: Staff;
@@ -50,17 +60,23 @@ export const ClassCard = ({
   const hasTeacher = !!cls.homeroomTeacherId;
 
   return (
-    <Card className="gap-3 p-4">
+    <Card
+      className={
+        hasTeacher
+          ? "border-primary/14 border-l-primary gap-3 rounded-none border-l-[3px] p-4"
+          : "border-destructive/30 border-l-destructive gap-3 rounded-none border-l-[3px] p-4"
+      }
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <button
             type="button"
-            className="text-left font-semibold hover:underline"
+            className="font-heading text-left text-2xl leading-none font-semibold hover:underline"
             onClick={() => onEditClick(cls)}
           >
             {cls.name}
           </button>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-muted-foreground mt-1.5 text-xs tracking-wide">
             Grade {cls.gradeLevel}
           </p>
         </div>
@@ -103,10 +119,34 @@ export const ClassCard = ({
         )}
       </div>
 
-      <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-        <IconUserCircle className="size-4 shrink-0" />
-        <span className="truncate">{teacher?.name || "Unassigned"}</span>
+      <div className="border-primary/12 flex items-center gap-2.5 border-t pt-3">
+        {hasTeacher && teacher ? (
+          <>
+            <span className="bg-primary/10 text-primary flex size-7 shrink-0 items-center justify-center text-[10.5px] font-bold">
+              {getInitials(teacher.name)}
+            </span>
+            <span className="truncate text-sm font-semibold">
+              {teacher.name}
+            </span>
+          </>
+        ) : (
+          <>
+            <IconUserCircle className="text-destructive size-5 shrink-0" />
+            <span className="text-destructive text-sm font-semibold">
+              Not assigned
+            </span>
+          </>
+        )}
       </div>
+
+      <Button
+        variant={hasTeacher ? "outline" : "default"}
+        size="sm"
+        className="w-full font-semibold"
+        onClick={() => onAssignTeacherClick(cls)}
+      >
+        {hasTeacher ? "Replace Teacher" : "Assign Teacher"}
+      </Button>
     </Card>
   );
 };

@@ -170,8 +170,8 @@ export const AssignTeacherForm = ({
       </Field>
 
       {changeKind !== "none" && (
-        <div className="bg-muted rounded-md p-3 text-sm">
-          <p className="font-medium">{CHANGE_KIND_COPY[changeKind].title}</p>
+        <div className="bg-accent/10 border-accent/30 border p-3 text-sm">
+          <p className="font-semibold">{CHANGE_KIND_COPY[changeKind].title}</p>
           <p className="text-muted-foreground">
             {CHANGE_KIND_COPY[changeKind].description}
           </p>
