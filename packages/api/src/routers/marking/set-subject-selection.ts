@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { COMPULSORY_BASKET_CATEGORY } from "@school-student-teacher-management/db/constants/structureVersions/index";
 import {
   class_,
@@ -8,7 +9,6 @@ import {
   studentSubjectSelection,
   studentSubjectSelectionInsertSchema,
 } from "@school-student-teacher-management/db/schema/marking";
-import { ORPCError } from "@orpc/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { pick } from "valibot";
 

@@ -1,6 +1,7 @@
 import { approveQualification } from "./approve-qualification";
 import { assignClassTeacher } from "./assign-class-teacher";
 import { assignPosition } from "./assign-position";
+import { attendanceRouter } from "./attendance";
 import { createAcademicYear } from "./create-academic-year";
 import { createClass } from "./create-class";
 import { createStaff } from "./create-staff";
@@ -74,6 +75,9 @@ export const staffRouter = {
 
   // Periods and timetable
   periods: periodsRouter,
+
+  // Attendance
+  attendance: attendanceRouter,
 
   // File exports (Excel/PDF)
   exports: exportsRouter,

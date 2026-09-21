@@ -1,5 +1,8 @@
 import type { Database } from "@school-student-teacher-management/db";
-import { account, user } from "@school-student-teacher-management/db/schema/auth";
+import {
+  account,
+  user,
+} from "@school-student-teacher-management/db/schema/auth";
 import { hashPassword } from "better-auth/crypto";
 import { and, eq, or } from "drizzle-orm";
 

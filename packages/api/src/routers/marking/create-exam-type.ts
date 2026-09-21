@@ -1,8 +1,8 @@
+import { ORPCError } from "@orpc/server";
 import {
   examType,
   examTypeInsertSchema,
 } from "@school-student-teacher-management/db/schema/marking";
-import { ORPCError } from "@orpc/server";
 import { pick } from "valibot";
 
 import { requireExamPermission } from "../../index";

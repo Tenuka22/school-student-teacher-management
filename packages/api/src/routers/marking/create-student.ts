@@ -1,8 +1,8 @@
+import { ORPCError } from "@orpc/server";
 import {
   student,
   studentInsertSchema,
 } from "@school-student-teacher-management/db/schema/marking";
-import { ORPCError } from "@orpc/server";
 import { pick } from "valibot";
 
 import { requireStudentPermission } from "../../index";

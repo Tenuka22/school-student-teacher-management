@@ -1,6 +1,6 @@
 {
-  "id": "046a051c-96a7-465a-ba46-28f2ea17c617",
-  "prevId": "f4acd38b-2492-4095-969c-f54560d5230b",
+  "id": "5709fda3-d161-4a51-8e43-3c8d630fe3c7",
+  "prevId": "046a051c-96a7-465a-ba46-28f2ea17c617",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -386,6 +386,253 @@
             "basket_category",
             "subject_key"
           ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.teacher_attendance": {
+      "name": "teacher_attendance",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "staff_id": {
+          "name": "staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "marked_at": {
+          "name": "marked_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "teacher_attendance_staff_idx": {
+          "name": "teacher_attendance_staff_idx",
+          "columns": [
+            {
+              "expression": "staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "teacher_attendance_date_idx": {
+          "name": "teacher_attendance_date_idx",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "teacher_attendance_year_idx": {
+          "name": "teacher_attendance_year_idx",
+          "columns": [
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "teacher_attendance_staff_id_staff_id_fk": {
+          "name": "teacher_attendance_staff_id_staff_id_fk",
+          "tableFrom": "teacher_attendance",
+          "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "teacher_attendance_academic_year_id_academic_year_id_fk": {
+          "name": "teacher_attendance_academic_year_id_academic_year_id_fk",
+          "tableFrom": "teacher_attendance",
+          "tableTo": "academic_year",
+          "columnsFrom": ["academic_year_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "teacher_attendance_staff_date_unique": {
+          "name": "teacher_attendance_staff_date_unique",
+          "nullsNotDistinct": false,
+          "columns": ["staff_id", "date"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.teacher_period_absence": {
+      "name": "teacher_period_absence",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "teacher_attendance_id": {
+          "name": "teacher_attendance_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_number": {
+          "name": "period_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "substitute_staff_id": {
+          "name": "substitute_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "teacher_period_absence_attendance_idx": {
+          "name": "teacher_period_absence_attendance_idx",
+          "columns": [
+            {
+              "expression": "teacher_attendance_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "teacher_period_absence_substitute_idx": {
+          "name": "teacher_period_absence_substitute_idx",
+          "columns": [
+            {
+              "expression": "substitute_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "teacher_period_absence_teacher_attendance_id_teacher_attendance_id_fk": {
+          "name": "teacher_period_absence_teacher_attendance_id_teacher_attendance_id_fk",
+          "tableFrom": "teacher_period_absence",
+          "tableTo": "teacher_attendance",
+          "columnsFrom": ["teacher_attendance_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "teacher_period_absence_substitute_staff_id_staff_id_fk": {
+          "name": "teacher_period_absence_substitute_staff_id_staff_id_fk",
+          "tableFrom": "teacher_period_absence",
+          "tableTo": "staff",
+          "columnsFrom": ["substitute_staff_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "teacher_period_absence_unique": {
+          "name": "teacher_period_absence_unique",
+          "nullsNotDistinct": false,
+          "columns": ["teacher_attendance_id", "period_number"]
         }
       },
       "policies": {},
