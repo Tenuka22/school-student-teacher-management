@@ -9,38 +9,38 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --background: #fdf8ec;
+  --foreground: #013405;
+  --card: #fffdf6;
+  --card-foreground: #013405;
+  --popover: #fffdf6;
+  --popover-foreground: #013405;
+  --primary: #013405;
+  --primary-foreground: #fff8e7;
+  --secondary: #f3f1e9;
+  --secondary-foreground: #013405;
+  --muted: #f3f1e9;
+  --muted-foreground: color-mix(in oklab, #013405 60%, transparent);
+  --accent: #ffb203;
+  --accent-foreground: #013405;
+  --destructive: #a51919;
+  --border: color-mix(in oklab, #013405 16%, transparent);
+  --input: color-mix(in oklab, #013405 22%, transparent);
+  --ring: #013405;
+  --chart-1: #013405;
+  --chart-2: #ffb203;
+  --chart-3: #a51919;
+  --chart-4: #7bc67b;
+  --chart-5: #e0a33a;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #013405;
+  --sidebar-foreground: #fff8e7;
+  --sidebar-primary: #ffb203;
+  --sidebar-primary-foreground: #013405;
+  --sidebar-accent: color-mix(in oklab, #fff8e7 16%, transparent);
+  --sidebar-accent-foreground: #fff8e7;
+  --sidebar-border: color-mix(in oklab, #ffb203 18%, transparent);
+  --sidebar-ring: #ffb203;
 }
 
 .dark {
@@ -78,7 +78,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Roboto Variable', sans-serif;
+  --font-sans: "Manrope", "Roboto Variable", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -117,7 +117,7 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
-  --font-heading: 'Figtree Variable', sans-serif;
+  --font-heading: "Cormorant Garamond", serif;
 }
 
 @layer base {
@@ -125,12 +125,13 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply font-sans bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
   html {
     @apply font-sans;
   }
-  button:not(:disabled), [role="button"]:not(:disabled) {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
     cursor: pointer;
   }
 }
