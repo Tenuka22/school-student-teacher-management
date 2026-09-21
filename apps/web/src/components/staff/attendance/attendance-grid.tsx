@@ -1,7 +1,16 @@
 "use client";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
+import { Card } from "@school-student-teacher-management/ui/components/card";
 import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
   Dialog,
@@ -27,6 +36,7 @@ import { useMemo, useState } from "react";
 import type {
   AttendancePageApi,
   AttendanceTeacher,
+  PendingPastEdit,
   RowStatus,
 } from "@/components/staff/attendance/use-attendance-page";
 import { CLASS_CATEGORIES } from "@/components/staff/class-assignment/class-categories";
@@ -115,7 +125,9 @@ const SchoolCell = ({
   const isSaving = page.pendingCells.has(`${teacher.id}:school`);
 
   return (
-    <TableCell className="p-1.5 text-center">
+    <TableCell
+      className={`w-20 p-1.5 text-center ${isPresent ? "" : "bg-destructive/5"}`}
+    >
       <div className="flex items-center justify-center gap-1">
         <Checkbox
           checked={isPresent}
@@ -152,8 +164,8 @@ const AttendanceCell = ({
   const scheduled = page.scheduleByStaff.get(teacher.id)?.get(periodNumber);
   if (!scheduled || scheduled.length === 0) {
     return (
-      <TableCell className="text-muted-foreground text-center text-xs">
-        —
+      <TableCell className="bg-muted/25 text-muted-foreground/50 w-16 text-center text-xs">
+        ·
       </TableCell>
     );
   }
@@ -165,7 +177,10 @@ const AttendanceCell = ({
     .join(", ");
 
   return (
-    <TableCell className="p-1.5 text-center" title={title}>
+    <TableCell
+      className={`w-16 p-1.5 text-center ${isAbsent ? "bg-destructive/5" : ""}`}
+      title={title}
+    >
       <div className="flex items-center justify-center gap-1">
         <Checkbox
           checked={!isAbsent}
@@ -205,7 +220,9 @@ const TeacherRow = ({
       <TableCell className="bg-card sticky left-0 font-medium whitespace-nowrap">
         <div className="flex items-center gap-2">
           {teacher.name}
-          <Badge variant={badge.variant}>{badge.label}</Badge>
+          {status !== "present" && (
+            <Badge variant={badge.variant}>{badge.label}</Badge>
+          )}
         </div>
       </TableCell>
       <SchoolCell page={page} teacher={teacher} onOpenReason={onOpenReason} />
@@ -292,6 +309,56 @@ const ReasonDialog = ({
   );
 };
 
+const pastEditLabel = (
+  teacher: AttendanceTeacher | undefined,
+  pending: PendingPastEdit
+) => {
+  const name = teacher?.name ?? "this teacher";
+  if (pending.kind === "school") {
+    return `${name} - whole day`;
+  }
+  if (pending.kind === "period") {
+    return `${name} - Period ${pending.periodNumber}`;
+  }
+  return pending.periodNumber === null
+    ? `${name} - whole day reason`
+    : `${name} - Period ${pending.periodNumber} reason`;
+};
+
+const PastEditConfirmDialog = ({ page }: { page: AttendancePageApi }) => {
+  const pending = page.pendingPastEdit;
+  const teacher = pending
+    ? page.teachers.find((t) => t.id === pending.staffId)
+    : undefined;
+
+  return (
+    <AlertDialog
+      open={!!pending}
+      onOpenChange={(open) => {
+        if (!open) {
+          page.cancelPastEdit();
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogTitle>Editing past attendance</AlertDialogTitle>
+        <AlertDialogDescription>
+          {page.date} has already passed.{" "}
+          {pending && pastEditLabel(teacher, pending)}
+          {" - changing attendance for a past date can affect records that " +
+            "may already be reported on. Continue?"}
+        </AlertDialogDescription>
+        <div className="flex justify-end gap-2">
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => page.confirmPastEdit()}>
+            Continue
+          </AlertDialogAction>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+
 export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
   const [reasonTarget, setReasonTarget] = useState<ReasonTarget | null>(null);
 
@@ -325,18 +392,18 @@ export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
                 </h2>
                 <Badge variant="secondary">{group.teachers.length}</Badge>
               </div>
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
+              <Card className="w-fit max-w-full overflow-x-auto">
+                <Table className="w-auto">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="bg-card sticky left-0">
+                      <TableHead className="bg-card sticky left-0 min-w-48">
                         Teacher
                       </TableHead>
-                      <TableHead className="text-center">School</TableHead>
+                      <TableHead className="w-20 text-center">School</TableHead>
                       {page.periods.map((period) => (
                         <TableHead
                           key={period.periodNumber}
-                          className="text-center whitespace-nowrap"
+                          className="w-16 text-center whitespace-nowrap"
                           title={`${period.startTime}-${period.endTime}`}
                         >
                           P{period.periodNumber}
@@ -355,7 +422,7 @@ export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </Card>
             </div>
           )
       )}
@@ -379,6 +446,7 @@ export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
           }
         }}
       />
+      <PastEditConfirmDialog page={page} />
     </div>
   );
 };
