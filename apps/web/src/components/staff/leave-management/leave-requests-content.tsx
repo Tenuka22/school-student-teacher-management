@@ -40,14 +40,15 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_BADGES: Record<
-  LeaveStatus,
+  string,
   {
     label: string;
     variant: "default" | "secondary" | "destructive" | "outline";
   }
 > = {
   pending: { label: "Pending", variant: "secondary" },
-  approved: { label: "Approved", variant: "default" },
+  recommended: { label: "Recommended (DP)", variant: "outline" },
+  approved: { label: "Approved (Final)", variant: "default" },
   rejected: { label: "Rejected", variant: "destructive" },
   cancelled: { label: "Cancelled", variant: "outline" },
 };
@@ -177,6 +178,18 @@ export const LeaveRequestsContent = () => {
                     {formatDateRange(request.startDate, request.endDate)}
                     {request.reason ? ` — ${request.reason}` : ""}
                   </p>
+                  {request.deputyStatus &&
+                    request.deputyStatus !== "pending" && (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Deputy Principal:{" "}
+                        {request.deputyStatus === "recommended"
+                          ? "recommended"
+                          : "not recommended"}
+                        {request.deputyComment
+                          ? ` — ${request.deputyComment}`
+                          : ""}
+                      </p>
+                    )}
                   {request.reviewComment && (
                     <p className="text-muted-foreground mt-1 text-xs italic">
                       Review note: {request.reviewComment}

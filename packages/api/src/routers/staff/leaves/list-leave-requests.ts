@@ -3,6 +3,8 @@ import {
   leaveStatusSchema,
 } from "@school-student-teacher-management/db/schema/leaves";
 import type {
+  DeputyStatus,
+  FinalStatus,
   LeaveStatus,
   LeaveType,
 } from "@school-student-teacher-management/db/schema/leaves";
@@ -38,6 +40,10 @@ export const listLeaveRequests = adminProcedure
         endDate: leaveRequest.endDate,
         reason: leaveRequest.reason,
         status: leaveRequest.status,
+        deputyStatus: leaveRequest.deputyStatus,
+        deputyComment: leaveRequest.deputyComment,
+        finalStatus: leaveRequest.finalStatus,
+        finalizedAt: leaveRequest.finalizedAt,
         reviewComment: leaveRequest.reviewComment,
         reviewedAt: leaveRequest.reviewedAt,
         createdAt: leaveRequest.createdAt,
@@ -61,6 +67,10 @@ export const listLeaveRequests = adminProcedure
         endDate: row.endDate,
         reason: row.reason,
         status: row.status as LeaveStatus,
+        deputyStatus: row.deputyStatus as DeputyStatus,
+        deputyComment: row.deputyComment,
+        finalStatus: row.finalStatus as FinalStatus,
+        finalizedAt: row.finalizedAt?.toISOString() ?? null,
         reviewComment: row.reviewComment,
         reviewedAt: row.reviewedAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),

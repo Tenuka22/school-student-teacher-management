@@ -12,6 +12,7 @@ import { exportsRouter } from "./exports";
 import { getMyStaff } from "./get-my-staff";
 import { getStaff } from "./get-staff";
 import { leavesRouter } from "./leaves";
+import { seedLeaveEntitlements } from "./leaves/entitlements";
 import { listAcademicYears } from "./list-academic-years";
 import { listClassTeacherHistory } from "./list-class-teacher-history";
 import { listClasses } from "./list-classes";
@@ -27,6 +28,7 @@ import { portTeachersFromPreviousYear } from "./port-teachers-from-previous-year
 import { removePosition } from "./remove-position";
 import { seedDefaultClasses } from "./seed-default-classes";
 import { setCurrentYear } from "./set-current-year";
+import { signupLeadership, signupStaff } from "./signup";
 import { updateClass } from "./update-class";
 import { updateProfile } from "./update-profile";
 import { updateStaff } from "./update-staff";
@@ -45,6 +47,7 @@ export const staffRouter = {
   createAcademicYear,
   deleteAcademicYear,
   setCurrentYear,
+  seedLeaveEntitlements,
   listPreviousYearTeachers,
   portTeachersFromPreviousYear,
 
@@ -66,6 +69,10 @@ export const staffRouter = {
   listGrades,
   listPositions,
   listStructureVersions,
+
+  // Sign-up (staff self-service + leadership with setup code)
+  signupStaff,
+  signupLeadership,
 
   // Self-service
   updateProfile,

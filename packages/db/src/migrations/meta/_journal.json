@@ -71,6 +71,13 @@
       "when": 1790093092470,
       "tag": "0009_leaves-and-staff-account",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790095811866,
+      "tag": "0010_staff-category-leave-entitlement-attendance-policy",
+      "breakpoints": true
     }
   ]
 }

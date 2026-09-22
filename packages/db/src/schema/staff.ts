@@ -43,6 +43,10 @@ import {
   slPhoneSchema,
 } from "./primitives";
 
+export type StaffCategory = (typeof STAFF_CATEGORIES)[number];
+
+export const STAFF_CATEGORIES = ["teacher", "officeStaff"] as const;
+
 export type StaffId = Brand<string, "StaffId">;
 export const staffIdSchema = v.pipe(v.string(), brand<string, "StaffId">());
 
@@ -96,6 +100,15 @@ export const staff = pgTable(
     // Emergency contact (optional)
     emergencyContactName: text("emergency_contact_name"),
     emergencyContactPhone: text("emergency_contact_phone"),
+
+    /**
+     * Broad category of staff. Teachers and office staff share the same
+     * record shape but differ in UI (portal features) and leave defaults.
+     */
+    staffCategory: text("staff_category")
+      .notNull()
+      .default("teacher")
+      .$type<StaffCategory>(),
 
     // Employment information (admin verifies)
     appointmentType: text("appointment_type").$type<AppointmentType>(),
@@ -235,6 +248,7 @@ const staffColumnRefinements = {
     ),
   portraitFileId: () => optionalNullable(fileIdSchema),
   nationalIdentityCardFileId: () => optionalNullable(fileIdSchema),
+  staffCategory: () => v.optional(v.picklist(STAFF_CATEGORIES)),
   userId: () => v.optional(v.nullable(v.string())),
 };
 

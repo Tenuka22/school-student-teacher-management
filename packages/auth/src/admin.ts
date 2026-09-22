@@ -88,16 +88,88 @@ const ensureCredentialUser = async (
 };
 
 /**
- * Username for a teacher's login account: their unique badge number
- * (teacher service number), lowercased so "T0142" and "t0142" are the
- * same account.
+ * Username for a staff login account: **the NIC itself** (lowercased so
+ * "991234567V" and "991234567v" are the same account). Uniqueness is
+ * guaranteed by the unique index on `staff.nic` — one NIC, one person,
+ * one account. No random suffixes, nothing auto-generated to remember.
  */
+export const usernameForNic = (nic: string) => nic.toLowerCase();
+
+/** Legacy helper: badge-number usernames (pre NIC-username era). */
 export const usernameForBadgeNumber = (badgeNumber: string) =>
   badgeNumber.toLowerCase();
 
 /** Synthetic internal email backing a username login (never shown). */
 export const internalEmailForUsername = (accountUsername: string) =>
   `${accountUsername.toLowerCase()}@school-student-teacher-management.internal`;
+
+/**
+ * Creates a staff credential account whose username is the **staff
+ * member's NIC** (lowercased).
+ *
+ * Used by both self-service sign-up and admin-created staff. A synthetic
+ * internal email (never shown) satisfies Better Auth's required email
+ * field unless the staff member provided their own email.
+ *
+ * Returns the user id and the username (the NIC) for confirmation.
+ */
+export const createStaffCredential = async (
+  database: Database,
+  {
+    nic,
+    password,
+    name,
+    email,
+    role = "teacher",
+  }: {
+    nic: string;
+    password: string;
+    name: string;
+    email?: string;
+    role?: string;
+  }
+) => {
+  const accountUsername = usernameForNic(nic);
+  const internalEmail = email ?? internalEmailForUsername(accountUsername);
+
+  const [hash, [existing]] = await Promise.all([
+    hashPassword(password),
+    database
+      .select()
+      .from(user)
+      .where(
+        or(eq(user.username, accountUsername), eq(user.email, internalEmail))
+      )
+      .limit(1),
+  ]);
+
+  if (existing) {
+    throw new Error(
+      `An account with username "${accountUsername}" already exists`
+    );
+  }
+
+  const userId = crypto.randomUUID();
+  await database.insert(user).values({
+    id: userId,
+    name,
+    email: internalEmail,
+    emailVerified: true,
+    username: accountUsername,
+    displayUsername: accountUsername,
+    role,
+  });
+
+  await database.insert(account).values({
+    id: crypto.randomUUID(),
+    accountId: userId,
+    providerId: "credential",
+    userId,
+    password: hash,
+  });
+
+  return { userId, username: accountUsername };
+};
 
 /**
  * Creates a new teacher credential account.

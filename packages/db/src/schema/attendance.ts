@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -46,6 +47,8 @@ export const teacherAttendanceStatusSchema = v.picklist([
   "present",
   "partial",
   "absent",
+  "lateShortLeave",
+  "halfDay",
 ]);
 export type TeacherAttendanceStatus = v.InferOutput<
   typeof teacherAttendanceStatusSchema
@@ -171,4 +174,145 @@ export const teacherPeriodAbsenceInsertSchema = createInsertSchema(
 export const teacherPeriodAbsenceUpdateSchema = createUpdateSchema(
   teacherPeriodAbsence,
   teacherPeriodAbsenceColumnRefinements
+);
+
+/**
+ * Automatic late-arrival policy for one academic year. All values are
+ * editable data (never constants in code) so a new year can use different
+ * rules without a code change. Historical years keep their own row.
+ */
+export const attendancePolicy = pgTable(
+  "attendance_policy",
+  {
+    id: text("id").primaryKey(),
+    academicYearId: text("academic_year_id")
+      .notNull()
+      .references(() => academicYear.id, { onDelete: "cascade" }),
+    /** Arrival cut-off in school-local HH:MM (24h). Arrival after this is late. */
+    arrivalCutoffTime: text("arrival_cutoff_time").notNull().default("07:30"),
+    /** Short leaves allowed per calendar month. */
+    shortLeavesPerMonth: integer("short_leaves_per_month").notNull().default(2),
+    /** Half days allowed per calendar month. */
+    halfDaysPerMonth: integer("half_days_per_month").notNull().default(2),
+    /** Half days that equal one full leave day (e.g. 2 ⇒ 21 days = 42 half days). */
+    halfDaysPerFullDay: numeric("half_days_per_full_day")
+      .notNull()
+      .default("2"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [unique("attendance_policy_year_unique").on(table.academicYearId)]
+);
+
+/**
+ * Append-only monthly consumption counters for the late-arrival policy.
+ * One row per (staff, year-month); created on first use and only ever
+ * incremented, so "current usage" is always reconstructible and history
+ * is never rewritten when policies change.
+ */
+export const shortLeaveUsage = pgTable(
+  "short_leave_usage",
+  {
+    id: text("id").primaryKey(),
+    staffId: text("staff_id")
+      .notNull()
+      .references(() => staff.id, { onDelete: "cascade" }),
+    academicYearId: text("academic_year_id")
+      .notNull()
+      .references(() => academicYear.id, { onDelete: "cascade" }),
+    /** Calendar month key, "YYYY-MM" (school-local). */
+    yearMonth: text("year_month").notNull(),
+    shortLeavesUsed: integer("short_leaves_used").notNull().default(0),
+    halfDaysUsed: numeric("half_days_used").notNull().default("0"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("short_leave_usage_staff_month_unique").on(
+      table.staffId,
+      table.yearMonth
+    ),
+    index("short_leave_usage_year_idx").on(table.academicYearId),
+  ]
+);
+
+export type AttendancePolicyId = Brand<string, "AttendancePolicyId">;
+export const attendancePolicyIdSchema = v.pipe(
+  v.string(),
+  brand<string, "AttendancePolicyId">()
+);
+
+export type ShortLeaveUsageId = Brand<string, "ShortLeaveUsageId">;
+export const shortLeaveUsageIdSchema = v.pipe(
+  v.string(),
+  brand<string, "ShortLeaveUsageId">()
+);
+
+/** HH:MM 24-hour time-of-day validation ("07:30"). */
+export const timeOfDaySchema = v.pipe(
+  v.string(),
+  // oxlint-disable-next-line require-unicode-regexp, prefer-named-capture-group
+  v.regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM (24-hour)")
+);
+
+const attendancePolicyColumnRefinements = {
+  id: () => attendancePolicyIdSchema,
+  academicYearId: () => academicYearIdSchema,
+  arrivalCutoffTime: () => timeOfDaySchema,
+  halfDaysPerFullDay: () =>
+    v.pipe(
+      v.string(),
+      // oxlint-disable-next-line require-unicode-regexp, prefer-named-capture-group
+      v.regex(/^\d+(\.5)?$/u)
+    ),
+};
+
+export const attendancePolicySelectSchema = createSelectSchema(
+  attendancePolicy,
+  attendancePolicyColumnRefinements
+);
+export const attendancePolicyInsertSchema = createInsertSchema(
+  attendancePolicy,
+  attendancePolicyColumnRefinements
+);
+export const attendancePolicyUpdateSchema = createUpdateSchema(
+  attendancePolicy,
+  attendancePolicyColumnRefinements
+);
+
+const shortLeaveUsageColumnRefinements = {
+  id: () => shortLeaveUsageIdSchema,
+  staffId: () => staffIdSchema,
+  academicYearId: () => academicYearIdSchema,
+  yearMonth: () =>
+    v.pipe(
+      v.string(),
+      // oxlint-disable-next-line require-unicode-regexp
+      v.regex(/^\d{4}-\d{2}$/)
+    ),
+  halfDaysUsed: () =>
+    v.pipe(
+      v.string(),
+      // oxlint-disable-next-line require-unicode-regexp, prefer-named-capture-group
+      v.regex(/^\d+(\.5)?$/u)
+    ),
+};
+
+export const shortLeaveUsageSelectSchema = createSelectSchema(
+  shortLeaveUsage,
+  shortLeaveUsageColumnRefinements
+);
+export const shortLeaveUsageInsertSchema = createInsertSchema(
+  shortLeaveUsage,
+  shortLeaveUsageColumnRefinements
+);
+export const shortLeaveUsageUpdateSchema = createUpdateSchema(
+  shortLeaveUsage,
+  shortLeaveUsageColumnRefinements
 );

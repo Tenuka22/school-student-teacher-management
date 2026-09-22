@@ -14,7 +14,12 @@ import { ac, admin, teacher, user } from "./permissions";
 
 export { ac, admin, teacher, user } from "./permissions";
 export type { AppAccessControl } from "./permissions";
-export { createTeacherCredential, rotateTeacherPassword } from "./admin";
+export {
+  createStaffCredential,
+  createTeacherCredential,
+  usernameForNic,
+  rotateTeacherPassword,
+} from "./admin";
 export { ensureAdminUser } from "./admin";
 
 export interface AuthConfig {
@@ -22,6 +27,8 @@ export interface AuthConfig {
   BETTER_AUTH_SECRET: string;
   ADMIN_USERNAME: string;
   ADMIN_PASSWORD: string;
+  /** Shared secret for the leadership (DP/principal) sign-up page. */
+  LEADERSHIP_SETUP_CODE: string;
 }
 
 export const AUTH_COOKIE_PREFIX = "school-student-teacher-management";

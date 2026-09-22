@@ -1,6 +1,5 @@
 "use client";
 
-import type { LeaveStatus } from "@school-student-teacher-management/db/schema/leaves";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -32,14 +31,15 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_BADGES: Record<
-  LeaveStatus,
+  string,
   {
     label: string;
     variant: "default" | "secondary" | "destructive" | "outline";
   }
 > = {
   pending: { label: "Pending", variant: "secondary" },
-  approved: { label: "Approved", variant: "default" },
+  recommended: { label: "Recommended (DP)", variant: "outline" },
+  approved: { label: "Approved (Final)", variant: "default" },
   rejected: { label: "Rejected", variant: "destructive" },
   cancelled: { label: "Cancelled", variant: "outline" },
 };
