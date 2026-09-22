@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_auth")({
     }
     return { session };
   },
+  // Teachers land on their own workspace; admins keep the main dashboard.
   loader: ({ context }) => {
     if (!context.session) {
       throw redirect({
@@ -42,6 +43,7 @@ const AuthLayout = () => {
                 name: session.user.name || "User",
                 email: session.user.email || "",
                 avatar: session.user.image || undefined,
+                role: session.user.role || "user",
               }
             : undefined
         }

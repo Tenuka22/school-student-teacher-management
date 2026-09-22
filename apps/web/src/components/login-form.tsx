@@ -20,8 +20,14 @@ export const LoginForm = () => {
           window.location.assign("/dashboard");
           toast.success("Signed in successfully");
         },
-        onError: (error) => {
-          toast.error(error.error.message || error.error.statusText);
+        onError: (context: {
+          error: { message?: string; statusText?: string };
+        }) => {
+          toast.error(
+            context.error.message ||
+              context.error.statusText ||
+              "Sign-in failed"
+          );
         },
       }
     );

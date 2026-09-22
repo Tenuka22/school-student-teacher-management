@@ -1,5 +1,9 @@
+// Intentional barrel file: the schema registry is the single import surface
+// for drizzle-kit, better-auth and the API layer (established project pattern).
+// oxlint-disable-next-line no-barrel-file
 export * from "./auth";
 export * from "./attendance";
+export * from "./leaves";
 export * from "./marking";
 export * from "./staff";
 export * from "./qualifications";

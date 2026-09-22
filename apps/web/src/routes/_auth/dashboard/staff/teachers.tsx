@@ -51,6 +51,10 @@ const RouteComponent = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isPortDialogOpen, setIsPortDialogOpen] = useState(false);
   const [newTeacher, setNewTeacher] = useState<Staff | null>(null);
+  const [newTeacherCredentials, setNewTeacherCredentials] = useState<{
+    username: string | null;
+    password: string | null;
+  }>({ username: null, password: null });
 
   const [selectedTeacher, setSelectedTeacher] = useState<Staff | null>(null);
 
@@ -90,10 +94,17 @@ const RouteComponent = () => {
     async (data: unknown) => {
       const created = (await createMutation.mutateAsync(
         data as never
-      )) as unknown as Staff;
+      )) as unknown as Staff & {
+        loginUsername?: string;
+        initialPassword?: string;
+      };
       await listQuery.refetch();
       setIsCreateDialogOpen(false);
       setNewTeacher(created);
+      setNewTeacherCredentials({
+        username: created.loginUsername ?? null,
+        password: created.initialPassword ?? null,
+      });
     },
     [createMutation, listQuery]
   );
@@ -239,9 +250,12 @@ const RouteComponent = () => {
 
       <NewTeacherNextStepsDialog
         teacher={newTeacher}
+        loginUsername={newTeacherCredentials.username}
+        initialPassword={newTeacherCredentials.password}
         onOpenChange={(open) => {
           if (!open) {
             setNewTeacher(null);
+            setNewTeacherCredentials({ username: null, password: null });
           }
         }}
         onManageTimetableClick={(teacher) => {

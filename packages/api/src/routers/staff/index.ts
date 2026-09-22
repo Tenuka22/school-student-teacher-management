@@ -9,7 +9,9 @@ import { deleteAcademicYear } from "./delete-academic-year";
 import { deleteClass } from "./delete-class";
 import { deleteStaff } from "./delete-staff";
 import { exportsRouter } from "./exports";
+import { getMyStaff } from "./get-my-staff";
 import { getStaff } from "./get-staff";
+import { leavesRouter } from "./leaves";
 import { listAcademicYears } from "./list-academic-years";
 import { listClassTeacherHistory } from "./list-class-teacher-history";
 import { listClasses } from "./list-classes";
@@ -67,6 +69,10 @@ export const staffRouter = {
 
   // Self-service
   updateProfile,
+  getMyStaff,
+
+  // Leave management (teacher apply / admin review)
+  leaves: leavesRouter,
 
   // Qualifications
   uploadQualification,

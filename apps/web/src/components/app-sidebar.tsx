@@ -25,6 +25,7 @@ export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     name: string;
     email: string;
     avatar?: string;
+    role?: string;
   };
 }
 
@@ -40,6 +41,9 @@ const ACADEMIC_NAV = [
 ];
 
 export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
+  // Admins get the full staff-management nav; teachers (and anyone else)
+  // get their personal workspace links instead.
+  const isAdmin = user?.role === "admin";
   const yearsQuery = useQuery(orpc.staff.listAcademicYears.queryOptions());
   const currentYear = (
     (yearsQuery.data || []) as unknown as AcademicYear[]
@@ -57,6 +61,12 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
       input: { status: "pending" },
     }),
   });
+  const pendingLeavesQuery = useQuery({
+    ...orpc.staff.leaves.listLeaveRequests.queryOptions({
+      input: { status: "pending" },
+    }),
+    enabled: isAdmin,
+  });
 
   const staffNav = [
     {
@@ -72,6 +82,13 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     { title: "Period Assignment", url: "/dashboard/staff/periods" },
     { title: "Teacher Timetable", url: "/dashboard/staff/teacher-timetable" },
     { title: "Attendance", url: "/dashboard/staff/attendance" },
+    {
+      title: "Leave Requests",
+      url: "/dashboard/staff/leaves",
+      count: pendingLeavesQuery.data
+        ? String(pendingLeavesQuery.data.requests.length)
+        : undefined,
+    },
     {
       title: "Qualifications",
       url: "/dashboard/staff/teachers",
@@ -110,7 +127,18 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
 
       <SidebarContent className="gap-0 overflow-y-auto">
         <NavMain label="Platform" items={PLATFORM_NAV} />
-        <NavMain label="Staff Management" items={staffNav} />
+        {isAdmin ? (
+          <NavMain label="Staff Management" items={staffNav} />
+        ) : (
+          <NavMain
+            label="My Workspace"
+            items={[
+              { title: "My Dashboard", url: "/dashboard/my" },
+              { title: "My Leave", url: "/dashboard/my/leave" },
+              { title: "My Profile", url: "/dashboard/my/profile" },
+            ]}
+          />
+        )}
         <NavMain label="Academic" items={ACADEMIC_NAV} />
       </SidebarContent>
 

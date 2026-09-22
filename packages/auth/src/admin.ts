@@ -88,28 +88,60 @@ const ensureCredentialUser = async (
 };
 
 /**
- * Creates a new teacher credential account from the admin panel.
- * The admin enters: teacher name, email, password.
+ * Username for a teacher's login account: their unique badge number
+ * (teacher service number), lowercased so "T0142" and "t0142" are the
+ * same account.
+ */
+export const usernameForBadgeNumber = (badgeNumber: string) =>
+  badgeNumber.toLowerCase();
+
+/** Synthetic internal email backing a username login (never shown). */
+export const internalEmailForUsername = (accountUsername: string) =>
+  `${accountUsername.toLowerCase()}@school-student-teacher-management.internal`;
+
+/**
+ * Creates a new teacher credential account.
+ *
+ * The teacher signs in with their **badge number** as the username plus a
+ * password chosen by the admin at creation time. A synthetic internal
+ * email (never shown) satisfies Better Auth's required email field.
+ *
+ * Returns the generated user id so the staff row can link to it.
  */
 export const createTeacherCredential = async (
   database: Database,
-  { email, password, name }: { email: string; password: string; name: string }
+  {
+    badgeNumber,
+    password,
+    name,
+  }: { badgeNumber: string; password: string; name: string }
 ) => {
+  const accountUsername = usernameForBadgeNumber(badgeNumber);
+  const internalEmail = internalEmailForUsername(accountUsername);
+
   const [hash, [existing]] = await Promise.all([
     hashPassword(password),
-    database.select().from(user).where(eq(user.email, email)).limit(1),
+    database
+      .select()
+      .from(user)
+      .where(
+        or(eq(user.username, accountUsername), eq(user.email, internalEmail))
+      )
+      .limit(1),
   ]);
 
   if (existing) {
-    throw new Error(`User with email "${email}" already exists`);
+    throw new Error(`A user with username "${accountUsername}" already exists`);
   }
 
   const userId = crypto.randomUUID();
   await database.insert(user).values({
     id: userId,
     name,
-    email,
+    email: internalEmail,
     emailVerified: true,
+    username: accountUsername,
+    displayUsername: badgeNumber,
     role: "teacher",
   });
 
@@ -121,25 +153,26 @@ export const createTeacherCredential = async (
     password: hash,
   });
 
-  console.log(`[auth] Created teacher user: email=${email}`);
-  return { userId, email };
+  return { userId, username: accountUsername };
 };
 
 /**
  * Rotates a teacher's password. Called from the admin panel.
+ * Looks the teacher up by badge number (their username).
  */
 export const rotateTeacherPassword = async (
   database: Database,
-  { email, newPassword }: { email: string; newPassword: string }
+  { badgeNumber, newPassword }: { badgeNumber: string; newPassword: string }
 ) => {
+  const accountUsername = usernameForBadgeNumber(badgeNumber);
   const [existing] = await database
     .select()
     .from(user)
-    .where(eq(user.email, email))
+    .where(eq(user.username, accountUsername))
     .limit(1);
 
   if (!existing) {
-    throw new Error(`User with email "${email}" not found`);
+    throw new Error(`No account found for badge number "${badgeNumber}"`);
   }
 
   const [hash, [existingAccount]] = await Promise.all([
@@ -171,8 +204,6 @@ export const rotateTeacherPassword = async (
       password: hash,
     });
   }
-
-  console.log(`[auth] Rotated password for teacher: email=${email}`);
 };
 
 /**

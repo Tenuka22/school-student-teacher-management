@@ -42,15 +42,27 @@ interface TeacherFormProps {
   isEdit?: boolean;
 }
 
+const BADGE_NUMBER_RE = /^T\d{3,6}$/u;
+
 const createValidationSchema = () =>
-  v.pick(staffInsertSchema, [
-    "name",
-    "email",
-    "nic",
-    "phone",
-    "gender",
-    "birthDate",
-  ]);
+  v.object({
+    ...v.pick(staffInsertSchema, [
+      "name",
+      "email",
+      "nic",
+      "phone",
+      "gender",
+      "birthDate",
+    ]).entries,
+    teacherServiceNo: v.pipe(
+      v.string(),
+      v.minLength(1, "Badge number is required"),
+      v.regex(
+        BADGE_NUMBER_RE,
+        "Badge number must look like T0142 (T + 3-6 digits)"
+      )
+    ),
+  });
 
 const editValidationSchema = () =>
   v.pick(staffUpdateSchema, [
@@ -71,6 +83,7 @@ interface FormData {
   phone: string;
   gender: string;
   birthDate: string;
+  teacherServiceNo: string;
   appointmentType: string;
   employmentStatus: string;
 }
@@ -82,6 +95,7 @@ const getInitialFormData = (initialData?: Staff): FormData => ({
   phone: initialData?.phone || "",
   gender: initialData?.gender || "",
   birthDate: initialData?.birthDate || "",
+  teacherServiceNo: initialData?.teacherServiceNo || "",
   appointmentType: initialData?.appointmentType || "",
   employmentStatus: initialData?.employmentStatus || "",
 });
@@ -136,6 +150,27 @@ export const TeacherForm = ({
       <FieldSet>
         <FieldLegend>Basic Information</FieldLegend>
         <FieldGroup>
+          <Field>
+            <FieldLabel>Badge Number *</FieldLabel>
+            <Input
+              value={formData.teacherServiceNo}
+              onChange={(e) =>
+                handleChange("teacherServiceNo", e.target.value.toUpperCase())
+              }
+              placeholder="T0142"
+              disabled={isLoading}
+              data-invalid={errors.teacherServiceNo ? true : undefined}
+            />
+            <FieldDescription>
+              Unique service number — it doubles as the teacher&apos;s login
+              username. They sign in with this badge number and the password you
+              issue.
+            </FieldDescription>
+            {errors.teacherServiceNo && (
+              <FieldError>{errors.teacherServiceNo}</FieldError>
+            )}
+          </Field>
+
           <Field>
             <FieldLabel>Name *</FieldLabel>
             <Input

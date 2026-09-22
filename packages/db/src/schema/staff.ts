@@ -30,6 +30,7 @@ import { MOTHER_TONGUE_OPTIONS } from "../constants/languages";
 import { RELIGION_OPTIONS } from "../constants/religions";
 import { APPOINTMENT_TYPES, EMPLOYMENT_STATUSES } from "../constants/teachers";
 import type { AppointmentType, EmploymentStatus } from "../constants/teachers";
+import { user } from "./auth";
 import { brand } from "./brand";
 import type { Brand } from "./brand";
 import { fileIdSchema, files } from "./files";
@@ -100,8 +101,22 @@ export const staff = pgTable(
     appointmentType: text("appointment_type").$type<AppointmentType>(),
     /** ISO date string */
     appointmentDate: text("appointment_date"),
-    teacherServiceNo: text("teacher_service_no"),
+    /**
+     * Badge / service number. Unique — it doubles as the teacher's
+     * login username (see `createTeacherCredential` in the auth package).
+     */
+    teacherServiceNo: text("teacher_service_no").unique(),
     employmentStatus: text("employment_status").$type<EmploymentStatus>(),
+
+    /**
+     * Login account for this staff member (teachers sign in with their
+     * badge number as the username). Null for staff without an account.
+     */
+    userId: text("user_id")
+      .unique()
+      .references(() => user.id, {
+        onDelete: "set null",
+      }),
 
     // Profile
     portraitFileId: text("portrait_file_id").references(() => files.id, {
@@ -124,6 +139,7 @@ export const staff = pgTable(
     index("staff_nic_idx").on(table.nic),
     index("staff_appointment_type_idx").on(table.appointmentType),
     index("staff_employment_status_idx").on(table.employmentStatus),
+    index("staff_teacher_service_no_idx").on(table.teacherServiceNo),
   ]
 );
 
@@ -219,6 +235,7 @@ const staffColumnRefinements = {
     ),
   portraitFileId: () => optionalNullable(fileIdSchema),
   nationalIdentityCardFileId: () => optionalNullable(fileIdSchema),
+  userId: () => v.optional(v.nullable(v.string())),
 };
 
 export const staffSelectSchema = createSelectSchema(
