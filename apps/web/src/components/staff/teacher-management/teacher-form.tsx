@@ -162,13 +162,27 @@ export const TeacherForm = ({
               data-invalid={errors.teacherServiceNo ? true : undefined}
             />
             <FieldDescription>
-              Unique service number — it doubles as the teacher&apos;s login
-              username. They sign in with this badge number and the password you
-              issue.
+              Unique service number used for internal references.
             </FieldDescription>
             {errors.teacherServiceNo && (
               <FieldError>{errors.teacherServiceNo}</FieldError>
             )}
+          </Field>
+
+          <Field>
+            <FieldLabel>NIC Number *</FieldLabel>
+            <Input
+              value={formData.nic ?? ""}
+              onChange={(e) => handleChange("nic", e.target.value)}
+              placeholder="199912345678 or 991234567V"
+              disabled={isLoading}
+              data-invalid={errors.nic ? true : undefined}
+            />
+            <FieldDescription>
+              The NIC is the teacher&apos;s login username — they sign in with
+              it and the password you issue.
+            </FieldDescription>
+            {errors.nic && <FieldError>{errors.nic}</FieldError>}
           </Field>
 
           <Field>

@@ -53,7 +53,12 @@ interface AttendanceForDateRow {
   absentPeriods: { periodNumber: number; reason: string }[];
 }
 
-export type RowStatus = "present" | "partial" | "absent";
+export type RowStatus =
+  | "present"
+  | "partial"
+  | "absent"
+  | "lateShortLeave"
+  | "halfDay";
 
 /** A teacher missing from `draft` is fully present. An entry here means
  * something is off: "absent" cancels every scheduled period for the day
@@ -144,6 +149,8 @@ export interface AttendancePageApi {
   periodReason: (staffId: string, periodNumber: number) => string;
   togglePeriod: (staffId: string, periodNumber: number) => Promise<void>;
   toggleSchool: (staffId: string) => Promise<void>;
+  /** Automatic late-arrival policy (LEAVE_SYSTEM_DESIGN.md §5). */
+  recordArrival: (staffId: string, arrivalTime: string) => Promise<void>;
   dayReason: (staffId: string) => string;
   /** `periodNumber: null` saves the whole-day reason; otherwise saves that
    * one period's reason. Applies the value immediately - no separate
@@ -326,6 +333,48 @@ export const useAttendancePage = (): AttendancePageApi => {
   const queryClient = useQueryClient();
   const markMutation = useMutation(
     orpc.staff.attendance.markAttendance.mutationOptions()
+  );
+
+  /**
+   * Automatic late-arrival marking (LEAVE_SYSTEM_DESIGN.md §5): the
+   * server compares the given arrival time against the year's policy
+   * (07:30 cutoff, 2 short leaves/month, half-day overflow) and records
+   * present / lateShortLeave / halfDay itself.
+   */
+  const recordArrivalMutation = useMutation(
+    orpc.staff.attendance.recordArrival.mutationOptions()
+  );
+
+  const recordArrival = useCallback(
+    async (staffId: string, arrivalTime: string) => {
+      if (!currentYear?.id) {
+        return;
+      }
+      try {
+        const result = await recordArrivalMutation.mutateAsync({
+          staffId,
+          academicYearId: currentYear.id,
+          date,
+          arrivalTime,
+        } as never);
+        const arrivalNote = result.note ?? "";
+        const arrivalMessage =
+          result.status === "present"
+            ? "Marked present — on time"
+            : `Late — ${result.status === "lateShortLeave" ? "short leave" : "half day"} recorded (${arrivalNote})`;
+        toast.success(arrivalMessage);
+        await queryClient.invalidateQueries({
+          queryKey: orpc.staff.attendance.listAttendanceForDate.queryOptions({
+            input: { date },
+          }).queryKey,
+        });
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to record arrival"
+        );
+      }
+    },
+    [currentYear, date, recordArrivalMutation, queryClient]
   );
 
   const draftRef = useRef(draft);
@@ -644,5 +693,6 @@ export const useAttendancePage = (): AttendancePageApi => {
     toggleSchool,
     dayReason,
     saveReason,
+    recordArrival,
   };
 };

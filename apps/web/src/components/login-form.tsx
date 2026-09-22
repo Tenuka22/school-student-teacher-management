@@ -157,7 +157,15 @@ export const LoginForm = () => {
           </form>
 
           <div className="mt-[clamp(16px,2.8vh,28px)] flex flex-wrap justify-between gap-3.5 border-t border-[#013405]/12 pt-[clamp(12px,2vh,20px)] text-[12.5px] text-[#013405]/65">
-            <span>Forgot your credentials? Contact the College office.</span>
+            <span>
+              No account?{" "}
+              <a
+                href="/signup"
+                className="font-bold text-[#013405] underline underline-offset-2 hover:text-[#A51919]"
+              >
+                Staff sign-up
+              </a>
+            </span>
             <span className="font-bold tracking-[0.18em] text-[#013405]/45">
               CERTA VIRILITER
             </span>

@@ -2,6 +2,37 @@ import { ORPCError, os } from "@orpc/server";
 
 import type { Context } from "./context";
 
+/** Shape of better-auth's permission check, stated structurally — the
+ * inferred auth type loses plugin API inference through the config helper.
+ */
+interface PermissionCheckResult {
+  success: boolean;
+}
+
+const hasPermission = (
+  auth: NonNullable<Context["auth"]>,
+  role: string,
+  resource: string,
+  action: string
+) =>
+  // The auth factory's inferred API type collapses plugin endpoints, so we
+  // call through a structural cast — the endpoint exists at runtime.
+  (
+    auth.api as unknown as {
+      userHasPermission: (args: {
+        body: {
+          role: string;
+          permissions: Record<string, string[]>;
+        };
+      }) => Promise<PermissionCheckResult>;
+    }
+  ).userHasPermission({
+    body: {
+      role,
+      permissions: { [resource]: [action] },
+    },
+  });
+
 export const o = os.$context<Context>();
 
 export const publicProcedure = o;
@@ -82,12 +113,7 @@ const requirePermission = (
     }
 
     try {
-      const result = await context.auth.api.userHasPermission({
-        body: {
-          role: role as "admin" | "user" | "teacher",
-          permissions: { [resource]: [action] },
-        },
-      });
+      const result = await hasPermission(context.auth, role, resource, action);
 
       if (!result.success) {
         throw new ORPCError("FORBIDDEN");

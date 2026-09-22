@@ -22,10 +22,6 @@ import type { AcademicYearFormSubmitData } from "@/components/staff/academic-yea
 import { AddAcademicYearDialog } from "@/components/staff/academic-year-switcher/add-academic-year-dialog";
 import { orpc } from "@/utils/orpc";
 
-export const Route = createFileRoute("/_auth/dashboard/academic-years")({
-  component: RouteComponent,
-});
-
 interface AcademicYear {
   id: string;
   year: number;
@@ -249,3 +245,7 @@ const RouteComponent = () => {
     </div>
   );
 };
+
+export const Route = createFileRoute("/_auth/dashboard/academic-years")({
+  component: RouteComponent,
+});

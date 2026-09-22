@@ -61,6 +61,7 @@ type StatusFilter = LeaveStatus | "all";
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "pending", label: "Pending" },
+  { value: "recommended", label: "Recommended" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
   { value: "cancelled", label: "Cancelled" },
@@ -79,17 +80,50 @@ export const LeaveRequestsContent = () => {
     })
   );
 
+  const invalidateLists = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: orpc.staff.leaves.listLeaveRequests.queryOptions({ input: {} })
+        .queryKey,
+    });
+  };
+
   const reviewMutation = useMutation(
     orpc.staff.leaves.reviewLeave.mutationOptions({
       onSuccess: async () => {
         toast.success("Leave request reviewed");
         setReviewingId(null);
         setComment("");
-        await queryClient.invalidateQueries({
-          queryKey: orpc.staff.leaves.listLeaveRequests.queryOptions({
-            input: {},
-          }).queryKey,
-        });
+        await invalidateLists();
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    })
+  );
+
+  // Two-step chain actions (see LEAVE_SYSTEM_DESIGN.md §2):
+  // recommendLeave = Deputy Principal, finalizeLeave = Principal (final).
+  const recommendMutation = useMutation(
+    orpc.staff.leaves.recommendLeave.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Recommendation recorded — waiting for the Principal");
+        setReviewingId(null);
+        setComment("");
+        await invalidateLists();
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    })
+  );
+
+  const finalizeMutation = useMutation(
+    orpc.staff.leaves.finalizeLeave.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Decision finalised");
+        setReviewingId(null);
+        setComment("");
+        await invalidateLists();
       },
       onError: (error) => {
         toast.error(error.message);
@@ -99,13 +133,24 @@ export const LeaveRequestsContent = () => {
 
   const requests = requestsQuery.data?.requests ?? [];
   const pendingCount = requests.filter((r) => r.status === "pending").length;
+  const recommendedCount = requests.filter(
+    (r) => r.status === "recommended"
+  ).length;
 
-  const handleReview = (id: string, decision: "approved" | "rejected") => {
-    reviewMutation.mutate({
+  const act = (
+    mutation:
+      | typeof recommendMutation
+      | typeof finalizeMutation
+      | typeof reviewMutation,
+    id: string,
+    decision: "recommended" | "rejected" | "approved"
+  ) => {
+    mutation.mutate({
       id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       decision,
       comment: comment.trim() || undefined,
-    });
+    } as never);
   };
 
   return (
@@ -130,6 +175,11 @@ export const LeaveRequestsContent = () => {
             {filter.value === "pending" && pendingCount > 0 && (
               <Badge variant="secondary" className="ml-2">
                 {pendingCount}
+              </Badge>
+            )}
+            {filter.value === "recommended" && recommendedCount > 0 && (
+              <Badge variant="outline" className="ml-2">
+                {recommendedCount}
               </Badge>
             )}
           </Button>
@@ -209,23 +259,59 @@ export const LeaveRequestsContent = () => {
                         rows={2}
                         placeholder="e.g. Approved — arrange cover for 6-B"
                       />
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {request.status === "pending" && (
+                          <>
+                            <Button
+                              size="sm"
+                              disabled={recommendMutation.isPending}
+                              onClick={() =>
+                                act(
+                                  recommendMutation,
+                                  request.id,
+                                  "recommended"
+                                )
+                              }
+                            >
+                              <IconCircleCheck className="mr-1 size-4" />
+                              Recommend
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={recommendMutation.isPending}
+                              onClick={() =>
+                                act(recommendMutation, request.id, "rejected")
+                              }
+                            >
+                              <IconX className="mr-1 size-4" />
+                              Not recommended
+                            </Button>
+                          </>
+                        )}
+                        {/* Principal step — also reachable from "recommended"
+                            status; an admin with the principal position may
+                            act early on a pending request (implicit skip). */}
                         <Button
                           size="sm"
-                          disabled={reviewMutation.isPending}
-                          onClick={() => handleReview(request.id, "approved")}
+                          disabled={finalizeMutation.isPending}
+                          onClick={() =>
+                            act(finalizeMutation, request.id, "approved")
+                          }
                         >
                           <IconCheck className="mr-1 size-4" />
-                          Approve
+                          Approve (Final)
                         </Button>
                         <Button
                           size="sm"
                           variant="destructive"
-                          disabled={reviewMutation.isPending}
-                          onClick={() => handleReview(request.id, "rejected")}
+                          disabled={finalizeMutation.isPending}
+                          onClick={() =>
+                            act(finalizeMutation, request.id, "rejected")
+                          }
                         >
                           <IconX className="mr-1 size-4" />
-                          Reject
+                          Reject (Final)
                         </Button>
                         <Button
                           size="sm"
@@ -242,20 +328,25 @@ export const LeaveRequestsContent = () => {
                   )}
                 </div>
 
-                {request.status === "pending" && reviewingId !== request.id && (
-                  <div className="flex shrink-0 gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setReviewingId(request.id);
-                        setComment("");
-                      }}
-                    >
-                      <IconCircleCheck className="mr-1 size-4" />
-                      Review
-                    </Button>
-                  </div>
-                )}
+                {request.status !== "approved" &&
+                  request.status !== "rejected" &&
+                  request.status !== "cancelled" &&
+                  reviewingId !== request.id && (
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setReviewingId(request.id);
+                          setComment("");
+                        }}
+                      >
+                        <IconCircleCheck className="mr-1 size-4" />
+                        {request.status === "recommended"
+                          ? "Finalise"
+                          : "Review"}
+                      </Button>
+                    </div>
+                  )}
               </CardContent>
             </Card>
           ))}

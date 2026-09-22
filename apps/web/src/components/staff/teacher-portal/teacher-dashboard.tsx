@@ -19,6 +19,70 @@ import { Link } from "@tanstack/react-router";
 
 import { orpc } from "@/utils/orpc";
 
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  annual: "Annual",
+  casual: "Casual",
+  medical: "Medical",
+  maternity: "Maternity",
+  duty: "Official Duty",
+  other: "Other",
+};
+
+/** Leave balance card: entitlement (max) vs derived usage for the year. */
+const LeaveBalanceCard = () => {
+  const balanceQuery = useQuery(
+    orpc.staff.leaves.getMyLeaveBalance.queryOptions({ input: {} })
+  );
+  const balances = balanceQuery.data?.balances ?? [];
+
+  if (balances.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <IconCalendarTime className="text-muted-foreground size-5" />
+          <h2 className="font-semibold">Leave Balance (this year)</h2>
+        </div>
+        <div className="space-y-3">
+          {balances.map((b) => {
+            const pct =
+              b.maxDays > 0
+                ? Math.min(100, Math.round((b.usedDays / b.maxDays) * 100))
+                : 0;
+            return (
+              <div key={b.leaveType}>
+                <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium">
+                    {LEAVE_TYPE_LABELS[b.leaveType] ?? b.leaveType}
+                  </span>
+                  <span className="text-muted-foreground font-mono text-xs">
+                    {b.usedDays} / {b.maxDays} days
+                  </span>
+                </div>
+                <div
+                  className="bg-muted h-1.5 w-full overflow-hidden rounded-full"
+                  aria-valuenow={pct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${LEAVE_TYPE_LABELS[b.leaveType] ?? b.leaveType} leave used`}
+                >
+                  <div
+                    className={`h-full rounded-full ${pct >= 100 ? "bg-destructive" : "bg-primary"}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
   permanent: "Permanent",
   probation: "Probation",
@@ -157,6 +221,10 @@ export const TeacherDashboard = () => {
             </div>
           </CardContent>
         </Card>
+
+        <div className="md:col-span-2">
+          <LeaveBalanceCard />
+        </div>
       </div>
     </div>
   );

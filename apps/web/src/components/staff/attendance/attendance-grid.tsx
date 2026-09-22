@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
+import { Input } from "@school-student-teacher-management/ui/components/input";
 import {
   Table,
   TableBody,
@@ -30,7 +31,7 @@ import {
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
 import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
-import { IconMessage2 } from "@tabler/icons-react";
+import { IconClockCheck, IconMessage2 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 
 import type {
@@ -96,6 +97,8 @@ const ROW_STATUS_BADGE: Record<
   present: { label: "Present", variant: "outline" },
   partial: { label: "Partial", variant: "secondary" },
   absent: { label: "Absent", variant: "destructive" },
+  lateShortLeave: { label: "Late (SL)", variant: "secondary" },
+  halfDay: { label: "Half Day", variant: "destructive" },
 };
 
 const ReasonButton = ({ onClick }: { onClick: () => void }) => (
@@ -121,7 +124,8 @@ const SchoolCell = ({
   onOpenReason: (target: ReasonTarget) => void;
 }) => {
   const status = page.rowStatus(teacher.id);
-  const isPresent = status === "present";
+  const isPresent =
+    status === "present" || status === "lateShortLeave" || status === "halfDay";
   const isSaving = page.pendingCells.has(`${teacher.id}:school`);
 
   return (
@@ -215,6 +219,14 @@ const TeacherRow = ({
 }) => {
   const status = page.rowStatus(teacher.id);
   const badge = ROW_STATUS_BADGE[status];
+  const [arrivalOpen, setArrivalOpen] = useState(false);
+  const [arrivalTime, setArrivalTime] = useState("07:30");
+
+  const submitArrival = () => {
+    setArrivalOpen(false);
+    page.recordArrival?.(teacher.id, arrivalTime);
+  };
+
   return (
     <TableRow>
       <TableCell className="bg-card sticky left-0 font-medium whitespace-nowrap">
@@ -223,6 +235,17 @@ const TeacherRow = ({
           {status !== "present" && (
             <Badge variant={badge.variant}>{badge.label}</Badge>
           )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-5"
+            title="Record arrival time (auto short-leave / half-day policy)"
+            aria-label={`Record arrival time for ${teacher.name}`}
+            onClick={() => setArrivalOpen(true)}
+          >
+            <IconClockCheck className="size-3.5" />
+          </Button>
         </div>
       </TableCell>
       <SchoolCell page={page} teacher={teacher} onOpenReason={onOpenReason} />
@@ -235,6 +258,35 @@ const TeacherRow = ({
           onOpenReason={onOpenReason}
         />
       ))}
+      <Dialog open={arrivalOpen} onOpenChange={setArrivalOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Record arrival — {teacher.name}</DialogTitle>
+            <DialogDescription>
+              Compared against the 07:30 cut-off. After it, a short leave is
+              used (2/month) or a half day is recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="time"
+            value={arrivalTime}
+            onChange={(e) => setArrivalTime(e.target.value)}
+            aria-label="Arrival time"
+          />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setArrivalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={submitArrival}>
+              Record
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TableRow>
   );
 };

@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import { createTeacherCredential } from "@school-student-teacher-management/auth";
+import { createStaffCredential } from "@school-student-teacher-management/auth";
 import {
   staff,
   staffInsertSchema,
@@ -12,14 +12,22 @@ import { requireStaffPermission } from "../../index";
 
 /**
  * Badge number (teacher service no.) format: "T" + digits, e.g. T0142.
- * Doubles as the teacher's login username — every teacher gets a unique
- * badge number, so it is guaranteed unique across accounts.
+ * Internal reference only — the login username is the **NIC**
+ * (see `usernameForNic`).
  */
 const BADGE_NUMBER_RE = /^T\d{3,6}$/u;
 
 const badgeNumberSchema = v.pipe(
   v.string(),
   v.regex(BADGE_NUMBER_RE, "Badge number must look like T0142 (T + 3-6 digits)")
+);
+
+/** NIC format: old 9-digit + V/X or new 12-digit. Doubles as the username. */
+const NIC_RE = /^(?<nic>\d{9}[VvXx]|\d{12})$/u;
+
+const nicLoginSchema = v.pipe(
+  v.string(),
+  v.regex(NIC_RE, "NIC must be 9 digits + V/X or 12 digits")
 );
 
 /**
@@ -41,6 +49,8 @@ export const createStaff = requireStaffPermission("create")
         "birthDate",
       ]).entries,
       teacherServiceNo: badgeNumberSchema,
+      /** Required — it becomes the login username. */
+      nic: nicLoginSchema,
     })
   )
   .handler(async ({ input, context }) => {
@@ -97,15 +107,16 @@ export const createStaff = requireStaffPermission("create")
       throw new ORPCError("INTERNAL_SERVER_ERROR");
     }
 
-    // Every teacher gets a login: username = badge number, password =
+    // Every teacher gets a login: username = NIC (lowercased), password =
     // the initial welcome password (shown to the admin once, then the
     // teacher rotates it).
     let username: string;
     try {
-      const credential = await createTeacherCredential(context.db, {
-        badgeNumber,
+      const credential = await createStaffCredential(context.db, {
+        nic: input.nic,
         password: INITIAL_TEACHER_PASSWORD,
         name: input.name,
+        role: "teacher",
       });
       ({ username } = credential);
 
@@ -121,7 +132,7 @@ export const createStaff = requireStaffPermission("create")
         message:
           error instanceof Error
             ? error.message
-            : `Could not create login for ${badgeNumber}`,
+            : `Could not create login for NIC ${input.nic}`,
       });
     }
 

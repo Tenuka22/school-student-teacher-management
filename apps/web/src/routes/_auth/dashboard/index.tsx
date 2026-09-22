@@ -3,13 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { orpc } from "@/utils/orpc";
 
-export const Route = createFileRoute("/_auth/dashboard/")({
-  component: RouteComponent,
-  loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(orpc.privateData.queryOptions());
-  },
-});
-
 const CHECKLIST = [
   { label: "Academic year opened", value: "2027" },
   { label: "Teachers ported forward", value: "82" },
@@ -242,3 +235,10 @@ const RouteComponent = () => {
     </div>
   );
 };
+
+export const Route = createFileRoute("/_auth/dashboard/")({
+  component: RouteComponent,
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(orpc.privateData.queryOptions());
+  },
+});

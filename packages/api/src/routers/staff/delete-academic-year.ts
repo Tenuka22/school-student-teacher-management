@@ -61,7 +61,7 @@ export const deleteAcademicYear = adminProcedure
     );
 
     const firstDependent = DEPENDENT_TABLES.find(
-      (_, index) => dependentRows[index].length > 0
+      (_, index) => (dependentRows[index] ?? []).length > 0
     );
 
     if (firstDependent) {

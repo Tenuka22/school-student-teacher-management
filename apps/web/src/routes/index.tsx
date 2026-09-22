@@ -1,9 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/")({
-  component: LandingPage,
-});
-
 const MODULES = [
   { num: "01", name: "Attendance", desc: "Daily marking and follow-up" },
   { num: "02", name: "Examinations", desc: "Schedules and mark entry" },
@@ -126,3 +122,7 @@ const LandingPage = () => (
     </div>
   </div>
 );
+
+export const Route = createFileRoute("/")({
+  component: LandingPage,
+});

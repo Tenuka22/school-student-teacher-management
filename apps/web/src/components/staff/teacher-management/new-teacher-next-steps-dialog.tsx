@@ -15,7 +15,7 @@ type Staff = typeof staff.$inferSelect;
 
 interface NewTeacherNextStepsDialogProps {
   teacher: Staff | null;
-  /** Login username (the badge number) returned by createStaff. */
+  /** Login username (the teacher's NIC) returned by createStaff. */
   loginUsername?: string | null;
   /** One-time initial password shown only right after creation. */
   initialPassword?: string | null;
@@ -24,8 +24,7 @@ interface NewTeacherNextStepsDialogProps {
 }
 
 /** Shown right after a teacher is created: their fresh login credentials —
- * username = badge number — plus the natural next step, setting up their
- * timetable. */
+ * username = NIC — plus the natural next step, setting up their timetable. */
 export const NewTeacherNextStepsDialog = ({
   teacher,
   loginUsername,
@@ -56,8 +55,8 @@ export const NewTeacherNextStepsDialog = ({
           <DialogTitle>{teacher?.name} was created</DialogTitle>
           <DialogDescription>
             A login account was created automatically. Share these credentials
-            with the teacher — they sign in with their badge number as the
-            username and should change the password after first sign-in.
+            with the teacher — they sign in with their NIC as the username and
+            should change the password after first sign-in.
           </DialogDescription>
         </DialogHeader>
 
