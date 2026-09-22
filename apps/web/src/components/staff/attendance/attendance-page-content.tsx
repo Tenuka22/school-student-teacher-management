@@ -133,7 +133,7 @@ export const AttendancePageContent = () => {
               id="attendance-filter"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Search by name..."
+              placeholder="IconSearch by name..."
               className="pl-8"
             />
           </div>

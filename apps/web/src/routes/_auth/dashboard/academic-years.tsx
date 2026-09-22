@@ -11,7 +11,6 @@ import {
   Card,
   CardContent,
   CardHeader,
-  CardTitle,
 } from "@school-student-teacher-management/ui/components/card";
 import { IconCalendarPlus, IconCheck, IconTrash } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -115,34 +114,70 @@ const RouteComponent = () => {
         {years.map((year) => (
           <Card
             key={year.id}
-            className={year.isCurrent ? "border-primary" : ""}
+            className={
+              year.isCurrent
+                ? "bg-primary text-primary-foreground border-t-accent gap-3.5 border-t-4 py-5"
+                : "border-t-primary gap-3.5 border-t-4 py-5"
+            }
           >
-            <CardHeader>
-              <CardTitle className="font-heading flex items-center justify-between text-2xl">
-                {year.year}
-                {year.isCurrent && (
-                  <span className="bg-primary/10 text-primary flex items-center gap-1 px-2 py-0.5 text-xs font-bold">
-                    <IconCheck className="size-3.5" />
-                    ACTIVE
-                  </span>
-                )}
-              </CardTitle>
+            <CardHeader className="flex-row items-start justify-between gap-3">
+              <div>
+                <div
+                  className={
+                    year.isCurrent
+                      ? "font-heading text-accent text-5xl leading-none font-semibold"
+                      : "font-heading text-primary text-5xl leading-none font-semibold"
+                  }
+                >
+                  {year.year}
+                </div>
+                <div
+                  className={
+                    year.isCurrent
+                      ? "text-primary-foreground/65 mt-2 text-xs"
+                      : "text-muted-foreground mt-2 text-xs"
+                  }
+                >
+                  {year.startDate && year.endDate
+                    ? `${year.startDate} \u2013 ${year.endDate}`
+                    : "No dates set"}
+                </div>
+              </div>
+              {year.isCurrent ? (
+                <span className="bg-accent text-accent-foreground flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold tracking-wider whitespace-nowrap uppercase">
+                  <IconCheck className="size-3.5" />
+                  Active
+                </span>
+              ) : (
+                <span className="bg-primary/8 text-muted-foreground px-2.5 py-1 text-[10px] font-bold tracking-wider whitespace-nowrap uppercase">
+                  Past year
+                </span>
+              )}
             </CardHeader>
-            <CardContent className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground text-sm">
-                {year.startDate && year.endDate
-                  ? `${year.startDate} – ${year.endDate}`
-                  : "No dates set"}
-              </span>
+            <CardContent className="flex flex-col gap-3.5">
+              <div
+                className={
+                  year.isCurrent
+                    ? "border-primary-foreground/15 border-t"
+                    : "border-t"
+                }
+              />
               <div className="flex items-center gap-2">
-                {!year.isCurrent && (
+                {year.isCurrent ? (
+                  <Button
+                    disabled
+                    className="disabled:text-primary-foreground/55 disabled:bg-primary-foreground/10 flex-1 text-xs font-bold tracking-wide uppercase"
+                  >
+                    Current year
+                  </Button>
+                ) : (
                   <Button
                     variant="outline"
-                    size="sm"
                     disabled={setCurrentMutation.isPending}
                     onClick={() => handleSwitchYear(year.id)}
+                    className="flex-1 text-xs font-bold tracking-wide uppercase"
                   >
-                    Switch
+                    Switch to this year
                   </Button>
                 )}
                 {!year.isCurrent && (
@@ -160,6 +195,20 @@ const RouteComponent = () => {
             </CardContent>
           </Card>
         ))}
+
+        <button
+          type="button"
+          onClick={() => setIsAddDialogOpen(true)}
+          className="border-primary/30 text-muted-foreground hover:border-primary hover:text-primary hover:bg-card flex min-h-[220px] flex-col items-center justify-center gap-2 border border-dashed p-6 text-center transition-colors"
+        >
+          <span className="font-heading text-4xl leading-none">+</span>
+          <span className="text-sm font-bold tracking-wide">
+            Add academic year
+          </span>
+          <span className="max-w-[24ch] text-xs leading-relaxed">
+            Opens a fresh year — classes and staff can be ported forward.
+          </span>
+        </button>
       </div>
 
       <AddAcademicYearDialog

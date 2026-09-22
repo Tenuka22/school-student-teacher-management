@@ -43,6 +43,50 @@ export const TeacherTimetablePageContent = ({
 
       {page.staffId && page.currentYear?.id && (
         <>
+          {page.currentStaff && (
+            <div className="bg-primary text-primary-foreground flex flex-wrap items-center gap-5 p-5">
+              <span className="bg-accent/20 text-accent flex size-12 flex-none items-center justify-center rounded-full text-base font-bold">
+                {page.currentStaff.name
+                  .split(/\s+/u)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((part) => part[0]?.toUpperCase())
+                  .join("")}
+              </span>
+              <div className="min-w-0">
+                <div className="font-heading text-2xl leading-tight font-semibold">
+                  {page.currentStaff.name}
+                </div>
+                {page.currentStaff.email && (
+                  <div className="text-primary-foreground/65 mt-1 text-xs">
+                    {page.currentStaff.email}
+                  </div>
+                )}
+              </div>
+              <div className="ml-auto flex gap-6">
+                <div>
+                  <div className="font-heading text-accent text-2xl leading-none font-semibold">
+                    {page.entries.length}
+                  </div>
+                  <div className="text-primary-foreground/65 mt-1 text-[10px] tracking-wider uppercase">
+                    Periods / week
+                  </div>
+                </div>
+                <div>
+                  <div className="font-heading text-accent text-2xl leading-none font-semibold">
+                    {Math.max(
+                      page.periodConfig.length * 5 - page.entries.length,
+                      0
+                    )}
+                  </div>
+                  <div className="text-primary-foreground/65 mt-1 text-[10px] tracking-wider uppercase">
+                    Free slots
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <TeacherTimetableGrid
             entries={page.entries}
             periodConfig={page.periodConfig}

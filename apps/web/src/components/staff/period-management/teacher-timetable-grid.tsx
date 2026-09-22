@@ -71,11 +71,16 @@ export const TeacherTimetableGrid = ({
   return (
     <Card className="overflow-x-auto">
       <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-32">Period</TableHead>
+        <TableHeader className="bg-primary">
+          <TableRow className="hover:bg-primary">
+            <TableHead className="text-accent w-32 font-bold tracking-wider uppercase">
+              Period
+            </TableHead>
             {DAYS_OF_WEEK.map((day) => (
-              <TableHead key={day} className="text-center">
+              <TableHead
+                key={day}
+                className="text-accent text-center font-bold tracking-wider uppercase"
+              >
                 {day}
               </TableHead>
             ))}

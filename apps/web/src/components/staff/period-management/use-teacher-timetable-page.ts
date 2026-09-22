@@ -1,5 +1,6 @@
 import type { class_ as classTable } from "@school-student-teacher-management/db/schema/academics";
 import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
+import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -8,6 +9,7 @@ import { orpc } from "@/utils/orpc";
 
 type Class = typeof classTable.$inferSelect;
 type PeriodConfig = typeof periodConfigTable.$inferSelect;
+type Staff = typeof staffTable.$inferSelect;
 
 interface AcademicYear {
   id: string;
@@ -64,6 +66,13 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
       enabled: !!(currentYear?.id && staffId),
     })
   );
+
+  const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
+
+  const currentStaff = useMemo(() => {
+    const staffList = staffQuery.data as unknown as Staff[] | undefined;
+    return staffList?.find((s) => s.id === staffId);
+  }, [staffQuery.data, staffId]);
 
   const assignMutation = useMutation(
     orpc.staff.periods.assignClassPeriod.mutationOptions()
@@ -194,6 +203,7 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
     staffId,
     setStaffId,
     currentYear,
+    currentStaff,
     classes,
     periodConfig,
     entries,

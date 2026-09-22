@@ -125,7 +125,10 @@ const TeacherRow = ({
     <TableCell className="hidden sm:table-cell">{teacher.phone}</TableCell>
     <TableCell>
       {teacher.employmentStatus ? (
-        <Badge variant={getStatusColor(teacher.employmentStatus)}>
+        <Badge
+          variant={getStatusColor(teacher.employmentStatus)}
+          className="text-[10px] font-bold tracking-wider uppercase"
+        >
           {EMPLOYMENT_STATUSES[
             teacher.employmentStatus as keyof typeof EMPLOYMENT_STATUSES
           ]?.label || teacher.employmentStatus}
@@ -135,31 +138,41 @@ const TeacherRow = ({
       )}
     </TableCell>
     <TableCell>
-      <DropdownMenu>
-        <DropdownMenuTrigger>
-          <Button variant="ghost" size="sm">
-            <IconDotsVertical className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onViewClick}>
-            View Profile
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onEditClick}>
-            Edit Details
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onManageTimetableClick}>
-            <IconCalendarTime className="mr-2 size-4" />
-            Manage Timetable
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={onDeleteClick}
-            className="text-destructive"
-          >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center justify-end gap-4 text-xs font-bold">
+        <button
+          type="button"
+          className="text-accent-foreground decoration-accent underline-offset-4 hover:underline"
+          onClick={onViewClick}
+        >
+          View
+        </button>
+        <button
+          type="button"
+          className="text-foreground/70 hover:text-foreground hover:underline"
+          onClick={onEditClick}
+        >
+          Edit
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger>
+            <Button variant="ghost" size="icon" className="size-6">
+              <IconDotsVertical className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onManageTimetableClick}>
+              <IconCalendarTime className="mr-2 size-4" />
+              Manage Timetable
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={onDeleteClick}
+              className="text-destructive"
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </TableCell>
   </TableRow>
 );

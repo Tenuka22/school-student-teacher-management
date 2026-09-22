@@ -192,7 +192,7 @@ export const ClassesTabs = ({
         <div className="relative flex-1 basis-64">
           <IconSearch className="text-muted-foreground absolute top-3 left-3 size-4" />
           <Input
-            placeholder="Search by class name or teacher..."
+            placeholder="IconSearch by class name or teacher..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
