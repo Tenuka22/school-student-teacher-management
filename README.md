@@ -1,6 +1,8 @@
 # school-student-teacher-management
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Self, ORPC, and more.
+School management system for St. Aloysius' College (Galle, Sri Lanka): staff records, timetables, attendance, leave management and a self-service teacher portal.
+
+Built with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Self, ORPC, and more.
 
 ## Features
 
@@ -13,6 +15,43 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **PostgreSQL** - Database engine
 - **Authentication** - Better-Auth
 - **Nx** - Smart monorepo task orchestration and caching
+
+## What the system does
+
+### Staff management
+
+- **Teacher records** — full CRUD with personal, address, emergency-contact and employment details; qualifications with file uploads and an approval flow.
+- **Two staff categories** — `teacher` and `officeStaff` (`staff.staffCategory`).
+- **Subject & class assignment** per academic year, sectional heads and department heads via `staff_position`.
+- **Timetables** — period configuration plus class/teacher slot assignment with conflict detection (no double-booked teacher, no duplicate class slot), Excel/PDF exports.
+
+### Leave management
+
+Documented in detail in [`LEAVE_SYSTEM_DESIGN.md`](./LEAVE_SYSTEM_DESIGN.md) — the source of truth for the workflow.
+
+- **Apply by type** — annual, casual, medical, maternity, official duty, other.
+- **Two-step approval chain** — the **Deputy Principal recommends**, the **Principal approves/rejects**. The Principal's action sets `finalized_at` and locks the request; the DP recommendation is preserved for the audit trail. Owners can cancel non-finalised requests.
+- **Dynamic quotas** — per-year limits live in the `leave_entitlement` table (e.g. medical 21 + other categories 20 = 41 days this year). Next year's numbers are a data edit, not a code change; historical years keep their own rows so past records are never rewritten. Remaining balance is derived (quota − approved days), never stored.
+
+### Attendance & the late-arrival policy
+
+- Day-level teacher attendance (`present` / `partial` / `absent`) plus per-period absence records with reasons.
+- **Automatic late-arrival handling** (`attendance.recordArrival`):
+  1. Arrival **by 07:30** (the year's `arrival_cutoff_time`) → marked present.
+  2. Later, with short-leave allowance left → recorded as a **short leave** (2 per month by default).
+  3. Allowance exhausted → recorded as a **half day**; 2 half days = 1 leave day, so a 21-day entitlement equals 42 half days.
+- All policy numbers are rows in `attendance_policy` (per academic year) and monthly usage in `short_leave_usage` — minimum / maximum / current, append-only so history stays intact.
+
+### Accounts & sign-up
+
+- **The NIC is the username.** Staff (teachers and office staff) sign up at `/signup` with name, NIC, email and password — the NIC (lowercased, unique index) becomes their login username. One NIC = one person = one account.
+- **Leadership sign-up** at `/signup/admin` for the Principal and Deputy Principals, gated by a shared `LEADERSHIP_SETUP_CODE` env secret, and automatically linked to their leadership position for the current year.
+- Teachers get a self-service portal at `/dashboard/my` — profile, leave history and applications; admins manage everything under `/dashboard/staff`. The sidebar adapts to the signed-in role.
+- An env-bootstrap admin account (`ADMIN_USERNAME` / `ADMIN_PASSWORD`) exists for initial setup.
+
+### Academic-year scoping
+
+Assignments, timetables, attendance, leave and quotas are all scoped to an academic year. Opening a new year isolates data automatically — no archiving step.
 
 ## Getting Started
 
@@ -73,6 +112,12 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 Each app owns its environment schema in `.env.schema`. Varlock generates `src/env.ts` during installation; run `bun run env:generate` after changing a schema. Commit schemas, and keep secrets in ignored env files or your deployment platform.
 
+Auth-related variables (all in `apps/web/.env.schema`):
+
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` — bootstrap admin account, re-synced on server start
+- `LEADERSHIP_SETUP_CODE` — shared secret required by the `/signup/admin` leadership page
+- `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` / `DATABASE_URL`
+
 Import the generated `ENV` accessor in application code. Shared database and auth packages receive configuration or initialized clients from the application. See [Varlock's monorepo guide](https://varlock.dev/guides/monorepos/).
 
 Bun's automatic env loading is disabled in `bunfig.toml`; the framework integration or server bootstrap loads Varlock. Node deployments must include Varlock and its dependencies alongside the app schema.
@@ -102,10 +147,27 @@ school-student-teacher-management/
 │   └── web/         # Fullstack application (React + TanStack Start)
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── api/         # API layer / business logic
-│   ├── auth/        # Authentication configuration & logic
-│   └── db/          # Database schema & queries
+│   ├── api/         # API layer / business logic (staff, leaves, attendance, periods)
+│   ├── auth/        # Authentication configuration & logic (NIC usernames, roles)
+│   └── db/          # Database schema & queries (Drizzle)
 ```
+
+### Key source locations
+
+| Area | Path |
+| --- | --- |
+| Leave/attendance design doc | `LEAVE_SYSTEM_DESIGN.md` |
+| Leave & quota schema | `packages/db/src/schema/leaves.ts` |
+| Attendance & policy schema | `packages/db/src/schema/attendance.ts` |
+| Staff & academic-year schema | `packages/db/src/schema/staff.ts` |
+| Auth (NIC username, credentials) | `packages/auth/src/admin.ts` |
+| Leave procedures (apply, review chain, quotas) | `packages/api/src/routers/staff/leaves/` |
+| Attendance procedures (policy, recordArrival) | `packages/api/src/routers/staff/attendance/` |
+| Sign-up procedures | `packages/api/src/routers/staff/signup.ts` |
+| Teacher portal UI | `apps/web/src/components/staff/teacher-portal/` |
+| Leave review UI (admin) | `apps/web/src/components/staff/leave-management/` |
+| Sign-up pages | `apps/web/src/components/signup/` |
+| Routes | `apps/web/src/routes/` (`/signup`, `/signup/admin`, `/dashboard/my/*`, `/dashboard/staff/*`) |
 
 ## Available Scripts
 
