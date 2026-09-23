@@ -128,7 +128,7 @@ packages/db/src/schema/leaves.ts       + leaveEntitlement (per year × type, max
                                        + leaveBalanceProcedure (derived, no table)
 packages/db/src/schema/attendance.ts   + attendancePolicy (per year)
                                        + shortLeaveUsage (per staff × month)
-packages/auth/src/admin.ts             ~ username auto-generation helpers
+packages/auth/src/admin.ts             ~ NIC-as-username helpers + Principal/DP env seeding
 packages/api/src/routers/staff/        + signup flows, entitlement CRUD,
                                          leadership review chain procedures
 apps/web/src/routes/                   + /signup, /signup/admin pages

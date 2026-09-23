@@ -72,7 +72,9 @@ export const ApplyLeaveForm = ({
   const applyMutation = useMutation(
     orpc.staff.leaves.applyLeave.mutationOptions({
       onSuccess: async () => {
-        toast.success("Leave request submitted — pending admin review");
+        toast.success(
+          "Leave request submitted — awaiting Deputy Principal recommendation"
+        );
         setForm(EMPTY_FORM);
         onOpenChange(false);
         onApplied();
@@ -128,8 +130,9 @@ export const ApplyLeaveForm = ({
         <DialogHeader>
           <DialogTitle>Apply for Leave</DialogTitle>
           <DialogDescription>
-            Your request goes to the administration for review. You&apos;ll see
-            the decision in &quot;My Leave&quot;.
+            Your request goes to the Deputy Principal for recommendation, then
+            to the Principal for the final decision. You&apos;ll see the outcome
+            in &quot;My Leave&quot;.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

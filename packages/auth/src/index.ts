@@ -16,17 +16,21 @@ export { ac, admin, teacher, user } from "./permissions";
 export type { AppAccessControl } from "./permissions";
 export {
   createStaffCredential,
-  createTeacherCredential,
   usernameForNic,
-  rotateTeacherPassword,
+  ensureLeadershipUsers,
 } from "./admin";
-export { ensureAdminUser } from "./admin";
 
 export interface AuthConfig {
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
-  ADMIN_USERNAME: string;
-  ADMIN_PASSWORD: string;
+  /** Principal's NIC — doubles as their login username. */
+  PRINCIPAL_NIC: string;
+  PRINCIPAL_PASSWORD: string;
+  PRINCIPAL_NAME?: string;
+  /** Deputy Principal's NIC — doubles as their login username. */
+  DEPUTY_PRINCIPAL_NIC: string;
+  DEPUTY_PRINCIPAL_PASSWORD: string;
+  DEPUTY_PRINCIPAL_NAME?: string;
   /** Shared secret for the leadership (DP/principal) sign-up page. */
   LEADERSHIP_SETUP_CODE: string;
 }

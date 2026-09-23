@@ -3,89 +3,23 @@ import {
   account,
   user,
 } from "@school-student-teacher-management/db/schema/auth";
+import {
+  academicYear,
+  staff,
+  staffPosition,
+} from "@school-student-teacher-management/db/schema/staff";
 import { hashPassword } from "better-auth/crypto";
 import { and, eq, or } from "drizzle-orm";
 
 import type { AuthConfig } from "./index";
 
-/**
- * Bootstraps (or re-secures) a credential login using direct database
- * operations — bypassing Better Auth's HTTP API layer entirely.
- *
- * The account signs in with username + password. A synthetic internal email
- * (`<username>@school-student-teacher-management.internal`) satisfies Better Auth's required
- * email field and is never shown to the user.
- */
-const ensureCredentialUser = async (
-  database: Database,
-  {
-    username: accountUsername,
-    password,
-    name,
-    role,
-  }: { username: string; password: string; name: string; role: string }
-) => {
-  const internalEmail = `${accountUsername.toLowerCase()}@school-student-teacher-management.internal`;
-  const [hash, [existing]] = await Promise.all([
-    hashPassword(password),
-    database
-      .select()
-      .from(user)
-      .where(
-        or(eq(user.username, accountUsername), eq(user.email, internalEmail))
-      )
-      .limit(1),
-  ]);
+/** Position keys (see db/constants/positions.ts) for the two leadership seats. */
+export const PRINCIPAL_POSITION = "principal";
+export const DEPUTY_PRINCIPAL_POSITION = "vicePrincipal";
 
-  if (!existing) {
-    const userId = crypto.randomUUID();
-    await database.insert(user).values({
-      id: userId,
-      name,
-      email: internalEmail,
-      emailVerified: true,
-      username: accountUsername,
-      role,
-    });
-
-    await database.insert(account).values({
-      id: crypto.randomUUID(),
-      accountId: userId,
-      providerId: "credential",
-      userId,
-      password: hash,
-    });
-
-    console.log(`[auth] Created ${role} user`);
-    return;
-  }
-
-  await database.update(user).set({ role }).where(eq(user.id, existing.id));
-
-  const [existingAccount] = await database
-    .select()
-    .from(account)
-    .where(eq(account.userId, existing.id))
-    .limit(1);
-
-  // oxlint-disable-next-line unicorn/prefer-ternary
-  if (existingAccount) {
-    await database
-      .update(account)
-      .set({ password: hash })
-      .where(eq(account.id, existingAccount.id));
-  } else {
-    await database.insert(account).values({
-      id: crypto.randomUUID(),
-      accountId: existing.id,
-      providerId: "credential",
-      userId: existing.id,
-      password: hash,
-    });
-  }
-
-  console.log(`[auth] Rotated password for ${role} user`);
-};
+/** Synthetic internal email backing a username login (never shown). */
+export const internalEmailForUsername = (accountUsername: string) =>
+  `${accountUsername.toLowerCase()}@school-student-teacher-management.internal`;
 
 /**
  * Username for a staff login account: **the NIC itself** (lowercased so
@@ -94,14 +28,6 @@ const ensureCredentialUser = async (
  * one account. No random suffixes, nothing auto-generated to remember.
  */
 export const usernameForNic = (nic: string) => nic.toLowerCase();
-
-/** Legacy helper: badge-number usernames (pre NIC-username era). */
-export const usernameForBadgeNumber = (badgeNumber: string) =>
-  badgeNumber.toLowerCase();
-
-/** Synthetic internal email backing a username login (never shown). */
-export const internalEmailForUsername = (accountUsername: string) =>
-  `${accountUsername.toLowerCase()}@school-student-teacher-management.internal`;
 
 /**
  * Creates a staff credential account whose username is the **staff
@@ -171,24 +97,36 @@ export const createStaffCredential = async (
   return { userId, username: accountUsername };
 };
 
+interface EnsureLeadershipUserConfig {
+  /** Leadership position key ("principal" | "vicePrincipal"). */
+  position: typeof PRINCIPAL_POSITION | typeof DEPUTY_PRINCIPAL_POSITION;
+  /** The leadership member's NIC — also their login username. */
+  nic: string;
+  password: string;
+  /** Display name, e.g. "Principal". */
+  name: string;
+}
+
 /**
- * Creates a new teacher credential account.
+ * Bootstraps one leadership account (Principal or Deputy Principal) using
+ * direct database operations — bypassing Better Auth's HTTP API layer.
  *
- * The teacher signs in with their **badge number** as the username plus a
- * password chosen by the admin at creation time. A synthetic internal
- * email (never shown) satisfies Better Auth's required email field.
+ * Creates (or re-syncs the password of) three linked rows:
+ * 1. `user` + `account` — login with username = NIC, role `admin`.
+ * 2. `staff` — the permanent staff record (`staffCategory: "officeStaff"`).
+ * 3. `staff_position` — the leadership position for the current academic
+ *    year, so the leave review chain (`recommendLeave` / `finalizeLeave`)
+ *    recognises this member immediately.
  *
- * Returns the generated user id so the staff row can link to it.
+ * If a current academic year does not exist yet, the user + staff rows are
+ * still created; the position row is linked later by `signupLeadership`
+ * logic or manually.
  */
-export const createTeacherCredential = async (
+const ensureLeadershipUser = async (
   database: Database,
-  {
-    badgeNumber,
-    password,
-    name,
-  }: { badgeNumber: string; password: string; name: string }
+  { position, nic, password, name }: EnsureLeadershipUserConfig
 ) => {
-  const accountUsername = usernameForBadgeNumber(badgeNumber);
+  const accountUsername = usernameForNic(nic);
   const internalEmail = internalEmailForUsername(accountUsername);
 
   const [hash, [existing]] = await Promise.all([
@@ -202,90 +140,143 @@ export const createTeacherCredential = async (
       .limit(1),
   ]);
 
+  let userId: string;
+
   if (existing) {
-    throw new Error(`A user with username "${accountUsername}" already exists`);
-  }
-
-  const userId = crypto.randomUUID();
-  await database.insert(user).values({
-    id: userId,
-    name,
-    email: internalEmail,
-    emailVerified: true,
-    username: accountUsername,
-    displayUsername: badgeNumber,
-    role: "teacher",
-  });
-
-  await database.insert(account).values({
-    id: crypto.randomUUID(),
-    accountId: userId,
-    providerId: "credential",
-    userId,
-    password: hash,
-  });
-
-  return { userId, username: accountUsername };
-};
-
-/**
- * Rotates a teacher's password. Called from the admin panel.
- * Looks the teacher up by badge number (their username).
- */
-export const rotateTeacherPassword = async (
-  database: Database,
-  { badgeNumber, newPassword }: { badgeNumber: string; newPassword: string }
-) => {
-  const accountUsername = usernameForBadgeNumber(badgeNumber);
-  const [existing] = await database
-    .select()
-    .from(user)
-    .where(eq(user.username, accountUsername))
-    .limit(1);
-
-  if (!existing) {
-    throw new Error(`No account found for badge number "${badgeNumber}"`);
-  }
-
-  const [hash, [existingAccount]] = await Promise.all([
-    hashPassword(newPassword),
-    database
+    // Re-secure on every server start so env stays the source of truth.
+    userId = existing.id;
+    await database
+      .update(user)
+      .set({ role: "admin" })
+      .where(eq(user.id, userId));
+    const [existingAccount] = await database
       .select()
       .from(account)
       .where(
-        and(
-          eq(account.userId, existing.id),
-          eq(account.providerId, "credential")
-        )
+        and(eq(account.userId, userId), eq(account.providerId, "credential"))
       )
-      .limit(1),
-  ]);
-
-  // oxlint-disable-next-line unicorn/prefer-ternary
-  if (existingAccount) {
-    await database
-      .update(account)
-      .set({ password: hash })
-      .where(eq(account.id, existingAccount.id));
+      .limit(1);
+    // oxlint-disable-next-line unicorn/prefer-ternary -- update vs insert branches have different shapes
+    if (existingAccount) {
+      await database
+        .update(account)
+        .set({ password: hash })
+        .where(eq(account.id, existingAccount.id));
+    } else {
+      await database.insert(account).values({
+        id: crypto.randomUUID(),
+        accountId: userId,
+        providerId: "credential",
+        userId,
+        password: hash,
+      });
+    }
   } else {
+    userId = crypto.randomUUID();
+    await database.insert(user).values({
+      id: userId,
+      name,
+      email: internalEmail,
+      emailVerified: true,
+      username: accountUsername,
+      displayUsername: accountUsername,
+      role: "admin",
+    });
     await database.insert(account).values({
       id: crypto.randomUUID(),
-      accountId: existing.id,
+      accountId: userId,
       providerId: "credential",
-      userId: existing.id,
+      userId,
       password: hash,
     });
   }
+
+  // Ensure the staff row exists and links to the login account.
+  const [existingStaff] = await database
+    .select({ id: staff.id })
+    .from(staff)
+    .where(eq(staff.nic, nic))
+    .limit(1);
+
+  let staffId: string;
+
+  if (existingStaff) {
+    staffId = existingStaff.id;
+    await database
+      .update(staff)
+      .set({ userId, staffCategory: "officeStaff" })
+      .where(eq(staff.id, staffId));
+  } else {
+    const [record] = await database
+      .insert(staff)
+      .values({
+        id: crypto.randomUUID(),
+        name,
+        email: internalEmail,
+        nic,
+        staffCategory: "officeStaff",
+        userId,
+      })
+      .returning({ id: staff.id });
+    if (!record) {
+      throw new Error(`Failed to create staff row for ${name}`);
+    }
+    staffId = record.id;
+  }
+
+  // Attach the leadership position for the current academic year (if any).
+  const [currentYear] = await database
+    .select({ id: academicYear.id })
+    .from(academicYear)
+    .where(eq(academicYear.isCurrent, true))
+    .limit(1);
+
+  if (currentYear) {
+    const [existingPosition] = await database
+      .select({ id: staffPosition.id })
+      .from(staffPosition)
+      .where(
+        and(
+          eq(staffPosition.staffId, staffId),
+          eq(staffPosition.academicYearId, currentYear.id),
+          eq(staffPosition.position, position)
+        )
+      )
+      .limit(1);
+
+    if (!existingPosition) {
+      await database.insert(staffPosition).values({
+        id: crypto.randomUUID(),
+        staffId,
+        academicYearId: currentYear.id,
+        position,
+      });
+    }
+  }
+
+  console.log(`[auth] Ensured ${position} account (${accountUsername})`);
 };
 
 /**
- * Bootstraps (or re-secures) the admin account using username + password.
- * Runs on every server start so the admin credential stays in sync with env.
+ * Bootstraps (or re-secures) the Principal and Deputy Principal accounts
+ * from env. Runs on every server start so credentials stay in sync.
  */
-export const ensureAdminUser = (database: Database, env: AuthConfig) =>
-  ensureCredentialUser(database, {
-    username: env.ADMIN_USERNAME,
-    password: env.ADMIN_PASSWORD,
-    name: "Administrator",
-    role: "admin",
-  });
+export const ensureLeadershipUsers = async (
+  database: Database,
+  env: AuthConfig
+) => {
+  await Promise.all([
+    ensureLeadershipUser(database, {
+      position: PRINCIPAL_POSITION,
+      nic: env.PRINCIPAL_NIC,
+      password: env.PRINCIPAL_PASSWORD,
+      name: env.PRINCIPAL_NAME || "Principal",
+    }),
+    ensureLeadershipUser(database, {
+      position: DEPUTY_PRINCIPAL_POSITION,
+      nic: env.DEPUTY_PRINCIPAL_NIC,
+      password: env.DEPUTY_PRINCIPAL_PASSWORD,
+      name: env.DEPUTY_PRINCIPAL_NAME || "Deputy Principal",
+    }),
+  ]);
+};

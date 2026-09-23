@@ -48,13 +48,13 @@ export const createStaff = requireStaffPermission("create")
         "gender",
         "birthDate",
       ]).entries,
-      teacherServiceNo: badgeNumberSchema,
+      teacherServiceNo: v.optional(badgeNumberSchema),
       /** Required — it becomes the login username. */
       nic: nicLoginSchema,
     })
   )
   .handler(async ({ input, context }) => {
-    const badgeNumber = input.teacherServiceNo.toUpperCase();
+    const badgeNumber = input.teacherServiceNo?.toUpperCase() ?? null;
     const id = crypto.randomUUID();
 
     // Optional staff email must not collide with a login account's

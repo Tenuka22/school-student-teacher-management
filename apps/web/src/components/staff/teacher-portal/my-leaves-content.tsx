@@ -79,7 +79,7 @@ export const MyLeavesContent = () => {
         <div>
           <h1 className="font-heading text-4xl font-semibold">My Leave</h1>
           <p className="text-muted-foreground mt-2">
-            Apply for leave and track the administration&apos;s decision.
+            Apply for leave and track the Principal&apos;s decision.
           </p>
         </div>
         <Button onClick={() => setIsApplyOpen(true)}>
@@ -100,7 +100,7 @@ export const MyLeavesContent = () => {
         <Empty className="min-h-[40vh] border-dashed">
           <EmptyTitle>No leave requests yet</EmptyTitle>
           <EmptyDescription>
-            When you apply for leave, your request and the administration&apos;s
+            When you apply for leave, your request and the Principal&apos;s
             decision will appear here.
           </EmptyDescription>
           <EmptyContent>
@@ -142,7 +142,7 @@ export const MyLeavesContent = () => {
                   )}
                   {request.reviewComment && (
                     <p className="text-muted-foreground mt-1 text-xs italic">
-                      Admin note: {request.reviewComment}
+                      Reviewer note: {request.reviewComment}
                     </p>
                   )}
                 </div>

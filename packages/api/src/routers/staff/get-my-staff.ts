@@ -33,8 +33,8 @@ export const getMyStaff = teacherProcedure.handler(async ({ context }) => {
     return { profile: null, username: context.session.user.username ?? null };
   }
 
-  // Badge number doubles as the login username; fall back to the
-  // user row's stored username for accounts created before linking.
+  // The login username is the NIC; fall back to the user row for
+  // accounts created before the NIC-username era.
   const [account] = await context.db
     .select({ username: userTable.username })
     .from(userTable)
@@ -45,8 +45,6 @@ export const getMyStaff = teacherProcedure.handler(async ({ context }) => {
     profile: {
       ...row,
     },
-    username: row.teacherServiceNo
-      ? row.teacherServiceNo.toLowerCase()
-      : (account?.username ?? null),
+    username: account?.username ?? null,
   };
 });

@@ -47,7 +47,7 @@ Documented in detail in [`LEAVE_SYSTEM_DESIGN.md`](./LEAVE_SYSTEM_DESIGN.md) —
 - **The NIC is the username.** Staff (teachers and office staff) sign up at `/signup` with name, NIC, email and password — the NIC (lowercased, unique index) becomes their login username. One NIC = one person = one account.
 - **Leadership sign-up** at `/signup/admin` for the Principal and Deputy Principals, gated by a shared `LEADERSHIP_SETUP_CODE` env secret, and automatically linked to their leadership position for the current year.
 - Teachers get a self-service portal at `/dashboard/my` — profile, leave history and applications; admins manage everything under `/dashboard/staff`. The sidebar adapts to the signed-in role.
-- An env-bootstrap admin account (`ADMIN_USERNAME` / `ADMIN_PASSWORD`) exists for initial setup.
+- Env-bootstrap leadership accounts exist for initial setup: Principal (`PRINCIPAL_NIC` / `PRINCIPAL_PASSWORD`) and Deputy Principal (`DEPUTY_PRINCIPAL_NIC` / `DEPUTY_PRINCIPAL_PASSWORD`) — the NIC doubles as the login username.
 
 ### Academic-year scoping
 
@@ -114,7 +114,8 @@ Each app owns its environment schema in `.env.schema`. Varlock generates `src/en
 
 Auth-related variables (all in `apps/web/.env.schema`):
 
-- `ADMIN_USERNAME` / `ADMIN_PASSWORD` — bootstrap admin account, re-synced on server start
+- `PRINCIPAL_NIC` / `PRINCIPAL_PASSWORD` / `PRINCIPAL_NAME` — bootstrap Principal account (NIC = username), re-synced on server start
+- `DEPUTY_PRINCIPAL_NIC` / `DEPUTY_PRINCIPAL_PASSWORD` / `DEPUTY_PRINCIPAL_NAME` — bootstrap Deputy Principal account (NIC = username), re-synced on server start
 - `LEADERSHIP_SETUP_CODE` — shared secret required by the `/signup/admin` leadership page
 - `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` / `DATABASE_URL`
 

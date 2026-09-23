@@ -42,7 +42,7 @@ const AuthLayout = () => {
       </SidebarInset>
     </SidebarProvider>
   );
-}
+};
 
 export const Route = createFileRoute("/_auth")({
   component: AuthLayout,

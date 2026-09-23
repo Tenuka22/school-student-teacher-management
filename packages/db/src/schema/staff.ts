@@ -115,15 +115,16 @@ export const staff = pgTable(
     /** ISO date string */
     appointmentDate: text("appointment_date"),
     /**
-     * Badge / service number. Unique — it doubles as the teacher's
-     * login username (see `createTeacherCredential` in the auth package).
+     * Badge / service number. Internal employment reference only — the
+     * login username is the NIC (see `createStaffCredential` in the auth
+     * package).
      */
     teacherServiceNo: text("teacher_service_no").unique(),
     employmentStatus: text("employment_status").$type<EmploymentStatus>(),
 
     /**
-     * Login account for this staff member (teachers sign in with their
-     * badge number as the username). Null for staff without an account.
+     * Login account for this staff member (staff sign in with their NIC
+     * as the username). Null for staff without an account.
      */
     userId: text("user_id")
       .unique()

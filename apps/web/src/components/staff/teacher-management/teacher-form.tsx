@@ -43,6 +43,7 @@ interface TeacherFormProps {
 }
 
 const BADGE_NUMBER_RE = /^T\d{3,6}$/u;
+const NIC_RE = /^(?:\d{9}[VvXx]|\d{12})$/u;
 
 const createValidationSchema = () =>
   v.object({
@@ -54,12 +55,20 @@ const createValidationSchema = () =>
       "gender",
       "birthDate",
     ]).entries,
-    teacherServiceNo: v.pipe(
+    /** NIC is required — it becomes the login username. */
+    nic: v.pipe(
       v.string(),
-      v.minLength(1, "Badge number is required"),
-      v.regex(
-        BADGE_NUMBER_RE,
-        "Badge number must look like T0142 (T + 3-6 digits)"
+      v.minLength(1, "NIC is required"),
+      v.regex(NIC_RE, "NIC must be 9 digits + V/X or 12 digits")
+    ),
+    /** Optional internal reference; no longer the login identity. */
+    teacherServiceNo: v.optional(
+      v.pipe(
+        v.string(),
+        v.regex(
+          BADGE_NUMBER_RE,
+          "Badge number must look like T0142 (T + 3-6 digits)"
+        )
       )
     ),
   });
@@ -151,18 +160,19 @@ export const TeacherForm = ({
         <FieldLegend>Basic Information</FieldLegend>
         <FieldGroup>
           <Field>
-            <FieldLabel>Badge Number *</FieldLabel>
+            <FieldLabel>Badge Number</FieldLabel>
             <Input
               value={formData.teacherServiceNo}
               onChange={(e) =>
                 handleChange("teacherServiceNo", e.target.value.toUpperCase())
               }
-              placeholder="T0142"
+              placeholder="T0142 (optional)"
               disabled={isLoading}
               data-invalid={errors.teacherServiceNo ? true : undefined}
             />
             <FieldDescription>
-              Unique service number used for internal references.
+              Optional internal service number — the login username is the NIC
+              below.
             </FieldDescription>
             {errors.teacherServiceNo && (
               <FieldError>{errors.teacherServiceNo}</FieldError>
@@ -223,21 +233,6 @@ export const TeacherForm = ({
               Sri Lankan phone number (normalized to +94 format)
             </FieldDescription>
             {errors.phone && <FieldError>{errors.phone}</FieldError>}
-          </Field>
-
-          <Field>
-            <FieldLabel>NIC</FieldLabel>
-            <Input
-              value={formData.nic}
-              onChange={(e) => handleChange("nic", e.target.value)}
-              placeholder="123456789V or 123456789012345"
-              disabled={isLoading}
-              data-invalid={errors.nic ? true : undefined}
-            />
-            <FieldDescription>
-              Old format (9 digits + V) or new format (12 digits)
-            </FieldDescription>
-            {errors.nic && <FieldError>{errors.nic}</FieldError>}
           </Field>
 
           <Field>
