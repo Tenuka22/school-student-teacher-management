@@ -4,7 +4,7 @@ import Loader from "@/components/loader";
 import { LeadershipSignupForm } from "@/components/signup/leadership-signup-form";
 import { getUser } from "@/functions/get-user";
 
-export const Route = createFileRoute("/signup/admin")({
+export const Route = createFileRoute("/signup/leadership")({
   component: LeadershipSignupForm,
   pendingComponent: Loader,
   beforeLoad: async () => {

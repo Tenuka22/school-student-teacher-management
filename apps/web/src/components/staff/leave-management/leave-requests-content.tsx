@@ -80,26 +80,20 @@ export const LeaveRequestsContent = () => {
     })
   );
 
+  // Who is reviewing? The UI shows only the buttons this member can use:
+  // Deputy Principal -> recommend controls, Principal -> finalise controls.
+  const authorityQuery = useQuery(
+    orpc.staff.leaves.getMyAuthority.queryOptions()
+  );
+  const isDeputy = authorityQuery.data?.isDeputy ?? false;
+  const isPrincipal = authorityQuery.data?.isPrincipal ?? false;
+
   const invalidateLists = async () => {
     await queryClient.invalidateQueries({
       queryKey: orpc.staff.leaves.listLeaveRequests.queryOptions({ input: {} })
         .queryKey,
     });
   };
-
-  const reviewMutation = useMutation(
-    orpc.staff.leaves.reviewLeave.mutationOptions({
-      onSuccess: async () => {
-        toast.success("Leave request reviewed");
-        setReviewingId(null);
-        setComment("");
-        await invalidateLists();
-      },
-      onError: (error) => {
-        toast.error(error.message);
-      },
-    })
-  );
 
   // Two-step chain actions (see LEAVE_SYSTEM_DESIGN.md §2):
   // recommendLeave = Deputy Principal, finalizeLeave = Principal (final).
@@ -138,10 +132,7 @@ export const LeaveRequestsContent = () => {
   ).length;
 
   const act = (
-    mutation:
-      | typeof recommendMutation
-      | typeof finalizeMutation
-      | typeof reviewMutation,
+    mutation: typeof recommendMutation | typeof finalizeMutation,
     id: string,
     decision: "recommended" | "rejected" | "approved"
   ) => {
@@ -158,8 +149,10 @@ export const LeaveRequestsContent = () => {
       <div>
         <h1 className="font-heading text-4xl font-semibold">Leave Requests</h1>
         <p className="text-muted-foreground mt-2">
-          Review leave applications submitted by teachers. Approving a request
-          does not auto-mark attendance — mark the day on the Attendance page.
+          Review leave applications submitted by teachers — the Deputy
+          Principal recommends, the Principal gives the final decision.
+          Approving a request does not auto-mark attendance — mark the day on
+          the Attendance page.
         </p>
       </div>
 
@@ -260,7 +253,7 @@ export const LeaveRequestsContent = () => {
                         placeholder="e.g. Approved — arrange cover for 6-B"
                       />
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {request.status === "pending" && (
+                        {isDeputy && request.status === "pending" && (
                           <>
                             <Button
                               size="sm"
@@ -289,30 +282,33 @@ export const LeaveRequestsContent = () => {
                             </Button>
                           </>
                         )}
-                        {/* Principal step — also reachable from "recommended"
-                            status; an admin with the principal position may
-                            act early on a pending request (implicit skip). */}
-                        <Button
-                          size="sm"
-                          disabled={finalizeMutation.isPending}
-                          onClick={() =>
-                            act(finalizeMutation, request.id, "approved")
-                          }
-                        >
-                          <IconCheck className="mr-1 size-4" />
-                          Approve (Final)
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={finalizeMutation.isPending}
-                          onClick={() =>
-                            act(finalizeMutation, request.id, "rejected")
-                          }
-                        >
-                          <IconX className="mr-1 size-4" />
-                          Reject (Final)
-                        </Button>
+                        {/* Principal step — reachable from "pending" too
+                            (implicit override of the DP recommendation). */}
+                        {isPrincipal && (
+                          <>
+                            <Button
+                              size="sm"
+                              disabled={finalizeMutation.isPending}
+                              onClick={() =>
+                                act(finalizeMutation, request.id, "approved")
+                              }
+                            >
+                              <IconCheck className="mr-1 size-4" />
+                              Approve (Final)
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={finalizeMutation.isPending}
+                              onClick={() =>
+                                act(finalizeMutation, request.id, "rejected")
+                              }
+                            >
+                              <IconX className="mr-1 size-4" />
+                              Reject (Final)
+                            </Button>
+                          </>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"
@@ -331,7 +327,8 @@ export const LeaveRequestsContent = () => {
                 {request.status !== "approved" &&
                   request.status !== "rejected" &&
                   request.status !== "cancelled" &&
-                  reviewingId !== request.id && (
+                  reviewingId !== request.id &&
+                  (isDeputy || isPrincipal) && (
                     <div className="flex shrink-0 gap-2">
                       <Button
                         size="sm"
@@ -341,9 +338,7 @@ export const LeaveRequestsContent = () => {
                         }}
                       >
                         <IconCircleCheck className="mr-1 size-4" />
-                        {request.status === "recommended"
-                          ? "Finalise"
-                          : "Review"}
+                        {isPrincipal ? "Finalise" : "Review"}
                       </Button>
                     </div>
                   )}

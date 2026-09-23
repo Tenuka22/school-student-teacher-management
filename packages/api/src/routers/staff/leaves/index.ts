@@ -6,7 +6,11 @@ import {
   seedLeaveEntitlements,
   upsertLeaveEntitlement,
 } from "./entitlements";
-import { finalizeLeave, recommendLeave } from "./leadership-review";
+import {
+  finalizeLeave,
+  getMyAuthority,
+  recommendLeave,
+} from "./leadership-review";
 import { listLeaveRequests } from "./list-leave-requests";
 import { listMyLeaves } from "./list-my-leaves";
 import { reviewLeave } from "./review-leave";
@@ -26,6 +30,8 @@ export const leavesRouter = {
   // Leadership review chain
   recommendLeave,
   finalizeLeave,
+  /** Exposes the viewer's DP/Principal authority so the UI gates buttons. */
+  getMyAuthority,
 
   // Dynamic quotas
   listLeaveEntitlements,

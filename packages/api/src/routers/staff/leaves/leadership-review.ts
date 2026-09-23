@@ -18,8 +18,10 @@ const PRINCIPAL_POSITIONS = new Set(["principal"]);
 /**
  * Resolves the signed-in user's staff row + current-year position keys.
  * Authority comes from `staff_position` rows, not from auth roles.
+ *
+ * Exported so `getMyAuthority` can expose the same truth to the UI.
  */
-const resolveAuthority = async (
+export const resolveAuthority = async (
   db: Parameters<
     Parameters<typeof protectedProcedure.handler>[0]
   >[0]["context"]["db"],
@@ -197,3 +199,23 @@ export const finalizeLeave = protectedProcedure
       finalizedAt: updated.finalizedAt?.toISOString() ?? null,
     };
   });
+
+/**
+ * The signed-in user's review-chain authority for the current academic
+ * year. Lets the UI show only the buttons that member can actually use:
+ * the Deputy Principal gets recommend controls, the Principal gets the
+ * finalise controls, everyone else gets neither.
+ */
+export const getMyAuthority = protectedProcedure.handler(
+  async ({ context }) => {
+    const authority = await resolveAuthority(
+      context.db,
+      context.session.user.id
+    );
+
+    return {
+      isDeputy: authority?.isDeputy ?? false,
+      isPrincipal: authority?.isPrincipal ?? false,
+    };
+  }
+);
