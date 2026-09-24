@@ -14,9 +14,11 @@ import {
 } from "@school-student-teacher-management/ui/components/sidebar";
 import { IconChevronDown, IconPlus } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { replaceYearInPath } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
 import type { AcademicYearFormSubmitData } from "./academic-year-form";
@@ -35,6 +37,8 @@ const YEAR_WINDOW = { before: 2, after: 1 } as const;
 
 export const AcademicYearSwitcher = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const yearsQuery = useQuery(orpc.staff.listAcademicYears.queryOptions());
   const setCurrentMutation = useMutation(
     orpc.staff.setCurrentYear.mutationOptions()
@@ -69,14 +73,27 @@ export const AcademicYearSwitcher = () => {
       .toSorted((a, b) => b.year - a.year);
   }, [years, currentYear]);
 
-  const handleSwitchYear = async (yearId: string) => {
-    if (yearId === currentYear?.id) {
+  /**
+   * Switching a year does two things, in order: promote it to the school's
+   * active year in the database, then rewrite the `:year` segment in the
+   * current URL. The URL is what makes the choice survive a refresh or a
+   * shared link, and the `$year` route guard keeps the URL and the database
+   * in agreement.
+   */
+  const handleSwitchYear = async (year: AcademicYear) => {
+    if (year.isCurrent) {
       return;
     }
     try {
-      await setCurrentMutation.mutateAsync({ id: yearId } as never);
+      await setCurrentMutation.mutateAsync({ id: year.id } as never);
       await queryClient.invalidateQueries();
-      toast.success("Switched academic year");
+
+      const next = replaceYearInPath(pathname, year.year);
+      if (next) {
+        navigate({ to: next as never });
+      }
+
+      toast.success(`Switched to academic year ${year.year}`);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to switch year"
@@ -126,7 +143,7 @@ export const AcademicYearSwitcher = () => {
               {windowedYears.map((year) => (
                 <DropdownMenuItem
                   key={year.id}
-                  onClick={() => handleSwitchYear(year.id)}
+                  onClick={() => handleSwitchYear(year)}
                   className={
                     year.isCurrent
                       ? "bg-primary/8 text-primary justify-between rounded-none py-2 font-semibold"
@@ -135,7 +152,7 @@ export const AcademicYearSwitcher = () => {
                 >
                   <span className="font-heading text-base">{year.year}</span>
                   {year.isCurrent && (
-                    <span className="text-[10px] font-bold tracking-wider">
+                    <span className="text-xs font-bold tracking-wider">
                       ACTIVE
                     </span>
                   )}

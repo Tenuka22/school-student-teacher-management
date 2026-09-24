@@ -69,10 +69,17 @@ const requireRole = (...allowedRoles: string[]) =>
     });
   });
 
-export const adminProcedure = publicProcedure.use(requireRole("admin"));
+/**
+ * Roles that may reach the admin surface. Principal and Vice Principal are
+ * seeded with their own roles (see `packages/auth/permissions.ts`) but hold
+ * the same management authority as `admin`, so all three are accepted here.
+ */
+const ADMIN_ROLES = ["admin", "principal", "vicePrincipal"];
+
+export const adminProcedure = publicProcedure.use(requireRole(...ADMIN_ROLES));
 
 export const teacherProcedure = publicProcedure.use(
-  requireRole("admin", "teacher")
+  requireRole(...ADMIN_ROLES, "teacher")
 );
 
 // ─── Permission-based middleware ─────────────────────────────────────────────
@@ -98,8 +105,9 @@ const requirePermission = (
       throw new ORPCError("FORBIDDEN");
     }
 
-    // Admin bypasses all permission checks
-    if (role === "admin") {
+    // Leadership roles hold the same statement set as admin, so they bypass
+    // the per-permission round trip exactly like `admin` does.
+    if (ADMIN_ROLES.includes(role)) {
       return next({
         context: {
           session: context.session,

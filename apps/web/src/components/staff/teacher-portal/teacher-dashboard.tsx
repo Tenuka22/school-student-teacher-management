@@ -15,7 +15,7 @@ import {
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import { IconCalendarTime, IconId } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 
 import { orpc } from "@/utils/orpc";
 
@@ -92,6 +92,7 @@ const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export const TeacherDashboard = () => {
+  const { year } = useParams({ from: "/_auth/teacher/$year" });
   const myStaffQuery = useQuery(orpc.staff.getMyStaff.queryOptions());
   const profile = myStaffQuery.data?.profile;
   const username = myStaffQuery.data?.username;
@@ -120,7 +121,8 @@ export const TeacherDashboard = () => {
             variant="outline"
             render={
               <Link
-                to="/dashboard/my/leave"
+                to="/teacher/$year/leave"
+                params={{ year }}
                 className="mt-4 inline-flex items-center gap-2"
               >
                 <IconCalendarTime className="size-4" />
@@ -191,7 +193,7 @@ export const TeacherDashboard = () => {
               variant="outline"
               size="sm"
               className="mt-4"
-              render={<Link to="/dashboard/my/profile" />}
+              render={<Link to="/teacher/$year/profile" params={{ year }} />}
             >
               Edit contact details
             </Button>
@@ -209,12 +211,19 @@ export const TeacherDashboard = () => {
               timetable all live here.
             </p>
             <div className="flex flex-col gap-2">
-              <Button render={<Link to="/dashboard/my/leave" />}>
+              <Button
+                render={<Link to="/teacher/$year/leave" params={{ year }} />}
+              >
                 Manage My Leave
               </Button>
               <Button
                 variant="outline"
-                render={<Link to="/dashboard/staff/teacher-timetable" />}
+                render={
+                  <Link
+                    to="/admin/$year/staff/teacher-timetable"
+                    params={{ year }}
+                  />
+                }
               >
                 Timetables
               </Button>

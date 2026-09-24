@@ -71,12 +71,13 @@ Stored per request:
 - **The NIC itself is the username** (lowercased, so `991234567V` and `991234567v` are the same account). Nothing is generated, nothing to remember — one NIC, one person, one account (the unique index enforces this). Sign-in stays username + password.
 - Email is **provided by the staff member at sign-up** (their own address).
 
-### Sign-up flows (two pages)
+### Sign-up flow (one page)
 
 1. **Staff sign-up** (`/signup`) — self-service: name, NIC, email, phone, category (`teacher` / `officeStaff`). Creates `user` (role `teacher`) + `staff` row linked via `staff.user_id`, password set at sign-up. Pending admin verification of employment details is a UI concern, not a blocker.
-2. **Leadership/admin sign-up** (`/signup/admin`) — for **Deputy Principals and the Principal**. Requires an **invitation/setup code** from env (`LEADERSHIP_SETUP_CODE`) so it cannot be used by randos; creates the account with leadership position access.
 
-Both flows reuse `createStaffCredential` in `packages/auth` with the **NIC as the username**; duplicate NICs are rejected with a clear error (unique index backstop).
+Leadership (Principal / Deputy Principal) and the non-leadership **admin** account are **env-bootstrapped** on server start (`PRINCIPAL_*`, `DEPUTY_PRINCIPAL_*`, `ADMIN_*`) — there is no separate leadership sign-up page. Leadership positions can also be assigned later by an admin (`assignPosition`), which promotes the holder to auth role `admin`.
+
+The flow reuses `createStaffCredential` in `packages/auth` with the **NIC as the username**; duplicate NICs are rejected with a clear error (unique index backstop).
 
 ---
 

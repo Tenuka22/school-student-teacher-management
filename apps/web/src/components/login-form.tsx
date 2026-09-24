@@ -1,9 +1,13 @@
+import { useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { SavedAccounts } from "@/components/auth/saved-accounts";
+import { getMyHomePath } from "@/functions/get-home-path";
 import { authClient } from "@/lib/auth-client";
 
 export const LoginForm = () => {
+  const { switch: isSwitching } = useSearch({ from: "/login" });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -16,9 +20,11 @@ export const LoginForm = () => {
     await authClient.signIn.username(
       { username, password },
       {
-        onSuccess: () => {
-          window.location.assign("/dashboard");
+        onSuccess: async () => {
           toast.success("Signed in successfully");
+          // Land on the workspace for this member's role and leadership
+          // authority instead of a shared dashboard.
+          window.location.assign(await getMyHomePath());
         },
         onError: (context: {
           error: { message?: string; statusText?: string };
@@ -107,6 +113,18 @@ export const LoginForm = () => {
           <p className="m-0 mb-[clamp(18px,3vh,30px)] text-[13.5px] leading-[1.55] text-[#013405]/65">
             Enter your username and password to access your account.
           </p>
+          <p className="m-0 mb-[clamp(12px,2vh,20px)] text-[12.5px] leading-[1.5] text-[#013405]/55">
+            Teachers and office staff: use your <strong>NIC number</strong> as
+            the username. Principal and Deputy Principal: use your assigned
+            username.
+          </p>
+
+          {isSwitching && (
+            <p className="m-0 mb-[clamp(12px,2vh,20px)] border-l-[3px] border-[#FFB203] bg-[#013405]/5 py-2 pl-3 text-[12.5px] leading-[1.5] text-[#013405]/70">
+              You are already signed in. Adding or switching accounts here keeps
+              your current session active.
+            </p>
+          )}
 
           <form onSubmit={handleSignIn}>
             <label className="mb-[clamp(12px,2vh,18px)] block">
@@ -156,19 +174,35 @@ export const LoginForm = () => {
             </button>
           </form>
 
+          <div className="mt-[clamp(16px,2.8vh,28px)]">
+            <SavedAccounts />
+          </div>
+
           <div className="mt-[clamp(16px,2.8vh,28px)] flex flex-wrap justify-between gap-3.5 border-t border-[#013405]/12 pt-[clamp(12px,2vh,20px)] text-[12.5px] text-[#013405]/65">
             <span>
               No account?{" "}
               <a
-                href="/signup"
+                href={isSwitching ? "/signup?switch=1" : "/signup"}
                 className="font-bold text-[#013405] underline underline-offset-2 hover:text-[#A51919]"
               >
                 Staff sign-up
               </a>
             </span>
-            <span className="font-bold tracking-[0.18em] text-[#013405]/45">
-              CERTA VIRILITER
-            </span>
+            {isSwitching ? (
+              <span>
+                Changed your mind?{" "}
+                <a
+                  href="/account"
+                  className="font-bold text-[#013405] underline underline-offset-2 hover:text-[#A51919]"
+                >
+                  Back to my account
+                </a>
+              </span>
+            ) : (
+              <span className="font-bold tracking-[0.18em] text-[#013405]/45">
+                CERTA VIRILITER
+              </span>
+            )}
           </div>
         </div>
       </div>

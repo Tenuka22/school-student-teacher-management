@@ -16,8 +16,19 @@ const DEPUTY_POSITIONS = new Set(["vicePrincipal", "assistantPrincipal"]);
 const PRINCIPAL_POSITIONS = new Set(["principal"]);
 
 /**
- * Resolves the signed-in user's staff row + current-year position keys.
- * Authority comes from `staff_position` rows, not from auth roles.
+ * Resolves the signed-in user's leave-review authority.
+ *
+ * Two sources, in order:
+ * 1. The **seeded auth role** (`principal` / `vicePrincipal`). The Principal
+ *    and Deputy accounts are bootstrapped as pure admin accounts with no
+ *    `staff` row and no NIC, so their role is the only thing that exists.
+ * 2. A current-year `staff_position` row, which is how a member promoted
+ *    through position management (rather than seeded from env) gains
+ *    authority.
+ *
+ * `staffId` is null for role-based leadership, since there is no staff record
+ * to point at; the `*_staff_id` columns on a leave request are nullable for
+ * exactly that reason.
  *
  * Exported so `getMyAuthority` can expose the same truth to the UI.
  */
@@ -27,6 +38,23 @@ export const resolveAuthority = async (
   >[0]["context"]["db"],
   userId: string
 ) => {
+  const { user } =
+    await import("@school-student-teacher-management/db/schema/auth");
+
+  const [account] = await db
+    .select({ role: user.role })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+
+  if (account?.role === "principal" || account?.role === "vicePrincipal") {
+    return {
+      staffId: null,
+      isDeputy: account.role === "vicePrincipal",
+      isPrincipal: account.role === "principal",
+    };
+  }
+
   const { staffPosition, academicYear } =
     await import("@school-student-teacher-management/db/schema/staff");
 

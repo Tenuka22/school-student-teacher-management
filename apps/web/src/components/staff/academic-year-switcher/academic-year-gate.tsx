@@ -21,7 +21,7 @@ interface AcademicYear {
 }
 
 /**
- * Gates every `/dashboard` route behind having a current academic year.
+ * Gates every role-scoped workspace route behind having a current academic year.
  * Staff management is meaningless without one — classes, subjects, and
  * periods all filter by it — so instead of letting each page render a
  * confusing empty state, block the whole area with a clear next step.

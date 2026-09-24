@@ -32,11 +32,4 @@ export interface Context {
   session: Session | null;
   db: Database;
   auth: ReturnType<typeof createAuth> | null;
-  /**
-   * Server env (varlock-typed). Provided by the web app's context factory;
-   * minimal — only keys procedures actually use.
-   */
-  env: {
-    LEADERSHIP_SETUP_CODE: string;
-  };
 }

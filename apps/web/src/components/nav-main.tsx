@@ -81,12 +81,12 @@ export const NavMain = ({
               >
                 <span className="flex-1 text-[13px]">{item.title}</span>
                 {item.count && (
-                  <span className="bg-sidebar-foreground/16 text-sidebar-foreground shrink-0 px-1.5 py-0.5 font-mono text-[10px]">
+                  <span className="bg-sidebar-foreground/16 text-sidebar-foreground shrink-0 px-1.5 py-0.5 font-mono text-xs">
                     {item.count}
                   </span>
                 )}
                 {item.tag && (
-                  <span className="border-sidebar-foreground/25 text-sidebar-foreground/50 shrink-0 border px-1.5 py-0.5 text-[8.5px] font-extrabold tracking-widest">
+                  <span className="border-sidebar-foreground/25 text-sidebar-foreground/50 shrink-0 border px-1.5 py-0.5 text-xs font-extrabold tracking-wider">
                     {item.tag}
                   </span>
                 )}

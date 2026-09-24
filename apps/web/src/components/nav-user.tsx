@@ -8,6 +8,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@school-student-teacher-management/ui/components/dropdown-menu";
@@ -17,7 +18,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@school-student-teacher-management/ui/components/sidebar";
-import { IconSelector, IconLogout } from "@tabler/icons-react";
+import { IconLogout, IconSelector, IconUserCircle } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -105,14 +106,22 @@ export const NavUser = ({
               </div>
             </div>
             <DropdownMenuSeparator className="bg-primary/10" />
-            <button
-              type="button"
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 rounded-none font-semibold"
+              onClick={() => {
+                navigate({ to: "/account" });
+              }}
+            >
+              <IconUserCircle className="size-4" />
+              Account &amp; password
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive hover:bg-destructive/8 cursor-pointer gap-2 rounded-none font-semibold"
               onClick={handleSignOut}
-              className="text-destructive hover:bg-destructive/8 flex w-full items-center gap-2 px-2 py-2 text-left text-sm font-semibold"
             >
               <IconLogout className="size-4" />
               Log out
-            </button>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

@@ -9,7 +9,7 @@ import type {
   LeaveType,
 } from "@school-student-teacher-management/db/schema/leaves";
 import { staff } from "@school-student-teacher-management/db/schema/staff";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import * as v from "valibot";
 
 import { adminProcedure } from "../../../index";
@@ -17,20 +17,49 @@ import { adminProcedure } from "../../../index";
 export const leaveStatusFilterSchema = v.optional(leaveStatusSchema);
 
 /**
+ * Review-chain queue presets. Each selects the slice of the ledger a given
+ * reviewer is actually acting on:
+ * - `all` — the full ledger (admins, and any reviewer keeping an overview)
+ * - `deputy` — untouched requests waiting for a Deputy recommendation
+ * - `principal` — requests the Deputy recommended, awaiting a final decision
+ *
+ * `finalizedAt` is the authoritative "chain is closed" marker, so a
+ * preset never resurrects a decided request.
+ */
+export const LEAVE_QUEUE_FILTERS = ["all", "deputy", "principal"] as const;
+
+export type LeaveQueue = (typeof LEAVE_QUEUE_FILTERS)[number];
+
+/**
  * All leave requests across the school, newest first — the admin
- * review queue. Filterable by status; includes the requesting
- * teacher's name and badge number for one-shot rendering.
+ * review queue. Filterable by status or by review-chain queue; includes the
+ * requesting teacher's name and badge number for one-shot rendering.
  */
 export const listLeaveRequests = adminProcedure
   .input(
     v.object({
       status: leaveStatusFilterSchema,
+      queue: v.optional(v.picklist(LEAVE_QUEUE_FILTERS)),
     })
   )
   .handler(async ({ input, context }) => {
-    const whereClause = input.status
-      ? eq(leaveRequest.status, input.status)
-      : undefined;
+    const conditions = [];
+
+    if (input.status) {
+      conditions.push(eq(leaveRequest.status, input.status));
+    }
+
+    if (input.queue === "deputy") {
+      conditions.push(
+        eq(leaveRequest.status, "pending"),
+        isNull(leaveRequest.finalizedAt)
+      );
+    } else if (input.queue === "principal") {
+      conditions.push(
+        eq(leaveRequest.status, "recommended"),
+        isNull(leaveRequest.finalizedAt)
+      );
+    }
 
     const rows = await context.db
       .select({
@@ -53,7 +82,7 @@ export const listLeaveRequests = adminProcedure
       })
       .from(leaveRequest)
       .innerJoin(staff, eq(leaveRequest.staffId, staff.id))
-      .where(whereClause)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(leaveRequest.createdAt));
 
     return {

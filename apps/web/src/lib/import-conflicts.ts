@@ -12,11 +12,36 @@ export interface ImportConflict<T = Record<string, unknown>> {
 
 const storageKey = (namespace: string) => `import-conflicts:${namespace}`;
 
+/**
+ * `localStorage` is browser-only, but these helpers run inside `useState`
+ * initialisers so they are also called during the server render, where
+ * referencing the global throws. `null` means "no storage here" and every
+ * caller degrades to an empty in-memory result.
+ */
+const getStorage = (): Storage | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return window.localStorage;
+  } catch {
+    // Blocked by browser privacy settings — treat as unavailable.
+    return null;
+  }
+};
+
 /** Reads every staged (unresolved) import conflict for a namespace (e.g. "teachers"). */
 export const getImportConflicts = <T = Record<string, unknown>>(
   namespace: string
 ): ImportConflict<T>[] => {
-  const raw = localStorage.getItem(storageKey(namespace));
+  const storage = getStorage();
+
+  if (!storage) {
+    return [];
+  }
+
+  const raw = storage.getItem(storageKey(namespace));
   if (!raw) {
     return [];
   }
@@ -32,8 +57,14 @@ export const addImportConflicts = <T = Record<string, unknown>>(
   namespace: string,
   conflicts: ImportConflict<T>[]
 ) => {
+  const storage = getStorage();
+
+  if (!storage) {
+    return;
+  }
+
   const existing = getImportConflicts<T>(namespace);
-  localStorage.setItem(
+  storage.setItem(
     storageKey(namespace),
     JSON.stringify([...existing, ...conflicts])
   );
@@ -41,13 +72,19 @@ export const addImportConflicts = <T = Record<string, unknown>>(
 
 /** Removes one staged conflict (after it's been applied or discarded). */
 export const removeImportConflict = (namespace: string, conflictId: string) => {
+  const storage = getStorage();
+
+  if (!storage) {
+    return;
+  }
+
   const remaining = getImportConflicts(namespace).filter(
     (conflict) => conflict.conflictId !== conflictId
   );
-  localStorage.setItem(storageKey(namespace), JSON.stringify(remaining));
+  storage.setItem(storageKey(namespace), JSON.stringify(remaining));
 };
 
 /** Clears every staged conflict for a namespace. */
 export const clearImportConflicts = (namespace: string) => {
-  localStorage.removeItem(storageKey(namespace));
+  getStorage()?.removeItem(storageKey(namespace));
 };

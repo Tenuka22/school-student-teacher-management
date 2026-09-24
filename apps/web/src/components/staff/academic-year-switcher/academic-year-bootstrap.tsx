@@ -19,7 +19,7 @@ import { AcademicYearForm } from "./academic-year-form";
  * Full-page takeover shown when the school has never created an academic
  * year. Nothing in the app is scoped meaningfully without one — every
  * staff-management page filters by the current year — so this blocks
- * access to everything under `/dashboard` until the first year exists.
+ * access to every workspace until the first year exists.
  */
 export const AcademicYearBootstrap = () => {
   const queryClient = useQueryClient();

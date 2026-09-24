@@ -10,12 +10,13 @@ import { getRequest } from "@tanstack/react-start/server";
 import { toast } from "sonner";
 
 import { createContext } from "../context";
+import { formatApiErrorMessage } from "../lib/api-error";
 
 export const createQueryClient = () =>
   new QueryClient({
     queryCache: new QueryCache({
       onError: (error, query) => {
-        toast.error(`Error: ${error.message}`, {
+        toast.error(formatApiErrorMessage(error, "Something went wrong"), {
           action: {
             label: "retry",
             onClick: () => {

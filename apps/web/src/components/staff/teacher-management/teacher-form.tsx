@@ -31,6 +31,11 @@ import { toast } from "sonner";
 import * as v from "valibot";
 
 import { DatePicker } from "@/components/date-picker";
+import {
+  formatApiErrorMessage,
+  friendlyValidationMessage,
+  validationFieldErrors,
+} from "@/lib/api-error";
 
 type Staff = typeof staff.$inferSelect;
 
@@ -136,7 +141,10 @@ export const TeacherForm = ({
       const newErrors: Record<string, string> = {};
       for (const issue of result.issues) {
         const path = issue.path?.[0]?.key || "form";
-        newErrors[path as string] = issue.message;
+        newErrors[path as string] = friendlyValidationMessage(
+          issue.message,
+          issue.type
+        );
       }
 
       setErrors(newErrors);
@@ -150,7 +158,16 @@ export const TeacherForm = ({
         isEdit ? "Teacher updated successfully" : "Teacher created successfully"
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "An error occurred");
+      const fieldErrors = validationFieldErrors<keyof FormData>(error);
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors((prev) => ({ ...prev, ...fieldErrors }));
+      }
+      toast.error(
+        formatApiErrorMessage(
+          error,
+          isEdit ? "Failed to update teacher" : "Failed to create teacher"
+        )
+      );
     }
   };
 

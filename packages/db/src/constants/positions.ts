@@ -34,6 +34,17 @@ export const POSITION_TYPES = {
 export type PositionType = keyof typeof POSITION_TYPES;
 
 /**
+ * Positions that carry leave-review authority (and auth role `admin`).
+ * A staff member holding any of these gets promoted to `role: "admin"`
+ * on assignment and demoted back to `teacher` when the last one is removed.
+ */
+export const LEADERSHIP_POSITION_KEYS: ReadonlySet<string> = new Set([
+  "principal",
+  "vicePrincipal",
+  "assistantPrincipal",
+]);
+
+/**
  * Sectional head scopes — the grade range a sectional head is responsible for.
  * Only applies when position = "sectionalHead".
  */

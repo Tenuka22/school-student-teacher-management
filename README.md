@@ -44,14 +44,16 @@ Documented in detail in [`LEAVE_SYSTEM_DESIGN.md`](./LEAVE_SYSTEM_DESIGN.md) —
 
 ### Accounts & sign-up
 
-- **The NIC is the username.** Staff (teachers and office staff) sign up at `/signup` with name, NIC, email and password — the NIC (lowercased, unique index) becomes their login username. One NIC = one person = one account.
-- **Leadership sign-up** at `/signup/admin` for the Principal and Deputy Principals, gated by a shared `LEADERSHIP_SETUP_CODE` env secret, and automatically linked to their leadership position for the current year.
-- Teachers get a self-service portal at `/dashboard/my` — profile, leave history and applications; admins manage everything under `/dashboard/staff`. The sidebar adapts to the signed-in role.
-- Env-bootstrap leadership accounts exist for initial setup: Principal (`PRINCIPAL_NIC` / `PRINCIPAL_PASSWORD`) and Deputy Principal (`DEPUTY_PRINCIPAL_NIC` / `DEPUTY_PRINCIPAL_PASSWORD`) — the NIC doubles as the login username.
+- **The NIC is the username for staff.** Staff (teachers and office staff) sign up at `/signup` with name, NIC, email and password — the NIC (lowercased, unique index) becomes their login username. One NIC = one person = one account.
+- **Seeded accounts** are created on every server start with **fixed usernames** — `principal`, `deputy-principal` and `admin` (constants in `packages/auth/src/admin.ts`, not env). They are pure admin accounts: no NIC, no `staff` row, so they never appear in staff lists or attendance. Only their passwords and display names are configurable.
+- **Roles:** `principal`, `vicePrincipal` (Deputy or Assistant Principal) and `admin` all carry the same management authority, so all three reach `/admin`. Leadership is granted leave-review authority by the seeded role; a member promoted later through `assignPosition` gains it from a current-year `staff_position` row, which also promotes the role. Removing the last seat demotes back to `teacher`.
+- Teachers get a self-service portal at `/teacher/{year}` — profile, leave history and applications; admins manage everything under `/admin/{year}/staff`. The academic year is a URL path segment, so a page keeps its year across a refresh, and the sidebar adapts to the signed-in role.
 
 ### Academic-year scoping
 
 Assignments, timetables, attendance, leave and quotas are all scoped to an academic year. Opening a new year isolates data automatically — no archiving step.
+
+The active year is also a **URL path segment** (`/admin/2026/staff/teachers`). The sidebar switcher promotes a year to current and rewrites the `:year` segment, so a bookmark survives a refresh; a stale year in the URL is forwarded to the active one by the `$year` route guard.
 
 ## Getting Started
 
@@ -114,9 +116,12 @@ Each app owns its environment schema in `.env.schema`. Varlock generates `src/en
 
 Auth-related variables (all in `apps/web/.env.schema`):
 
-- `PRINCIPAL_NIC` / `PRINCIPAL_PASSWORD` / `PRINCIPAL_NAME` — bootstrap Principal account (NIC = username), re-synced on server start
-- `DEPUTY_PRINCIPAL_NIC` / `DEPUTY_PRINCIPAL_PASSWORD` / `DEPUTY_PRINCIPAL_NAME` — bootstrap Deputy Principal account (NIC = username), re-synced on server start
-- `LEADERSHIP_SETUP_CODE` — shared secret required by the `/signup/admin` leadership page
+- `PRINCIPAL_PASSWORD` / `PRINCIPAL_NAME` — bootstrap Principal account (username is always `principal`), re-synced on server start
+- `DEPUTY_PRINCIPAL_PASSWORD` / `DEPUTY_PRINCIPAL_NAME` — bootstrap Deputy Principal account (username is always `deputy-principal`), re-synced on server start
+- `ADMIN_PASSWORD` / `ADMIN_NAME` — bootstrap non-leadership admin account (username is always `admin`), re-synced on server start
+
+The Principal and Deputy Principal accounts are seeded with the `principal` and `vicePrincipal` roles respectively; both are re-synced (password and role) on every server start.
+
 - `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` / `DATABASE_URL`
 
 Import the generated `ENV` accessor in application code. Shared database and auth packages receive configuration or initialized clients from the application. See [Varlock's monorepo guide](https://varlock.dev/guides/monorepos/).
@@ -168,7 +173,7 @@ school-student-teacher-management/
 | Teacher portal UI | `apps/web/src/components/staff/teacher-portal/` |
 | Leave review UI (admin) | `apps/web/src/components/staff/leave-management/` |
 | Sign-up pages | `apps/web/src/components/signup/` |
-| Routes | `apps/web/src/routes/` (`/signup`, `/signup/admin`, `/dashboard/my/*`, `/dashboard/staff/*`) |
+| Routes | `apps/web/src/routes/` (`/signup`, `/account`, `/admin/{year}/*`, `/principal/{year}`, `/deputy-principal/{year}`, `/teacher/{year}/*`) |
 
 ## Available Scripts
 

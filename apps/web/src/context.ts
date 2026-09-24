@@ -1,7 +1,6 @@
 import type { Context as ApiContext } from "@school-student-teacher-management/api/context";
 
-import { ENV } from "./env.server";
-import { db, auth } from "./services";
+import { db, auth } from "./services.server";
 
 export const createContext = async ({
   req,
@@ -14,7 +13,6 @@ export const createContext = async ({
   return {
     db,
     session,
-    env: ENV,
     auth,
   };
 };

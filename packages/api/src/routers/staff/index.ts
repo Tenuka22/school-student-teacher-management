@@ -1,3 +1,4 @@
+import { previewUnverifiedPurge, purgeUnverified } from "./account-admin";
 import { approveQualification } from "./approve-qualification";
 import { assignClassTeacher } from "./assign-class-teacher";
 import { assignPosition } from "./assign-position";
@@ -28,7 +29,8 @@ import { portTeachersFromPreviousYear } from "./port-teachers-from-previous-year
 import { removePosition } from "./remove-position";
 import { seedDefaultClasses } from "./seed-default-classes";
 import { setCurrentYear } from "./set-current-year";
-import { signupLeadership, signupStaff } from "./signup";
+import { signupStaff } from "./signup";
+import { approveTeacherRequest, listTeacherRequests } from "./teacher-requests";
 import { updateClass } from "./update-class";
 import { updateProfile } from "./update-profile";
 import { updateStaff } from "./update-staff";
@@ -70,9 +72,16 @@ export const staffRouter = {
   listPositions,
   listStructureVersions,
 
-  // Sign-up (staff self-service + leadership with setup code)
+  // Sign-up (staff self-service; leadership is env-seeded)
   signupStaff,
-  signupLeadership,
+
+  // Teacher requests: who is waiting to be approved as staff
+  listTeacherRequests,
+  approveTeacherRequest,
+
+  // Account housekeeping
+  previewUnverifiedPurge,
+  purgeUnverified,
 
   // Self-service
   updateProfile,
