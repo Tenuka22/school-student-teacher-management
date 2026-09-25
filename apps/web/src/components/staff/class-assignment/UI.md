@@ -1,4 +1,18 @@
-# Class Assignment UI Design
+# Class Assignment
+
+> **This file is a planning document, and parts of it no longer describe the product.** The divergences below are deliberate. Treat everything below the list as history, not specification.
+
+## What actually shipped
+
+| Planned | Shipped | Why |
+| --- | --- | --- |
+| Card overflow menu (⋯) | Inline Assign / Edit / Remove buttons on the card | Three actions do not need a menu; hiding them behind an overflow was one extra click for the common case. |
+| "No Teacher" status badge | A "Not assigned" line, plus a 2px accent bar | The text carries the state; the bar only reinforces it. |
+| `Sheet` for create/edit | `Dialog` | Short forms, centred. |
+
+Terminology is settled: one class has one **homeroom teacher** (also called the class teacher in older records — the UI says "homeroom teacher" throughout).
+
+`ClassCsvImport` writes a genuinely blank template. On a conflict, "Apply Imported Version" now writes the name, grade and medium, and the homeroom teacher where the file names one — it previously displayed the grade and homeroom differences and then silently applied only two of the three fields.
 
 ## Overview
 

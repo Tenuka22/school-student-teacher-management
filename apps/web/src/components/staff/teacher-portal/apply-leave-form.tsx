@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  MATERNITY_FULL_PAY_DAYS,
+  MATERNITY_HALF_PAY_DAYS,
+} from "@school-student-teacher-management/db/constants/leave";
+import {
+  DEFAULT_PRIMARY_PERIOD_RANGE,
+  DEFAULT_SECONDARY_PERIOD_RANGE,
+} from "@school-student-teacher-management/db/periods";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -18,11 +26,13 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@school-student-teacher-management/ui/components/select";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -48,6 +58,8 @@ interface FormState {
   type: string;
   startDate: string;
   endDate: string;
+  dayPart: "full" | "morning" | "afternoon";
+  maternityPaymentStatus: "paid" | "halfPay";
   reason: string;
 }
 
@@ -55,6 +67,8 @@ const EMPTY_FORM: FormState = {
   type: "",
   startDate: "",
   endDate: "",
+  dayPart: "full",
+  maternityPaymentStatus: "paid",
   reason: "",
 };
 
@@ -64,6 +78,35 @@ export const ApplyLeaveForm = ({
   onApplied,
 }: ApplyLeaveFormProps) => {
   const queryClient = useQueryClient();
+  const academicYearsQuery = useQuery(
+    orpc.staff.listAcademicYears.queryOptions()
+  );
+  const currentYear = academicYearsQuery.data?.find(
+    (academicYear) => academicYear.isCurrent
+  );
+  const policyQuery = useQuery({
+    ...orpc.staff.attendance.getPolicy.queryOptions({
+      input: { academicYearId: currentYear?.id ?? "" },
+    }),
+    enabled: Boolean(currentYear?.id),
+  });
+  const policy = policyQuery.data?.policy;
+  const primaryRange = {
+    startPeriodNumber:
+      policy?.primaryStartPeriodNumber ??
+      DEFAULT_PRIMARY_PERIOD_RANGE.startPeriodNumber,
+    endPeriodNumber:
+      policy?.primaryEndPeriodNumber ??
+      DEFAULT_PRIMARY_PERIOD_RANGE.endPeriodNumber,
+  };
+  const secondaryRange = {
+    startPeriodNumber:
+      policy?.secondaryStartPeriodNumber ??
+      DEFAULT_SECONDARY_PERIOD_RANGE.startPeriodNumber,
+    endPeriodNumber:
+      policy?.secondaryEndPeriodNumber ??
+      DEFAULT_SECONDARY_PERIOD_RANGE.endPeriodNumber,
+  };
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<
     Partial<Record<keyof FormState, string>>
@@ -89,7 +132,10 @@ export const ApplyLeaveForm = ({
     })
   );
 
-  const setField = (field: keyof FormState, value: string) => {
+  const setField = <K extends keyof FormState>(
+    field: K,
+    value: FormState[K]
+  ) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
@@ -110,6 +156,9 @@ export const ApplyLeaveForm = ({
     if (form.startDate && form.endDate && form.endDate < form.startDate) {
       nextErrors.endDate = "End date cannot be before the start date";
     }
+    if (form.dayPart !== "full" && form.startDate !== form.endDate) {
+      nextErrors.dayPart = "Half-day leave must use one date";
+    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -120,6 +169,11 @@ export const ApplyLeaveForm = ({
       type: form.type as (typeof LEAVE_TYPES)[number]["value"],
       startDate: form.startDate,
       endDate: form.endDate,
+      dayPart: form.dayPart,
+      paymentStatus:
+        form.type === "maternity"
+          ? form.maternityPaymentStatus
+          : "notApplicable",
       reason: form.reason.trim() || undefined,
     });
   };
@@ -151,15 +205,53 @@ export const ApplyLeaveForm = ({
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {LEAVE_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {LEAVE_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
               {errors.type && <FieldError>{errors.type}</FieldError>}
             </Field>
+
+            {form.type === "maternity" && (
+              <Field>
+                <FieldLabel htmlFor="maternity-payment">
+                  Maternity payment
+                </FieldLabel>
+                <Select
+                  value={form.maternityPaymentStatus}
+                  onValueChange={(value: string | null) => {
+                    if (value === "paid" || value === "halfPay") {
+                      setField("maternityPaymentStatus", value);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="maternity-payment">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="paid">
+                        Full pay — {MATERNITY_FULL_PAY_DAYS} days
+                      </SelectItem>
+                      <SelectItem value="halfPay">
+                        Half pay — {MATERNITY_HALF_PAY_DAYS} days
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  The College grants {MATERNITY_FULL_PAY_DAYS} days of maternity
+                  leave on full pay and a further {MATERNITY_HALF_PAY_DAYS} days
+                  at half pay, per person. Each has its own quota, counted
+                  against approved leave in this academic year.
+                </FieldDescription>
+              </Field>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <Field>
@@ -188,14 +280,50 @@ export const ApplyLeaveForm = ({
             </div>
 
             <Field>
+              <FieldLabel>Duration *</FieldLabel>
+              <Select
+                value={form.dayPart}
+                onValueChange={(value: string | null) => {
+                  if (
+                    value === "full" ||
+                    value === "morning" ||
+                    value === "afternoon"
+                  ) {
+                    setField("dayPart", value);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="full">Full day</SelectItem>
+                    <SelectItem value="morning">
+                      {`First half — Primary (P${primaryRange.startPeriodNumber}–P${primaryRange.endPeriodNumber})`}
+                    </SelectItem>
+                    <SelectItem value="afternoon">
+                      {`Second half — Secondary (P${secondaryRange.startPeriodNumber}–P${secondaryRange.endPeriodNumber})`}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Half-days have no monthly allowance. Two approved half-days
+                count as one full leave day; the third is recorded as a half
+                day.
+              </FieldDescription>
+              {errors.dayPart && <FieldError>{errors.dayPart}</FieldError>}
+            </Field>
+
+            <Field>
               <FieldLabel htmlFor="leave-reason">Reason</FieldLabel>
-              <textarea
+              <Textarea
                 id="leave-reason"
                 value={form.reason}
                 onChange={(e) => setField("reason", e.target.value)}
                 rows={3}
                 placeholder="e.g. Family wedding out of town"
-                className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
               />
             </Field>
           </FieldGroup>

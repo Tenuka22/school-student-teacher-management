@@ -25,7 +25,7 @@ const PrincipalHome = () => {
   // has finalised yet.
   const awaitingFinalisation = useQuery(
     orpc.staff.leaves.listLeaveRequests.queryOptions({
-      input: { queue: "principal" },
+      input: { year: Number(year), queue: "principal" },
     })
   );
 
@@ -35,10 +35,10 @@ const PrincipalHome = () => {
     <div className="flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
+          <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
             Principal&rsquo;s workspace
           </h1>
-          <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
+          <p className="text-primary/65 mt-1.5 text-[13.5px]">
             You are the final authority on every leave request. Recommendations
             from the Deputy Principal wait here for your decision.
           </p>
@@ -46,49 +46,49 @@ const PrincipalHome = () => {
         <Link
           to="/principal/$year/leaves"
           params={{ year }}
-          className="bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12]"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors"
         >
           REVIEW LEAVE QUEUE
         </Link>
       </div>
 
       <div className="grid items-start gap-[18px] lg:grid-cols-[minmax(300px,360px)_minmax(360px,1fr)]">
-        <div className="border-t-2 border-[#013405] border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-          <div className="text-xs font-extrabold tracking-[0.2em] text-[#013405]/55">
+        <div className="border-primary border-primary/14 bg-card border-t-2 px-[22px] py-5">
+          <div className="text-primary/55 text-xs font-extrabold tracking-[0.2em]">
             AWAITING YOUR DECISION
           </div>
-          <div className="font-heading mt-3 text-[52px] leading-none font-semibold text-[#013405]">
+          <div className="font-heading text-primary mt-3 text-[52px] leading-none font-semibold">
             {awaitingFinalisation.isPending ? "—" : pendingCount}
           </div>
-          <div className="mt-2 text-xs leading-relaxed text-[#013405]/60">
+          <div className="text-primary/60 mt-2 text-xs leading-relaxed">
             {pendingCount === 1
               ? "1 request recommended by the Deputy Principal."
               : `${pendingCount} requests recommended by the Deputy Principal.`}
           </div>
         </div>
 
-        <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-          <div className="font-heading mb-3.5 text-[23px] font-semibold text-[#013405]">
+        <div className="border-primary/14 bg-card border px-[22px] py-5">
+          <div className="font-heading text-primary mb-3.5 text-[23px] font-semibold">
             Shortcuts
           </div>
           <div className="flex flex-col">
             {SHORTCUTS.map((item) => (
               <div
                 key={item.title}
-                className="flex flex-wrap items-center gap-3.5 border-b border-[#013405]/10 py-3.5 last:border-b-0"
+                className="border-primary/10 flex flex-wrap items-center gap-3.5 border-b py-3.5 last:border-b-0"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-bold text-[#013405]">
+                  <span className="text-primary block text-[13.5px] font-bold">
                     {item.title}
                   </span>
-                  <span className="mt-0.5 block text-xs text-[#013405]/55">
+                  <span className="text-primary/55 mt-0.5 block text-xs">
                     {item.detail}
                   </span>
                 </span>
                 <Link
                   to={item.to}
                   params={{ year }}
-                  className="border border-[#013405]/25 px-[15px] py-2 text-xs font-bold whitespace-nowrap text-[#013405] transition-colors hover:border-[#013405] hover:bg-[#F3F1E9]"
+                  className="border-primary/25 text-primary hover:border-primary hover:bg-muted border px-[15px] py-2 text-xs font-bold whitespace-nowrap transition-colors"
                 >
                   {item.action}
                 </Link>
@@ -98,9 +98,9 @@ const PrincipalHome = () => {
         </div>
       </div>
 
-      <p className="text-xs text-[#013405]/50">
-        Leave authority is resolved from your current-year position row, not
-        from your login role.
+      <p className="text-primary/50 text-xs">
+        Leave authority is resolved from your selected-year position row; seeded
+        institutional leadership remains globally authorised.
       </p>
     </div>
   );
@@ -108,9 +108,11 @@ const PrincipalHome = () => {
 
 export const Route = createFileRoute("/_auth/principal/$year/")({
   component: PrincipalHome,
-  loader: async ({ context }) => {
+  loader: async ({ context, params }) => {
     await context.queryClient.ensureQueryData(
-      orpc.staff.leaves.getMyAuthority.queryOptions()
+      orpc.staff.leaves.getMyAuthority.queryOptions({
+        input: { year: Number(params.year) },
+      })
     );
   },
 });

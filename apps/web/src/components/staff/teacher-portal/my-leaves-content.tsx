@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  leavePaymentLabel,
+  leaveTypeLabel,
+} from "@school-student-teacher-management/db/constants/leave-labels";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -18,34 +22,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { leaveStatusBadge } from "@/components/staff/leave-management/leave-status";
 import { ApplyLeaveForm } from "@/components/staff/teacher-portal/apply-leave-form";
 import { orpc } from "@/utils/orpc";
 
-const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: "Annual",
-  casual: "Casual",
-  medical: "Medical",
-  maternity: "Maternity",
-  duty: "Official Duty",
-  other: "Other",
-};
-
-const STATUS_BADGES: Record<
-  string,
-  {
-    label: string;
-    variant: "default" | "secondary" | "destructive" | "outline";
-  }
-> = {
-  pending: { label: "Pending", variant: "secondary" },
-  recommended: { label: "Recommended (DP)", variant: "outline" },
-  approved: { label: "Approved (Final)", variant: "default" },
-  rejected: { label: "Rejected", variant: "destructive" },
-  cancelled: { label: "Cancelled", variant: "outline" },
-};
-
 const formatDateRange = (start: string, end: string) =>
-  start === end ? start : `${start} → ${end}`;
+  start === end ? start : `${start} â†’ ${end}`;
 
 export const MyLeavesContent = () => {
   const queryClient = useQueryClient();
@@ -126,13 +108,23 @@ export const MyLeavesContent = () => {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">
-                      {LEAVE_TYPE_LABELS[request.type] ?? request.type}
+                      {leaveTypeLabel(request.type)}
                     </Badge>
-                    <Badge variant={STATUS_BADGES[request.status].variant}>
-                      {STATUS_BADGES[request.status].label}
+                    {request.type === "maternity" &&
+                      request.paymentStatus !== "notApplicable" && (
+                        <Badge variant="outline">
+                          {leavePaymentLabel(request.paymentStatus)}
+                        </Badge>
+                      )}
+                    <Badge variant={leaveStatusBadge(request.status).variant}>
+                      {leaveStatusBadge(request.status).label}
                     </Badge>
                     <span className="text-sm font-medium">
                       {formatDateRange(request.startDate, request.endDate)}
+                      {request.dayPart === "morning" &&
+                        " Â· First half (Primary)"}
+                      {request.dayPart === "afternoon" &&
+                        " Â· Second half (Secondary)"}
                     </span>
                   </div>
                   {request.reason && (

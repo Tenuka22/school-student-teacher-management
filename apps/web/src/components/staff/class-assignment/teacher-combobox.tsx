@@ -1,6 +1,6 @@
 "use client";
 
-import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
+import type { StaffListItem } from "@school-student-teacher-management/api/routers/staff/list-staff";
 import {
   Combobox,
   ComboboxContent,
@@ -14,13 +14,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import { orpc } from "@/utils/orpc";
 
-type Staff = typeof staffTable.$inferSelect;
+type Staff = StaffListItem;
 
 interface TeacherComboboxProps {
   id?: string;
   value: string;
   onValueChange: (staffId: string) => void;
   disabled?: boolean;
+  academicYearId?: string;
 }
 
 const DEBOUNCE_MS = 250;
@@ -35,6 +36,7 @@ export const TeacherCombobox = ({
   value,
   onValueChange,
   disabled = false,
+  academicYearId,
 }: TeacherComboboxProps) => {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -46,14 +48,15 @@ export const TeacherCombobox = ({
 
   const staffQuery = useQuery(
     orpc.staff.listStaff.queryOptions({
-      input: { search: debouncedQuery || undefined },
+      input: {
+        search: debouncedQuery || undefined,
+        academicYearId,
+        onlyPositioned: true,
+      },
     })
   );
 
-  const staffList = useMemo(
-    () => (staffQuery.data || []) as unknown as Staff[],
-    [staffQuery.data]
-  );
+  const staffList = useMemo(() => staffQuery.data ?? [], [staffQuery.data]);
 
   const selected = useMemo(
     () => staffList.find((s) => s.id === value) ?? null,

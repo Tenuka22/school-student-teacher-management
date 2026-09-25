@@ -21,20 +21,20 @@ export interface RouterAppContext {
 }
 
 const NotFound = () => (
-  <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-[#04220A] px-6 text-center text-[#FFF8E7]">
-    <p className="text-xs font-extrabold tracking-[0.46em] text-[#FFB203]">
+  <main className="bg-sidebar text-primary-foreground flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+    <p className="text-accent text-xs font-extrabold tracking-[0.46em]">
       CERTA VIRILITER
     </p>
     <h1 className="font-heading m-0 text-[clamp(38px,7vh,72px)] leading-none font-semibold">
       Page not found
     </h1>
-    <p className="m-0 max-w-[46ch] text-sm leading-relaxed text-[#FFF8E7]/70">
+    <p className="text-primary-foreground/70 m-0 max-w-[46ch] text-sm leading-relaxed">
       That address does not match anything in the College system. It may have
       moved, or the link may be out of date.
     </p>
     <Link
       to="/"
-      className="mt-2 bg-[#FFB203] px-7 py-3 text-[13px] font-extrabold tracking-[0.06em] text-[#013405] transition-colors hover:bg-[#FFD45A]"
+      className="bg-accent text-primary hover:bg-accent-hover mt-2 px-7 py-3 text-[13px] font-extrabold tracking-[0.06em] transition-colors"
     >
       GO HOME
     </Link>
@@ -51,8 +51,12 @@ const RootDocument = () => (
         <Outlet />
       </TooltipProvider>
       <Toaster richColors />
-      <TanStackRouterDevtools position="bottom-left" />
-      <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+      {import.meta.env.DEV && (
+        <>
+          <TanStackRouterDevtools position="bottom-left" />
+          <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+        </>
+      )}
       <Scripts />
     </body>
   </html>
@@ -69,18 +73,18 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "My App",
+        title: "St. Aloysius' College — School Management System",
+      },
+      {
+        name: "description",
+        content:
+          "Staff records, classes, timetables, attendance and leave for St. Aloysius' College, Galle.",
       },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
-      },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400&display=swap",
       },
     ],
   }),

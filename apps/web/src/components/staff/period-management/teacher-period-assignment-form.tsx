@@ -1,6 +1,7 @@
 "use client";
 
-import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import {
   Field,
   FieldError,
@@ -32,14 +33,19 @@ interface Subject {
   subjectKey: string;
   gradeLevel: number;
 }
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
 
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-/** Subjects available for the selected class's grade, from the school's full
- * curriculum catalog (the current structure version). */
-const useSubjectsForGrade = (selectedClass: Class | undefined) => {
-  const catalogQuery = useQuery(orpc.staff.listSubjects.queryOptions({}));
+const useSubjectsForGrade = (
+  selectedClass: Class | undefined,
+  academicYearId: string | undefined
+) => {
+  const catalogQuery = useQuery({
+    ...orpc.staff.listSubjects.queryOptions({
+      input: { academicYearId: academicYearId ?? "" },
+    }),
+    enabled: Boolean(academicYearId),
+  });
 
   return useMemo(() => {
     const catalog = catalogQuery.data as unknown[] | undefined;
@@ -152,16 +158,10 @@ const SelectField = ({
 
 const useSelectOptions = (
   classes: Class[],
-  periodConfig: PeriodConfig[],
   filteredSubjects: Subject[],
   category: string,
   grade: string
 ) => {
-  const sortedPeriods = useMemo(
-    () => periodConfig.toSorted((a, b) => a.periodNumber - b.periodNumber),
-    [periodConfig]
-  );
-
   const categoryOptions = useMemo(
     () => CLASS_CATEGORIES.map((c) => ({ value: c.key, label: c.label })),
     []
@@ -207,18 +207,18 @@ const useSelectOptions = (
 
   const periodOptions = useMemo(
     () =>
-      sortedPeriods.map((period) => ({
+      CODE_DEFINED_PERIODS.map((period) => ({
         value: String(period.periodNumber),
         label: `Period ${period.periodNumber} (${period.startTime}-${period.endTime})`,
       })),
-    [sortedPeriods]
+    []
   );
 
   const subjectOptions = useMemo(
     () =>
       filteredSubjects.map((subject) => ({
         value: subject.subjectKey,
-        label: subject.subjectKey,
+        label: subjectLabel(subject.subjectKey),
       })),
     [filteredSubjects]
   );
@@ -352,7 +352,7 @@ const TeacherPeriodAssignmentFormContent = ({
 interface TeacherPeriodAssignmentFormProps {
   formId: string;
   classes: Class[];
-  periodConfig: PeriodConfig[];
+  academicYearId?: string;
   onSubmit: (data: unknown) => Promise<void>;
   isLoading?: boolean;
   /** Editing an existing slot: class/day/period are the row's identity and
@@ -372,7 +372,7 @@ interface TeacherPeriodAssignmentFormProps {
 export const TeacherPeriodAssignmentForm = ({
   formId,
   classes,
-  periodConfig,
+  academicYearId,
   onSubmit,
   isLoading = false,
   initialData,
@@ -430,7 +430,7 @@ export const TeacherPeriodAssignmentForm = ({
     [classes, formData.classId]
   );
 
-  const filteredSubjects = useSubjectsForGrade(selectedClass);
+  const filteredSubjects = useSubjectsForGrade(selectedClass, academicYearId);
 
   const {
     categoryOptions,
@@ -439,13 +439,7 @@ export const TeacherPeriodAssignmentForm = ({
     dayOptions,
     periodOptions,
     subjectOptions,
-  } = useSelectOptions(
-    classes,
-    periodConfig,
-    filteredSubjects,
-    category,
-    grade
-  );
+  } = useSelectOptions(classes, filteredSubjects, category, grade);
 
   const schema = v.object({
     classId: v.pipe(v.string(), v.minLength(1, "Class is required")),

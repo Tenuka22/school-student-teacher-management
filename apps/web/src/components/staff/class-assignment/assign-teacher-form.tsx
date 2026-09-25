@@ -24,6 +24,7 @@ import { TeacherCombobox } from "@/components/staff/class-assignment/teacher-com
 interface AssignTeacherFormProps {
   formId: string;
   currentTeacherId?: string | null;
+  academicYearId?: string;
   onSubmit: (data: unknown) => Promise<void>;
   isLoading?: boolean;
 }
@@ -69,6 +70,7 @@ const CHANGE_KIND_COPY: Record<
 export const AssignTeacherForm = ({
   formId,
   currentTeacherId,
+  academicYearId,
   onSubmit,
   isLoading = false,
 }: AssignTeacherFormProps) => {
@@ -160,6 +162,7 @@ export const AssignTeacherForm = ({
           value={homeroomTeacherId}
           onValueChange={handleTeacherChange}
           disabled={isLoading}
+          academicYearId={academicYearId}
         />
         <FieldDescription>
           Clear the field to unassign the current teacher.

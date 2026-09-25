@@ -119,7 +119,7 @@ export const ClassForm = ({
 
       {!initialData && (
         <Field>
-          <FieldLabel htmlFor="gradeLevel">Grade Level *</FieldLabel>
+          <FieldLabel htmlFor={`${formId}-grade`}>Grade Level *</FieldLabel>
           <Select
             value={formData.gradeLevel.toString()}
             onValueChange={(value) => {
@@ -129,7 +129,7 @@ export const ClassForm = ({
             }}
           >
             <SelectTrigger
-              id="gradeLevel"
+              id={`${formId}-grade`}
               disabled={isLoading}
               data-invalid={errors.gradeLevel ? true : undefined}
             >
@@ -148,9 +148,9 @@ export const ClassForm = ({
       )}
 
       <Field>
-        <FieldLabel htmlFor="name">Class Name *</FieldLabel>
+        <FieldLabel htmlFor={`${formId}-name`}>Class Name *</FieldLabel>
         <Input
-          id="name"
+          id={`${formId}-name`}
           placeholder="e.g., 10-A, Grade 9 Science"
           value={formData.name}
           onChange={(e) => handleChange("name", e.target.value)}
@@ -164,7 +164,9 @@ export const ClassForm = ({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="medium">Medium of Instruction</FieldLabel>
+        <FieldLabel htmlFor={`${formId}-medium`}>
+          Medium of Instruction
+        </FieldLabel>
         <Select
           value={formData.medium}
           onValueChange={(value) => {
@@ -173,7 +175,7 @@ export const ClassForm = ({
             }
           }}
         >
-          <SelectTrigger id="medium" disabled={isLoading}>
+          <SelectTrigger id={`${formId}-medium`} disabled={isLoading}>
             <SelectValue placeholder="Select medium" />
           </SelectTrigger>
           <SelectContent>

@@ -3,6 +3,7 @@ import {
   session,
   user,
 } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
@@ -15,9 +16,6 @@ import { adminProcedure } from "../../index";
  * this check is made explicitly rather than inherited.
  */
 const APPROVER_ROLES = new Set(["admin", "principal"]);
-
-/** Roles an account may hold while waiting to be approved as staff. */
-const REQUESTER_ROLES = new Set(["teacher-requester", "user"]);
 
 const assertCanApprove = (role: string | null | undefined) => {
   if (!role || !APPROVER_ROLES.has(role)) {
@@ -56,29 +54,37 @@ export const listTeacherRequests = adminProcedure.handler(
         updatedAt: user.updatedAt,
       })
       .from(user)
+      .where(eq(user.role, "teacher-requester"))
       .orderBy(user.createdAt);
 
-    const requesterIds: string[] = [];
+    const requesterIds = rows.map((row) => row.id);
 
-    for (const row of rows) {
-      if (row.role && REQUESTER_ROLES.has(row.role)) {
-        requesterIds.push(row.id);
-      }
-    }
+    const [sessions, linkedStaffRows] = await Promise.all([
+      requesterIds.length
+        ? context.db
+            .select({
+              userId: session.userId,
+              createdAt: session.createdAt,
+              ipAddress: session.ipAddress,
+              userAgent: session.userAgent,
+            })
+            .from(session)
+            .where(inArray(session.userId, requesterIds))
+        : Promise.resolve([]),
+      requesterIds.length
+        ? context.db
+            .select({
+              userId: staff.userId,
+              id: staff.id,
+              staffCategory: staff.staffCategory,
+              employmentStatus: staff.employmentStatus,
+            })
+            .from(staff)
+            .where(inArray(staff.userId, requesterIds))
+        : Promise.resolve([]),
+    ]);
 
-    const sessions = requesterIds.length
-      ? await context.db
-          .select({
-            userId: session.userId,
-            createdAt: session.createdAt,
-            ipAddress: session.ipAddress,
-            userAgent: session.userAgent,
-          })
-          .from(session)
-          .where(inArray(session.userId, requesterIds))
-      : [];
-
-    /** Newest first, so "last seen" is the first row for an account. */
+    /** Newest first, so the most recent sign-in is the first row. */
     const sessionsByUser = new Map<string, typeof sessions>();
     for (const entry of sessions) {
       const existing = sessionsByUser.get(entry.userId) ?? [];
@@ -86,17 +92,18 @@ export const listTeacherRequests = adminProcedure.handler(
       sessionsByUser.set(entry.userId, existing);
     }
 
-    const requesters = [];
+    const staffByUserId = new Map(
+      linkedStaffRows.flatMap((row) =>
+        row.userId ? [[row.userId, row] as const] : []
+      )
+    );
 
-    for (const row of rows) {
-      if (!row.role || !REQUESTER_ROLES.has(row.role)) {
-        continue;
-      }
-
+    return rows.map((row) => {
       const userSessions = sessionsByUser.get(row.id) ?? [];
       const [latest] = userSessions;
+      const linkedStaff = staffByUserId.get(row.id);
 
-      requesters.push({
+      return {
         id: row.id,
         name: row.name,
         email: row.email,
@@ -109,25 +116,42 @@ export const listTeacherRequests = adminProcedure.handler(
         banReason: row.banReason,
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),
-        sessionCount: userSessions.length,
-        lastSeenAt: latest?.createdAt.toISOString() ?? null,
-        lastSeenIp: latest?.ipAddress ?? null,
-        lastSeenAgent: latest?.userAgent ?? null,
-      });
-    }
-
-    return requesters;
+        signInCount: userSessions.length,
+        lastSignInAt: latest?.createdAt.toISOString() ?? null,
+        lastSignInIp: latest?.ipAddress ?? null,
+        lastSignInAgent: latest?.userAgent ?? null,
+        /**
+         * The staff record this account is attached to, when there is one.
+         * The review dialog reads this to say *why* an account cannot be
+         * approved yet instead of offering a button that always fails.
+         */
+        staffRecord: linkedStaff
+          ? {
+              id: linkedStaff.id,
+              staffCategory: linkedStaff.staffCategory,
+              employmentStatus: linkedStaff.employmentStatus,
+            }
+          : null,
+      };
+    });
   }
 );
-
 /**
  * Approves a requester as a teacher.
  *
- * Two gates, in this order:
+ * Four gates, in this order:
  * 1. The caller must be an administrator or the Principal.
  * 2. The requester must have **verified their email**. A teacher is always
  *    verified, so promoting an unverified account would manufacture that
  *    state rather than record it.
+ * 3. The requester must be linked to a staff record with the teacher category.
+ * 4. The staff record must not be standing against the College — a suspended,
+ *    retired or terminated record is a deliberate state, not a missing one.
+ *
+ * An employment status of `null` is a gap in the record, not a refusal: this
+ * approval *is* the administrator's employment decision, so it records `active`
+ * at the moment of approval rather than failing a person who registered
+ * honestly. That is the only status this procedure ever writes.
  *
  * The seeded institutional accounts are unreachable here: they hold roles no
  * requester ever has, so there is nothing to promote.
@@ -151,7 +175,7 @@ export const approveTeacherRequest = adminProcedure
       throw new ORPCError("NOT_FOUND", { message: "Account not found" });
     }
 
-    if (!target.role || !REQUESTER_ROLES.has(target.role)) {
+    if (target.role !== "teacher-requester") {
       throw new ORPCError("CONFLICT", {
         message: "That account is not waiting to be approved as a teacher",
       });
@@ -162,6 +186,46 @@ export const approveTeacherRequest = adminProcedure
         message:
           "This person has not verified their email address yet — they must enter the code sent to it first",
       });
+    }
+
+    const [linkedStaff] = await context.db
+      .select({
+        id: staff.id,
+        staffCategory: staff.staffCategory,
+        employmentStatus: staff.employmentStatus,
+      })
+      .from(staff)
+      .where(eq(staff.userId, target.id))
+      .limit(1);
+
+    if (!linkedStaff) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message:
+          "This account is not linked to a staff record — add them under Teachers first",
+      });
+    }
+
+    if (linkedStaff.staffCategory !== "teacher") {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: `The linked staff record is an office staff record, and office staff accounts are issued by an administrator rather than approved here`,
+      });
+    }
+
+    if (
+      linkedStaff.employmentStatus !== null &&
+      linkedStaff.employmentStatus !== undefined &&
+      linkedStaff.employmentStatus !== "active"
+    ) {
+      throw new ORPCError("PRECONDITION_FAILED", {
+        message: `The staff record is marked "${linkedStaff.employmentStatus}" — correct the record under Teachers before approving`,
+      });
+    }
+
+    if (linkedStaff.employmentStatus !== "active") {
+      await context.db
+        .update(staff)
+        .set({ employmentStatus: "active" })
+        .where(eq(staff.id, linkedStaff.id));
     }
 
     const [updated] = await context.db

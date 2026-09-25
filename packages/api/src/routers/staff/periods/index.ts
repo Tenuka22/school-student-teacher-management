@@ -1,6 +1,6 @@
 import { assignClassPeriod } from "./assign-class-period";
-import { createPeriodConfig } from "./create-period-config";
 import { deleteClassPeriodAssignment } from "./delete-class-period-assignment";
+import { getMyTeacherTimetable } from "./get-my-teacher-timetable";
 import { listClassTimetable } from "./list-class-timetable";
 import { listPeriodConfig } from "./list-period-config";
 import { listPeriodConflicts } from "./list-period-conflicts";
@@ -13,9 +13,8 @@ import { updateClassPeriodAssignment } from "./update-class-period-assignment";
  * Handles school day period configuration and class/teacher period assignments.
  */
 export const periodsRouter = {
-  // Period configuration (read, create times)
+  // Period configuration (read)
   listPeriodConfig,
-  createPeriodConfig,
 
   // Period assignments (CRUD)
   assignClassPeriod,
@@ -25,6 +24,7 @@ export const periodsRouter = {
   // Timetable views
   listClassTimetable,
   listTeacherTimetable,
+  getMyTeacherTimetable,
   listUnassignedSlots,
   listPeriodConflicts,
 };

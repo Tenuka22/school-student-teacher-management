@@ -135,40 +135,37 @@ const RouteComponent = () => {
           </Select>
         </div>
 
-        {page.periodConfig.length > 0 && (
-          <div className="ml-auto flex flex-wrap items-center gap-4">
-            <div>
-              <div className="text-muted-foreground text-xs font-extrabold tracking-[0.16em]">
-                SLOTS FILLED
-              </div>
-              <div className="font-heading mt-1 text-2xl leading-none font-semibold">
-                {page.timetableData.length}{" "}
-                <span className="text-muted-foreground text-sm">
-                  / {page.periodConfig.length * 5}
-                </span>
-              </div>
+        <div className="ml-auto flex flex-wrap items-center gap-4">
+          <div>
+            <div className="text-muted-foreground text-xs font-extrabold tracking-[0.16em]">
+              SLOTS FILLED
             </div>
-            <div className="bg-primary/14 h-9 w-px" />
-            <div>
-              <div className="text-destructive text-xs font-extrabold tracking-[0.16em]">
-                CONFLICTS
-              </div>
-              <div className="font-heading text-destructive mt-1 text-2xl leading-none font-semibold">
-                {
-                  page.timetableData.filter((a) =>
-                    page.conflictingAssignmentIds.has(a.id)
-                  ).length
-                }
-              </div>
+            <div className="font-heading mt-1 text-2xl leading-none font-semibold">
+              {page.timetableData.length}{" "}
+              <span className="text-muted-foreground text-sm">
+                / {page.periods.length * 5}
+              </span>
             </div>
           </div>
-        )}
+          <div className="bg-primary/14 h-9 w-px" />
+          <div>
+            <div className="text-destructive text-xs font-extrabold tracking-[0.16em]">
+              CONFLICTS
+            </div>
+            <div className="font-heading text-destructive mt-1 text-2xl leading-none font-semibold">
+              {
+                page.timetableData.filter((assignment) =>
+                  page.conflictingAssignmentIds.has(assignment.id)
+                ).length
+              }
+            </div>
+          </div>
+        </div>
       </div>
 
-      {page.selectedClass && page.periodConfig && page.timetableData ? (
+      {page.selectedClass ? (
         <TimetableGrid
           assignments={page.timetableData}
-          periodConfig={page.periodConfig}
           staff={page.staffMap}
           conflictingAssignmentIds={page.conflictingAssignmentIds}
           onAssignClick={page.handleAssignClick}

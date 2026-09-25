@@ -1,53 +1,182 @@
 import { ORPCError } from "@orpc/server";
+import { isSeededAccount } from "@school-student-teacher-management/auth";
+import type { Database } from "@school-student-teacher-management/db";
+import { getDayPartPeriodNumbers } from "@school-student-teacher-management/db/periods";
+import {
+  attendancePolicy,
+  teacherAttendance,
+  teacherPeriodAbsence,
+} from "@school-student-teacher-management/db/schema/attendance";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
 import type {
   DeputyStatus,
   FinalStatus,
 } from "@school-student-teacher-management/db/schema/leaves";
-import { staff } from "@school-student-teacher-management/db/schema/staff";
+import {
+  academicYear,
+  staff,
+  staffPosition,
+} from "@school-student-teacher-management/db/schema/staff";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
+import type { Context } from "../../../context";
 import { protectedProcedure } from "../../../index";
+
+type ApiDatabase = Context["db"];
+type DatabaseTransaction = Parameters<
+  Parameters<Database["transaction"]>[0]
+>[0];
+
+export const leaveYearSchema = v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(2000),
+  v.maxValue(2100)
+);
+
+export const requireLeaveAcademicYear = async (
+  db: ApiDatabase,
+  year: number
+) => {
+  const [record] = await db
+    .select({ id: academicYear.id, year: academicYear.year })
+    .from(academicYear)
+    .where(eq(academicYear.year, year))
+    .limit(1);
+
+  if (!record) {
+    throw new ORPCError("NOT_FOUND", {
+      message: `Academic year ${year} not found`,
+    });
+  }
+
+  return record;
+};
+
+const recordApprovedLeaveAttendance = async (
+  tx: DatabaseTransaction,
+  request: typeof leaveRequest.$inferSelect,
+  markedAt: Date
+) => {
+  const [policy] = await tx
+    .select()
+    .from(attendancePolicy)
+    .where(eq(attendancePolicy.academicYearId, request.academicYearId))
+    .limit(1);
+
+  if (!policy) {
+    throw new ORPCError("PRECONDITION_FAILED", {
+      message: "Attendance policy is not configured for this academic year",
+    });
+  }
+
+  const start = new Date(`${request.startDate}T00:00:00Z`);
+  const end = new Date(`${request.endDate}T00:00:00Z`);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const dayCount = Math.max(
+    0,
+    Math.floor((end.getTime() - start.getTime()) / dayMs) + 1
+  );
+  const dates = Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + index);
+    return date;
+  }).filter((date) => {
+    const day = date.getUTCDay();
+    return day !== 0 && day !== 6;
+  });
+
+  await Promise.all(
+    dates.map(async (date) => {
+      const dateString = date.toISOString().slice(0, 10);
+      const [existing] = await tx
+        .select({ id: teacherAttendance.id })
+        .from(teacherAttendance)
+        .where(
+          and(
+            eq(teacherAttendance.staffId, request.staffId),
+            eq(teacherAttendance.academicYearId, request.academicYearId),
+            eq(teacherAttendance.date, dateString)
+          )
+        )
+        .limit(1);
+      const attendanceId = existing?.id ?? crypto.randomUUID();
+      const absencePeriods = getDayPartPeriodNumbers(
+        request.dayPart,
+        {
+          startPeriodNumber: policy.primaryStartPeriodNumber,
+          endPeriodNumber: policy.primaryEndPeriodNumber,
+        },
+        {
+          startPeriodNumber: policy.secondaryStartPeriodNumber,
+          endPeriodNumber: policy.secondaryEndPeriodNumber,
+        }
+      );
+      const status = absencePeriods.length > 0 ? "partial" : "absent";
+      const reason = `Approved ${request.type} leave`;
+
+      if (existing) {
+        await tx
+          .update(teacherAttendance)
+          .set({
+            status,
+            reason,
+            leaveRequestId: request.id,
+            markedAt,
+          })
+          .where(eq(teacherAttendance.id, attendanceId));
+        await tx
+          .delete(teacherPeriodAbsence)
+          .where(eq(teacherPeriodAbsence.teacherAttendanceId, attendanceId));
+      } else {
+        await tx.insert(teacherAttendance).values({
+          id: attendanceId,
+          staffId: request.staffId,
+          academicYearId: request.academicYearId,
+          date: dateString,
+          status,
+          reason,
+          leaveRequestId: request.id,
+        });
+      }
+
+      if (absencePeriods.length > 0) {
+        await tx.insert(teacherPeriodAbsence).values(
+          absencePeriods.map((periodNumber) => ({
+            id: crypto.randomUUID(),
+            teacherAttendanceId: attendanceId,
+            periodNumber,
+            reason,
+          }))
+        );
+      }
+    })
+  );
+};
 
 /** Position keys (see constants/positions.ts) that may recommend leave. */
 const DEPUTY_POSITIONS = new Set(["vicePrincipal", "assistantPrincipal"]);
 /** Position keys that may finalise a leave request. */
 const PRINCIPAL_POSITIONS = new Set(["principal"]);
 
-/**
- * Resolves the signed-in user's leave-review authority.
- *
- * Two sources, in order:
- * 1. The **seeded auth role** (`principal` / `vicePrincipal`). The Principal
- *    and Deputy accounts are bootstrapped as pure admin accounts with no
- *    `staff` row and no NIC, so their role is the only thing that exists.
- * 2. A current-year `staff_position` row, which is how a member promoted
- *    through position management (rather than seeded from env) gains
- *    authority.
- *
- * `staffId` is null for role-based leadership, since there is no staff record
- * to point at; the `*_staff_id` columns on a leave request are nullable for
- * exactly that reason.
- *
- * Exported so `getMyAuthority` can expose the same truth to the UI.
- */
 export const resolveAuthority = async (
-  db: Parameters<
-    Parameters<typeof protectedProcedure.handler>[0]
-  >[0]["context"]["db"],
-  userId: string
+  db: ApiDatabase,
+  userId: string,
+  academicYearId: string
 ) => {
-  const { user } =
-    await import("@school-student-teacher-management/db/schema/auth");
-
   const [account] = await db
-    .select({ role: user.role })
+    .select({ role: user.role, username: user.username })
     .from(user)
     .where(eq(user.id, userId))
     .limit(1);
 
-  if (account?.role === "principal" || account?.role === "vicePrincipal") {
+  const isSeededLeadership =
+    isSeededAccount(account?.username) &&
+    (account?.role === "principal" || account?.role === "vicePrincipal");
+
+  if (account && isSeededLeadership) {
     return {
       staffId: null,
       isDeputy: account.role === "vicePrincipal",
@@ -55,24 +184,13 @@ export const resolveAuthority = async (
     };
   }
 
-  const { staffPosition, academicYear } =
-    await import("@school-student-teacher-management/db/schema/staff");
+  const [staffRecord] = await db
+    .select({ id: staff.id })
+    .from(staff)
+    .where(eq(staff.userId, userId))
+    .limit(1);
 
-  // Independent lookups — run in parallel.
-  const [[staffRecord], [currentYear]] = await Promise.all([
-    db
-      .select({ id: staff.id })
-      .from(staff)
-      .where(eq(staff.userId, userId))
-      .limit(1),
-    db
-      .select({ id: academicYear.id })
-      .from(academicYear)
-      .where(eq(academicYear.isCurrent, true))
-      .limit(1),
-  ]);
-
-  if (!staffRecord || !currentYear) {
+  if (!staffRecord) {
     return null;
   }
 
@@ -82,10 +200,9 @@ export const resolveAuthority = async (
     .where(
       and(
         eq(staffPosition.staffId, staffRecord.id),
-        eq(staffPosition.academicYearId, currentYear.id)
+        eq(staffPosition.academicYearId, academicYearId)
       )
     );
-
   const positionKeys = positions.map((row) => row.position);
 
   return {
@@ -103,14 +220,17 @@ export const recommendLeave = protectedProcedure
   .input(
     v.object({
       id: v.string(),
+      year: leaveYearSchema,
       decision: v.picklist(["recommended", "rejected"]),
       comment: v.optional(v.nullable(v.string())),
     })
   )
   .handler(async ({ input, context }) => {
+    const selectedYear = await requireLeaveAcademicYear(context.db, input.year);
     const authority = await resolveAuthority(
       context.db,
-      context.session.user.id
+      context.session.user.id,
+      selectedYear.id
     );
 
     if (!authority?.isDeputy) {
@@ -122,7 +242,12 @@ export const recommendLeave = protectedProcedure
     const [record] = await context.db
       .select()
       .from(leaveRequest)
-      .where(eq(leaveRequest.id, input.id))
+      .where(
+        and(
+          eq(leaveRequest.id, input.id),
+          eq(leaveRequest.academicYearId, selectedYear.id)
+        )
+      )
       .limit(1);
 
     if (!record) {
@@ -132,6 +257,12 @@ export const recommendLeave = protectedProcedure
     if (record.finalizedAt) {
       throw new ORPCError("CONFLICT", {
         message: "This request is already finalised by the Principal",
+      });
+    }
+
+    if (record.deputyStatus !== "pending" || record.status !== "pending") {
+      throw new ORPCError("CONFLICT", {
+        message: "This request has already received a Deputy decision",
       });
     }
 
@@ -146,7 +277,12 @@ export const recommendLeave = protectedProcedure
         // Principal finalises.
         status: input.decision === "recommended" ? "recommended" : "rejected",
       })
-      .where(eq(leaveRequest.id, input.id))
+      .where(
+        and(
+          eq(leaveRequest.id, input.id),
+          eq(leaveRequest.academicYearId, selectedYear.id)
+        )
+      )
       .returning();
 
     if (!updated) {
@@ -169,14 +305,18 @@ export const finalizeLeave = protectedProcedure
   .input(
     v.object({
       id: v.string(),
+      year: leaveYearSchema,
       decision: v.picklist(["approved", "rejected"]),
       comment: v.optional(v.nullable(v.string())),
+      overrideReason: v.optional(v.string()),
     })
   )
   .handler(async ({ input, context }) => {
+    const selectedYear = await requireLeaveAcademicYear(context.db, input.year);
     const authority = await resolveAuthority(
       context.db,
-      context.session.user.id
+      context.session.user.id,
+      selectedYear.id
     );
 
     if (!authority?.isPrincipal) {
@@ -185,40 +325,69 @@ export const finalizeLeave = protectedProcedure
       });
     }
 
-    const [record] = await context.db
-      .select()
-      .from(leaveRequest)
-      .where(eq(leaveRequest.id, input.id))
-      .limit(1);
+    const updated = await context.db.transaction(async (tx) => {
+      const [record] = await tx
+        .select()
+        .from(leaveRequest)
+        .where(
+          and(
+            eq(leaveRequest.id, input.id),
+            eq(leaveRequest.academicYearId, selectedYear.id)
+          )
+        )
+        .limit(1);
 
-    if (!record) {
-      throw new ORPCError("NOT_FOUND", { message: "Leave request not found" });
-    }
+      if (!record) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Leave request not found",
+        });
+      }
 
-    if (record.finalizedAt) {
-      throw new ORPCError("CONFLICT", {
-        message: "This request was already finalised",
-      });
-    }
+      if (record.finalizedAt) {
+        throw new ORPCError("CONFLICT", {
+          message: "This request was already finalised",
+        });
+      }
 
-    const now = new Date();
+      const isBypass =
+        record.deputyStatus !== "recommended" ||
+        record.status !== "recommended";
+      if (isBypass && !input.overrideReason?.trim()) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "A Principal override reason is required when bypassing the Deputy review",
+        });
+      }
 
-    const [updated] = await context.db
-      .update(leaveRequest)
-      .set({
-        finalStatus: input.decision satisfies FinalStatus,
-        principalStaffId: authority.staffId,
-        principalActedAt: now,
-        principalComment: input.comment ?? null,
-        finalizedAt: now,
-        status: input.decision,
-      })
-      .where(eq(leaveRequest.id, input.id))
-      .returning();
+      const now = new Date();
+      const [result] = await tx
+        .update(leaveRequest)
+        .set({
+          finalStatus: input.decision satisfies FinalStatus,
+          principalStaffId: authority.staffId,
+          principalActedAt: now,
+          principalComment: input.comment ?? input.overrideReason ?? null,
+          finalizedAt: now,
+          status: input.decision,
+        })
+        .where(
+          and(
+            eq(leaveRequest.id, input.id),
+            eq(leaveRequest.academicYearId, selectedYear.id)
+          )
+        )
+        .returning();
 
-    if (!updated) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
-    }
+      if (!result) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      if (result.status === "approved") {
+        await recordApprovedLeaveAttendance(tx, result, now);
+      }
+
+      return result;
+    });
 
     return {
       id: updated.id,
@@ -229,21 +398,23 @@ export const finalizeLeave = protectedProcedure
   });
 
 /**
- * The signed-in user's review-chain authority for the current academic
+ * The signed-in user's review-chain authority for the selected academic
  * year. Lets the UI show only the buttons that member can actually use:
  * the Deputy Principal gets recommend controls, the Principal gets the
  * finalise controls, everyone else gets neither.
  */
-export const getMyAuthority = protectedProcedure.handler(
-  async ({ context }) => {
+export const getMyAuthority = protectedProcedure
+  .input(v.object({ year: leaveYearSchema }))
+  .handler(async ({ input, context }) => {
+    const selectedYear = await requireLeaveAcademicYear(context.db, input.year);
     const authority = await resolveAuthority(
       context.db,
-      context.session.user.id
+      context.session.user.id,
+      selectedYear.id
     );
 
     return {
       isDeputy: authority?.isDeputy ?? false,
       isPrincipal: authority?.isPrincipal ?? false,
     };
-  }
-);
+  });

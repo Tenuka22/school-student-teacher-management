@@ -1,3 +1,15 @@
+import {
+  leavePaymentLabel,
+  leaveTypeLabel,
+} from "@school-student-teacher-management/db/constants/leave-labels";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -14,48 +26,68 @@ import {
   IconClock,
   IconX,
 } from "@tabler/icons-react";
+import { useState } from "react";
+
+import { leaveStatusBadge } from "@/components/staff/leave-management/leave-status";
 
 export interface LeaveRequestItem {
   id: string;
   type: string;
   startDate: string;
   endDate: string;
+  dayPart: "full" | "morning" | "afternoon";
+  paymentStatus: "notApplicable" | "paid" | "halfPay" | "unpaid";
   reason: string | null;
   status: string;
   deputyStatus: string | null;
   deputyComment: string | null;
+  finalStatus: "pending" | "approved" | "rejected";
+  finalizedAt: string | null;
+  principalComment: string | null;
   reviewComment: string | null;
 }
 
 export type ReviewDecision = "recommended" | "rejected" | "approved";
 
-const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: "Annual",
-  casual: "Casual",
-  medical: "Medical",
-  maternity: "Maternity",
-  duty: "Official Duty",
-  other: "Other",
-};
-
-const STATUS_BADGES: Record<
-  string,
-  {
-    label: string;
-    variant: "default" | "secondary" | "destructive" | "outline";
-  }
-> = {
-  pending: { label: "Pending", variant: "secondary" },
-  recommended: { label: "Recommended (DP)", variant: "outline" },
-  approved: { label: "Approved (Final)", variant: "default" },
-  rejected: { label: "Rejected", variant: "destructive" },
-  cancelled: { label: "Cancelled", variant: "outline" },
-};
-
-const CLOSED_STATUSES = new Set(["approved", "rejected", "cancelled"]);
-
 const formatDateRange = (start: string, end: string) =>
-  start === end ? start : `${start} → ${end}`;
+  start === end ? start : `${start} â†’ ${end}`;
+
+const formatDayPart = (dayPart: LeaveRequestItem["dayPart"]) => {
+  if (dayPart === "morning") {
+    return " Â· First half (Primary)";
+  }
+  if (dayPart === "afternoon") {
+    return " Â· Second half (Secondary)";
+  }
+  return "";
+};
+
+const MaternityPaymentBadge = ({ request }: { request: LeaveRequestItem }) => {
+  if (
+    request.type !== "maternity" ||
+    request.paymentStatus === "notApplicable"
+  ) {
+    return null;
+  }
+  return (
+    <Badge variant="outline">{leavePaymentLabel(request.paymentStatus)}</Badge>
+  );
+};
+
+const DeputyDecisionNote = ({ request }: { request: LeaveRequestItem }) => {
+  if (!request.deputyStatus || request.deputyStatus === "pending") {
+    return null;
+  }
+  return (
+    <p className="text-muted-foreground mt-1 text-xs">
+      Deputy Principal:{" "}
+      {request.deputyStatus === "recommended"
+        ? "recommended"
+        : "not recommended"}
+      {request.deputyComment ? ` â€” ${request.deputyComment}` : ""}
+    </p>
+  );
+};
 
 interface LeaveRequestCardProps {
   request: LeaveRequestItem;
@@ -69,8 +101,138 @@ interface LeaveRequestCardProps {
   onCommentChange: (value: string) => void;
   onStartReview: () => void;
   onCancelReview: () => void;
-  onDecide: (decision: ReviewDecision) => void;
+  onDecide: (decision: ReviewDecision, overrideReason?: string) => void;
 }
+
+interface ReviewControlsProps {
+  request: LeaveRequestItem;
+  isDeputy: boolean;
+  isPrincipal: boolean;
+  isSubmitting: boolean;
+  comment: string;
+  onCommentChange: (value: string) => void;
+  onCancel: () => void;
+  onDecide: (decision: ReviewDecision, overrideReason?: string) => void;
+}
+
+const ReviewControls = ({
+  request,
+  isDeputy,
+  isPrincipal,
+  isSubmitting,
+  comment,
+  onCommentChange,
+  onCancel,
+  onDecide,
+}: ReviewControlsProps) => {
+  const [overrideDecision, setOverrideDecision] =
+    useState<ReviewDecision | null>(null);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const requiresOverride =
+    isPrincipal &&
+    (request.status !== "recommended" ||
+      request.deputyStatus !== "recommended");
+
+  const decide = (decision: ReviewDecision) => {
+    if (requiresOverride) {
+      setOverrideDecision(decision);
+      setOverrideOpen(true);
+      return;
+    }
+    onDecide(decision);
+  };
+
+  return (
+    <>
+      <Field className="mt-3 max-w-md">
+        <FieldLabel htmlFor={`comment-${request.id}`}>
+          Review note (optional)
+        </FieldLabel>
+        <textarea
+          id={`comment-${request.id}`}
+          value={comment}
+          onChange={(event) => onCommentChange(event.target.value)}
+          className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
+          rows={2}
+          placeholder="e.g. Approved â€” arrange cover for 6-B"
+        />
+        <div className="mt-2 flex flex-wrap gap-2">
+          {isDeputy && request.status === "pending" && (
+            <>
+              <Button
+                size="sm"
+                disabled={isSubmitting}
+                onClick={() => onDecide("recommended")}
+              >
+                <IconCircleCheck className="mr-1 size-4" />
+                Recommend
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={isSubmitting}
+                onClick={() => onDecide("rejected")}
+              >
+                <IconX className="mr-1 size-4" />
+                Not recommended
+              </Button>
+            </>
+          )}
+          {isPrincipal && (
+            <>
+              <Button
+                size="sm"
+                disabled={isSubmitting}
+                onClick={() => decide("approved")}
+              >
+                <IconCheck className="mr-1 size-4" />
+                Approve (Final)
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={isSubmitting}
+                onClick={() => decide("rejected")}
+              >
+                <IconX className="mr-1 size-4" />
+                Reject (Final)
+              </Button>
+            </>
+          )}
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </Field>
+      <AlertDialog open={overrideOpen} onOpenChange={setOverrideOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Confirm Principal override</AlertDialogTitle>
+          <AlertDialogDescription>
+            This request has not completed the Deputy review step. The Principal
+            will {overrideDecision === "approved" ? "approve" : "reject"} it and
+            the decision will be final. Continue?
+          </AlertDialogDescription>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (overrideDecision) {
+                  onDecide(
+                    overrideDecision,
+                    comment.trim() || "Principal override"
+                  );
+                }
+                setOverrideOpen(false);
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};
 
 /**
  * One leave request with the actions the signed-in member is actually
@@ -91,7 +253,10 @@ export const LeaveRequestCard = ({
   onCancelReview,
   onDecide,
 }: LeaveRequestCardProps) => {
-  const isClosed = CLOSED_STATUSES.has(request.status);
+  const isClosed =
+    request.status === "approved" ||
+    request.status === "cancelled" ||
+    (request.status === "rejected" && (!!request.finalizedAt || !isPrincipal));
   const canAct = !isClosed && (isDeputy || isPrincipal);
 
   return (
@@ -101,29 +266,21 @@ export const LeaveRequestCard = ({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{staffName}</span>
             {staffBadge && <Badge variant="outline">{staffBadge}</Badge>}
-            <Badge variant="secondary">
-              {LEAVE_TYPE_LABELS[request.type] ?? request.type}
-            </Badge>
-            <Badge variant={STATUS_BADGES[request.status].variant}>
-              {STATUS_BADGES[request.status].label}
+            <Badge variant="secondary">{leaveTypeLabel(request.type)}</Badge>
+            <MaternityPaymentBadge request={request} />
+            <Badge variant={leaveStatusBadge(request.status).variant}>
+              {leaveStatusBadge(request.status).label}
             </Badge>
           </div>
 
           <p className="text-muted-foreground mt-2 text-sm">
             <IconClock className="mr-1 inline size-3.5" />
             {formatDateRange(request.startDate, request.endDate)}
-            {request.reason ? ` — ${request.reason}` : ""}
+            {formatDayPart(request.dayPart)}
+            {request.reason ? ` â€” ${request.reason}` : ""}
           </p>
 
-          {request.deputyStatus && request.deputyStatus !== "pending" && (
-            <p className="text-muted-foreground mt-1 text-xs">
-              Deputy Principal:{" "}
-              {request.deputyStatus === "recommended"
-                ? "recommended"
-                : "not recommended"}
-              {request.deputyComment ? ` — ${request.deputyComment}` : ""}
-            </p>
-          )}
+          <DeputyDecisionNote request={request} />
 
           {request.reviewComment && (
             <p className="text-muted-foreground mt-1 text-xs italic">
@@ -132,68 +289,16 @@ export const LeaveRequestCard = ({
           )}
 
           {isReviewing && (
-            <Field className="mt-3 max-w-md">
-              <FieldLabel htmlFor={`comment-${request.id}`}>
-                Review note (optional)
-              </FieldLabel>
-              <textarea
-                id={`comment-${request.id}`}
-                value={comment}
-                onChange={(e) => onCommentChange(e.target.value)}
-                className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
-                rows={2}
-                placeholder="e.g. Approved — arrange cover for 6-B"
-              />
-              <div className="mt-2 flex flex-wrap gap-2">
-                {isDeputy && request.status === "pending" && (
-                  <>
-                    <Button
-                      size="sm"
-                      disabled={isSubmitting}
-                      onClick={() => onDecide("recommended")}
-                    >
-                      <IconCircleCheck className="mr-1 size-4" />
-                      Recommend
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={isSubmitting}
-                      onClick={() => onDecide("rejected")}
-                    >
-                      <IconX className="mr-1 size-4" />
-                      Not recommended
-                    </Button>
-                  </>
-                )}
-                {/* The Principal step is reachable from "pending" too — an
-                    implicit override of the Deputy recommendation. */}
-                {isPrincipal && (
-                  <>
-                    <Button
-                      size="sm"
-                      disabled={isSubmitting}
-                      onClick={() => onDecide("approved")}
-                    >
-                      <IconCheck className="mr-1 size-4" />
-                      Approve (Final)
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={isSubmitting}
-                      onClick={() => onDecide("rejected")}
-                    >
-                      <IconX className="mr-1 size-4" />
-                      Reject (Final)
-                    </Button>
-                  </>
-                )}
-                <Button size="sm" variant="ghost" onClick={onCancelReview}>
-                  Cancel
-                </Button>
-              </div>
-            </Field>
+            <ReviewControls
+              request={request}
+              isDeputy={isDeputy}
+              isPrincipal={isPrincipal}
+              isSubmitting={isSubmitting}
+              comment={comment}
+              onCommentChange={onCommentChange}
+              onCancel={onCancelReview}
+              onDecide={onDecide}
+            />
           )}
         </div>
 

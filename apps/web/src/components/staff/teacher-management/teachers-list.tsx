@@ -1,11 +1,24 @@
-import { EMPLOYMENT_STATUSES } from "@school-student-teacher-management/db/constants/teachers";
-import type { staff } from "@school-student-teacher-management/db/schema/staff";
+import type { StaffListItem } from "@school-student-teacher-management/api/routers/staff/list-staff";
+import {
+  APPOINTMENT_TYPES,
+  EMPLOYMENT_STATUSES,
+} from "@school-student-teacher-management/db/constants/teachers";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@school-student-teacher-management/ui/components/dropdown-menu";
@@ -26,17 +39,28 @@ import {
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
 import {
+  IconCalendarTime,
   IconDotsVertical,
-  IconSearch,
   IconFileExport,
   IconPlus,
-  IconAlertCircle,
-  IconCalendarTime,
+  IconSearch,
 } from "@tabler/icons-react";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 
-type Staff = typeof staff.$inferSelect;
+interface TeachersListProps {
+  teachers: StaffListItem[] | undefined;
+  isLoading: boolean;
+  onCreateClick: () => void;
+  onEditClick: (teacher: StaffListItem) => void;
+  onViewClick: (teacher: StaffListItem) => void;
+  onDeleteClick: (teacher: StaffListItem) => void;
+  onManageTimetableClick: (teacher: StaffListItem) => void;
+  onExportClick: () => void;
+  onExportSelectedClick: (staffIds: string[]) => void;
+  onDeleteSelectedClick: (staffIds: string[]) => Promise<string[]>;
+  isExportPending: boolean;
+  isBulkDeletePending: boolean;
+}
 
 const getInitials = (name: string) =>
   name
@@ -48,44 +72,21 @@ const getInitials = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-interface TeachersListProps {
-  teachers: Staff[] | undefined;
-  isLoading: boolean;
-  onCreateClick: () => void;
-  onEditClick: (teacher: Staff) => void;
-  onViewClick: (teacher: Staff) => void;
-  onDeleteClick: (teacher: Staff) => void;
-  onManageTimetableClick: (teacher: Staff) => void;
-  onExportClick: () => void;
-}
-
 const getPluralSuffix = (count: number) => (count === 1 ? "" : "s");
 
 const getStatusColor = (
   status: string | null
 ): "default" | "secondary" | "destructive" | "outline" => {
-  switch (status) {
-    case "active": {
-      return "default";
-    }
-
-    case "onLeave": {
-      return "secondary";
-    }
-
-    case "suspended":
-    case "terminated": {
-      return "destructive";
-    }
-
-    case "retired": {
-      return "secondary";
-    }
-
-    default: {
-      return "outline";
-    }
+  if (status === "active") {
+    return "default";
   }
+  if (status === "onLeave" || status === "retired") {
+    return "secondary";
+  }
+  if (status === "suspended" || status === "terminated") {
+    return "destructive";
+  }
+  return "outline";
 };
 
 const TeacherRow = ({
@@ -97,7 +98,7 @@ const TeacherRow = ({
   onDeleteClick,
   onManageTimetableClick,
 }: {
-  teacher: Staff;
+  teacher: StaffListItem;
   isSelected: boolean;
   onSelect: (selected: boolean) => void;
   onEditClick: () => void;
@@ -107,7 +108,11 @@ const TeacherRow = ({
 }) => (
   <TableRow>
     <TableCell>
-      <Checkbox checked={isSelected} onCheckedChange={onSelect} />
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={(checked) => onSelect(checked === true)}
+        aria-label={`Select ${teacher.name}`}
+      />
     </TableCell>
     <TableCell className="font-medium">
       <button
@@ -118,24 +123,53 @@ const TeacherRow = ({
         <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center text-xs font-bold">
           {getInitials(teacher.name)}
         </span>
-        <span className="hover:underline">{teacher.name}</span>
+        <span className="min-w-0">
+          <span className="hover:underline">{teacher.name}</span>
+          <span className="text-muted-foreground block text-xs font-normal">
+            {teacher.teacherServiceNo ?? "No service number"}
+          </span>
+        </span>
       </button>
     </TableCell>
-    <TableCell>{teacher.email}</TableCell>
-    <TableCell className="hidden sm:table-cell">{teacher.phone}</TableCell>
+    <TableCell>
+      <span className="block">{teacher.email ?? "—"}</span>
+      <span className="text-muted-foreground hidden text-xs sm:block">
+        {teacher.phone ?? "No phone"}
+      </span>
+    </TableCell>
     <TableCell>
       {teacher.employmentStatus ? (
-        <Badge
-          variant={getStatusColor(teacher.employmentStatus)}
-          className="text-[10px] font-bold tracking-wider uppercase"
-        >
-          {EMPLOYMENT_STATUSES[
-            teacher.employmentStatus as keyof typeof EMPLOYMENT_STATUSES
-          ]?.label || teacher.employmentStatus}
+        <Badge variant={getStatusColor(teacher.employmentStatus)}>
+          {EMPLOYMENT_STATUSES[teacher.employmentStatus]?.label ??
+            teacher.employmentStatus}
         </Badge>
       ) : (
         <span className="text-muted-foreground text-sm">—</span>
       )}
+      <span className="text-muted-foreground mt-1 block text-xs">
+        {teacher.appointmentType
+          ? (APPOINTMENT_TYPES[teacher.appointmentType]?.label ??
+            teacher.appointmentType)
+          : "Appointment not set"}
+      </span>
+      {teacher.appointmentDate && (
+        <span className="text-muted-foreground block text-xs">
+          {teacher.appointmentDate}
+        </span>
+      )}
+    </TableCell>
+    <TableCell>
+      <div className="flex flex-col items-start gap-1">
+        <Badge variant={teacher.linkedUser ? "default" : "outline"}>
+          {teacher.linkedUser ? "Linked" : "No account"}
+        </Badge>
+        {teacher.linkedUser?.banned && (
+          <Badge variant="destructive">Banned</Badge>
+        )}
+        {teacher.linkedUser && !teacher.linkedUser.emailVerified && (
+          <Badge variant="secondary">Unverified email</Badge>
+        )}
+      </div>
     </TableCell>
     <TableCell>
       <div className="flex items-center justify-end gap-4 text-xs font-bold">
@@ -154,22 +188,27 @@ const TeacherRow = ({
           Edit
         </button>
         <DropdownMenu>
-          <DropdownMenuTrigger>
-            <Button variant="ghost" size="icon" className="size-6">
-              <IconDotsVertical className="size-4" />
-            </Button>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Actions for ${teacher.name}`}
+              />
+            }
+          >
+            <IconDotsVertical />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onManageTimetableClick}>
-              <IconCalendarTime className="mr-2 size-4" />
-              Manage Timetable
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={onDeleteClick}
-              className="text-destructive"
-            >
-              Delete
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={onManageTimetableClick}>
+                <IconCalendarTime />
+                Manage Timetable
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDeleteClick} variant="destructive">
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -186,151 +225,155 @@ export const TeachersList = ({
   onDeleteClick,
   onManageTimetableClick,
   onExportClick,
+  onExportSelectedClick,
+  onDeleteSelectedClick,
+  isExportPending,
+  isBulkDeletePending,
 }: TeachersListProps) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
-  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const filteredTeachers = useMemo(() => {
     if (!teachers) {
       return [];
     }
-
     if (!searchQuery) {
       return teachers;
     }
 
     const query = searchQuery.toLowerCase();
-    return teachers.filter(
-      (t) =>
-        t.name.toLowerCase().includes(query) ||
-        t.email?.toLowerCase().includes(query) ||
-        t.phone?.includes(query) ||
-        t.nic?.includes(query)
+    return teachers.filter((teacher) =>
+      [
+        teacher.name,
+        teacher.email,
+        teacher.phone,
+        teacher.nic,
+        teacher.teacherServiceNo,
+        teacher.linkedUser?.email,
+      ].some((value) => value?.toLowerCase().includes(query))
     );
-  }, [teachers, searchQuery]);
+  }, [searchQuery, teachers]);
+
+  const selectedFilteredCount = filteredTeachers.filter((teacher) =>
+    selectedIds.has(teacher.id)
+  ).length;
 
   const handleSelectAll = useCallback(
     (checked: boolean) => {
       if (checked) {
-        setSelectedIds(new Set(filteredTeachers.map((t) => t.id)));
-      } else {
-        setSelectedIds(new Set());
+        setSelectedIds(new Set(filteredTeachers.map((teacher) => teacher.id)));
+        return;
       }
+      setSelectedIds(new Set());
     },
     [filteredTeachers]
   );
 
-  const handleSelectRow = useCallback((teacherId: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
+  const handleSelectRow = useCallback((staffId: string, checked: boolean) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
       if (checked) {
-        next.add(teacherId);
+        next.add(staffId);
       } else {
-        next.delete(teacherId);
+        next.delete(staffId);
       }
-
       return next;
     });
   }, []);
 
-  const handleDeleteClick = useCallback(() => {
-    if (selectedIds.size === 0) {
-      return;
+  const handleConfirmSelectedDelete = async () => {
+    const deletedIds = await onDeleteSelectedClick([...selectedIds]);
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      for (const staffId of deletedIds) {
+        next.delete(staffId);
+      }
+      return next;
+    });
+    if (deletedIds.length > 0) {
+      setIsDeleteDialogOpen(false);
     }
-
-    setShowDeleteWarning(true);
-  }, [selectedIds.size]);
+  };
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={`skeleton-${i}`} className="h-12 w-full" />
+      <div className="flex flex-col gap-4">
+        {Array.from({ length: 5 }, (_, index) => (
+          <Skeleton key={`teacher-skeleton-${index}`} className="h-12 w-full" />
         ))}
       </div>
     );
   }
 
-  const hasResults = !!filteredTeachers && filteredTeachers.length > 0;
-  const hasAnyTeachers = !!teachers && teachers.length > 0;
+  const hasResults = filteredTeachers.length > 0;
+  const hasAnyTeachers = Boolean(teachers?.length);
 
   return (
-    <div className="space-y-4">
-      {/* Page-level actions */}
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onExportClick}>
-          <IconFileExport className="mr-2 h-4 w-4" />
-          Export as Excel
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onExportClick}
+          disabled={isExportPending}
+        >
+          <IconFileExport data-icon="inline-start" />
+          {isExportPending ? "Exporting..." : "Export as Excel"}
         </Button>
         <Button onClick={onCreateClick} size="sm">
-          <IconPlus className="mr-2 h-4 w-4" />
+          <IconPlus data-icon="inline-start" />
           Add Teacher
         </Button>
       </div>
 
-      {/* Bulk selection toolbar */}
       {selectedIds.size > 0 && (
-        <div className="bg-muted flex items-center justify-between gap-2 rounded-lg p-3">
+        <div className="bg-muted flex flex-wrap items-center justify-between gap-2 rounded-lg p-3">
           <span className="text-muted-foreground text-sm">
-            {selectedIds.size} item{getPluralSuffix(selectedIds.size)} selected
+            {selectedIds.size} teacher{getPluralSuffix(selectedIds.size)}{" "}
+            selected
           </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onExportClick}>
-              Export Selected
-            </Button>
-            <Button variant="destructive" size="sm" onClick={handleDeleteClick}>
-              Delete
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Delete warning dialog */}
-      {showDeleteWarning && (
-        <div className="border-destructive/30 bg-destructive/10 flex items-center gap-3 rounded-lg border p-3">
-          <IconAlertCircle className="text-destructive h-5 w-5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">
-              Delete {selectedIds.size} teacher
-              {getPluralSuffix(selectedIds.size)}?
-            </p>
-            <p className="text-muted-foreground text-xs">
-              This action cannot be undone.
-            </p>
-          </div>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowDeleteWarning(false)}
+              onClick={() => onExportSelectedClick([...selectedIds])}
+              disabled={isExportPending}
             >
-              Cancel
+              Export Selected
             </Button>
             <Button
               variant="destructive"
               size="sm"
-              onClick={() => {
-                toast("Deletion initiated for selected teachers");
-                setShowDeleteWarning(false);
-                setSelectedIds(new Set());
-              }}
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isBulkDeletePending}
             >
               Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedIds(new Set())}
+              disabled={isBulkDeletePending}
+            >
+              Clear
             </Button>
           </div>
         </div>
       )}
 
-      {/* Table */}
       {hasAnyTeachers ? (
-        <div className="border-primary/14 overflow-hidden border">
+        <div className="border-primary/14 overflow-x-auto border">
           <div className="border-primary/12 flex items-center gap-2 border-b p-3">
-            <IconSearch className="text-muted-foreground h-4 w-4 shrink-0" />
+            <IconSearch className="text-muted-foreground size-4 shrink-0" />
+            <label htmlFor="teacher-search" className="sr-only">
+              Search teachers
+            </label>
             <Input
-              placeholder="Search by name, email, phone or NIC…"
+              id="teacher-search"
+              placeholder="Search by name, email, phone, NIC or service number…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => setSearchQuery(event.target.value)}
               className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
             />
           </div>
@@ -341,26 +384,28 @@ export const TeachersList = ({
                   <TableHead className="w-8">
                     <Checkbox
                       checked={
-                        selectedIds.size > 0 &&
-                        selectedIds.size === filteredTeachers.length
+                        filteredTeachers.length > 0 &&
+                        selectedFilteredCount === filteredTeachers.length
                       }
-                      onCheckedChange={handleSelectAll}
-                      className="border-primary-foreground/40 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                      onCheckedChange={(checked) =>
+                        handleSelectAll(checked === true)
+                      }
+                      aria-label="Select visible teachers"
                     />
                   </TableHead>
                   <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    NAME
+                    TEACHER
                   </TableHead>
                   <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    EMAIL
-                  </TableHead>
-                  <TableHead className="text-accent hidden h-11 text-xs font-extrabold tracking-[0.16em] sm:table-cell">
-                    PHONE
+                    CONTACT
                   </TableHead>
                   <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    STATUS
+                    EMPLOYMENT
                   </TableHead>
-                  <TableHead className="text-accent h-11 w-10 text-xs font-extrabold tracking-[0.16em]" />
+                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                    ACCOUNT
+                  </TableHead>
+                  <TableHead className="text-accent h-11 w-40 text-xs font-extrabold tracking-[0.16em]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -369,9 +414,7 @@ export const TeachersList = ({
                     key={teacher.id}
                     teacher={teacher}
                     isSelected={selectedIds.has(teacher.id)}
-                    onSelect={(checked) =>
-                      handleSelectRow(teacher.id, checked as boolean)
-                    }
+                    onSelect={(checked) => handleSelectRow(teacher.id, checked)}
                     onEditClick={() => onEditClick(teacher)}
                     onViewClick={() => onViewClick(teacher)}
                     onDeleteClick={() => onDeleteClick(teacher)}
@@ -383,9 +426,13 @@ export const TeachersList = ({
               </TableBody>
             </Table>
           ) : (
-            <div className="text-muted-foreground p-10 text-center text-sm">
-              No teachers found. Try adjusting your search.
-            </div>
+            <Empty className="min-h-72 border-none">
+              <EmptyTitle>No teachers found</EmptyTitle>
+              <EmptyDescription>
+                No teacher on this year&rsquo;s roster matches that search.
+                Clear the search, or add a teacher to this year.
+              </EmptyDescription>
+            </Empty>
           )}
         </div>
       ) : (
@@ -394,16 +441,43 @@ export const TeachersList = ({
             No teachers yet
           </EmptyTitle>
           <EmptyDescription>
-            Create your first teacher record to get started
+            Create the first teacher record to get started
           </EmptyDescription>
           <EmptyContent>
             <Button onClick={onCreateClick} className="mt-4">
-              <IconPlus className="mr-2 h-4 w-4" />
+              <IconPlus data-icon="inline-start" />
               Create Teacher
             </Button>
           </EmptyContent>
         </Empty>
       )}
+
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogTitle>Delete Selected Teachers</AlertDialogTitle>
+          <AlertDialogDescription>
+            Delete {selectedIds.size} selected teacher
+            {getPluralSuffix(selectedIds.size)}? The server deletes only records
+            without history or current assignments. Protected records remain and
+            should be marked terminated instead.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeletePending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmSelectedDelete}
+              disabled={isBulkDeletePending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeletePending ? "Deleting..." : "Delete Selected"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

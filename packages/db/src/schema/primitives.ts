@@ -7,8 +7,6 @@ import * as v from "valibot";
  */
 
 const SL_PHONE_RE = /^(?:\+94|0)7\d{8}$/u;
-const NIC_OLD_RE = /^\d{9}[vV]$/u;
-const NIC_NEW_RE = /^\d{12}$/u;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/u;
 const POSTAL_CODE_RE = /^\d{5}$/u;
 
@@ -26,13 +24,28 @@ export const slPhoneSchema = v.pipe(
   )
 );
 
-/** Sri Lankan NIC: old format (9 digits + V) or new format (12 digits). */
+/**
+ * Sri Lankan NIC: old format (9 digits + V) or new format (12 digits).
+ *
+ * Exported because three surfaces validate a NIC before the database does —
+ * the sign-up form, the admin teacher form, and the create/signup procedures
+ * that turn a NIC into a login username. They all use these, so none of them
+ * can accept a value the `staff` table will refuse.
+ */
+export const NIC_OLD_FORMAT_RE = /^\d{9}[vV]$/u;
+export const NIC_NEW_FORMAT_RE = /^\d{12}$/u;
+
+/** The one message every NIC input in the product shows. */
+export const NIC_FORMAT_MESSAGE =
+  "Enter a valid Sri Lankan NIC: 9 digits followed by V, or 12 digits";
+
+/** True when a NIC is in a format the `staff` table will actually accept. */
+export const isValidNicFormat = (value: string): boolean =>
+  NIC_OLD_FORMAT_RE.test(value) || NIC_NEW_FORMAT_RE.test(value);
+
 export const nicSchema = v.pipe(
   v.string(),
-  v.check(
-    (val) => NIC_OLD_RE.test(val) || NIC_NEW_RE.test(val),
-    "Invalid NIC format (9 digits + V or 12 digits)"
-  )
+  v.check(isValidNicFormat, NIC_FORMAT_MESSAGE)
 );
 
 /** ISO date string, YYYY-MM-DD. */

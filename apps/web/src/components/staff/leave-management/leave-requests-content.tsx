@@ -57,7 +57,7 @@ const defaultQueue = (isDeputy: boolean, isPrincipal: boolean): LeaveQueue => {
   return "all";
 };
 
-export const LeaveRequestsContent = () => {
+export const LeaveRequestsContent = ({ year }: { year: number }) => {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [queueOverride, setQueueOverride] = useState<LeaveQueue | null>(null);
@@ -67,7 +67,7 @@ export const LeaveRequestsContent = () => {
   // Who is reviewing? The UI shows only the buttons this member can use:
   // Deputy Principal -> recommend controls, Principal -> finalise controls.
   const authorityQuery = useQuery(
-    orpc.staff.leaves.getMyAuthority.queryOptions()
+    orpc.staff.leaves.getMyAuthority.queryOptions({ input: { year } })
   );
   const isDeputy = authorityQuery.data?.isDeputy ?? false;
   const isPrincipal = authorityQuery.data?.isPrincipal ?? false;
@@ -80,6 +80,7 @@ export const LeaveRequestsContent = () => {
   const requestsQuery = useQuery(
     orpc.staff.leaves.listLeaveRequests.queryOptions({
       input: {
+        year,
         ...(statusFilter === "all" ? {} : { status: statusFilter }),
         ...(queue === "all" ? {} : { queue }),
       },
@@ -88,8 +89,9 @@ export const LeaveRequestsContent = () => {
 
   const invalidateLists = async () => {
     await queryClient.invalidateQueries({
-      queryKey: orpc.staff.leaves.listLeaveRequests.queryOptions({ input: {} })
-        .queryKey,
+      queryKey: orpc.staff.leaves.listLeaveRequests.queryOptions({
+        input: { year },
+      }).queryKey,
     });
   };
 
@@ -129,15 +131,28 @@ export const LeaveRequestsContent = () => {
     (r) => r.status === "recommended"
   ).length;
 
-  const act = (id: string, decision: ReviewDecision) => {
-    const mutation =
-      decision === "approved" ? finalizeMutation : recommendMutation;
+  const act = (
+    id: string,
+    decision: ReviewDecision,
+    overrideReason?: string
+  ) => {
+    if (decision === "approved") {
+      finalizeMutation.mutate({
+        id,
+        year,
+        decision,
+        comment: comment.trim() || undefined,
+        overrideReason,
+      });
+      return;
+    }
 
-    mutation.mutate({
+    recommendMutation.mutate({
       id,
+      year,
       decision,
       comment: comment.trim() || undefined,
-    } as never);
+    });
   };
 
   return (
@@ -146,9 +161,9 @@ export const LeaveRequestsContent = () => {
         <h1 className="font-heading text-4xl font-semibold">Leave Requests</h1>
         <p className="text-muted-foreground mt-2">
           Review leave applications submitted by teachers — the Deputy Principal
-          recommends, the Principal gives the final decision. Approving a
-          request does not auto-mark attendance — mark the day on the Attendance
-          page.
+          recommends, the Principal gives the final decision. Approval
+          automatically records the affected periods as absence and locks manual
+          attendance changes.
         </p>
       </div>
 
@@ -234,7 +249,9 @@ export const LeaveRequestsContent = () => {
                 setReviewingId(null);
                 setComment("");
               }}
-              onDecide={(decision) => act(request.id, decision)}
+              onDecide={(decision, overrideReason) =>
+                act(request.id, decision, overrideReason)
+              }
             />
           ))}
         </div>

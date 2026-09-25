@@ -74,10 +74,7 @@ export const TeacherTimetablePageContent = ({
                 </div>
                 <div>
                   <div className="font-heading text-accent text-2xl leading-none font-semibold">
-                    {Math.max(
-                      page.periodConfig.length * 5 - page.entries.length,
-                      0
-                    )}
+                    {Math.max(page.periods.length * 5 - page.entries.length, 0)}
                   </div>
                   <div className="text-primary-foreground/65 mt-1 text-[10px] tracking-wider uppercase">
                     Free slots
@@ -89,7 +86,6 @@ export const TeacherTimetablePageContent = ({
 
           <TeacherTimetableGrid
             entries={page.entries}
-            periodConfig={page.periodConfig}
             onAssignClick={page.handleAssignClick}
             onEditClick={page.handleEditClick}
             onDeleteClick={page.handleDeleteClick}
@@ -97,7 +93,7 @@ export const TeacherTimetablePageContent = ({
 
           <TeacherTimetableDialogs
             classes={page.classes}
-            periodConfig={page.periodConfig}
+            academicYearId={page.currentYear?.id}
             selectedEntry={page.selectedEntry}
             addSlot={page.addSlot}
             isAddOpen={page.isAddDialogOpen}

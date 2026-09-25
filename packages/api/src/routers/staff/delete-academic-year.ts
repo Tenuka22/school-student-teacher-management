@@ -4,34 +4,46 @@ import {
   classTeacherAssignmentHistory,
 } from "@school-student-teacher-management/db/schema/academics";
 import {
-  classPeriodAssignment,
-  periodConfig,
-} from "@school-student-teacher-management/db/schema/periods";
+  attendancePolicy,
+  shortLeaveUsage,
+  teacherAttendance,
+} from "@school-student-teacher-management/db/schema/attendance";
+import {
+  leaveEntitlement,
+  leaveRequest,
+} from "@school-student-teacher-management/db/schema/leaves";
+import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYear,
   academicYearIdSchema,
   staffPosition,
 } from "@school-student-teacher-management/db/schema/staff";
+import { teacherSubjectAssignment } from "@school-student-teacher-management/db/schema/teacher-subjects";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 
 /**
  * Tables that hold actual user-created data scoped to an academic year.
- * `gradeSubjectConfig` is deliberately excluded — it's auto-populated from
+ * `gradeSubjectConfig` is deliberately excluded â€” it's auto-populated from
  * the curriculum structure version at creation time, not user data, so
  * every year would always fail the emptiness check if it were included.
  */
 const DEPENDENT_TABLES = [
   { table: class_, label: "classes" },
   { table: staffPosition, label: "position assignments" },
+  { table: teacherSubjectAssignment, label: "subject assignments" },
+  { table: leaveRequest, label: "leave requests" },
+  { table: leaveEntitlement, label: "leave entitlements" },
+  { table: teacherAttendance, label: "attendance records" },
+  { table: attendancePolicy, label: "attendance policy" },
+  { table: shortLeaveUsage, label: "attendance usage" },
   { table: classPeriodAssignment, label: "period assignments" },
-  { table: periodConfig, label: "period configuration" },
   { table: classTeacherAssignmentHistory, label: "homeroom history" },
 ] as const;
 
-export const deleteAcademicYear = adminProcedure
+export const deleteAcademicYear = adminOnlyProcedure
   .input(v.object({ id: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [existing] = await context.db

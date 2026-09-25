@@ -36,7 +36,7 @@ export const AddAcademicYearDialog = ({
           year until you switch to it.
         </DialogDescription>
       </DialogHeader>
-      <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         <AcademicYearForm
           formId="add-academic-year-form"
           existingYears={existingYears}

@@ -6,6 +6,10 @@ import {
 import { pick } from "valibot";
 
 import { requireAssignmentPermission } from "../../../index";
+import {
+  assertTeacherEligibleForYear,
+  getClassForAcademicYear,
+} from "../teacher-eligibility";
 
 /**
  * Assign a teacher + subject to a class period slot.
@@ -28,6 +32,20 @@ export const assignClassPeriod = requireAssignmentPermission("create")
     ])
   )
   .handler(async ({ input, context }) => {
+    const classRecord = await getClassForAcademicYear(
+      context.db,
+      input.academicYearId,
+      input.classId
+    );
+
+    await assertTeacherEligibleForYear({
+      db: context.db,
+      academicYearId: input.academicYearId,
+      staffId: input.staffId,
+      subjectKey: input.subjectKey,
+      gradeLevel: classRecord.gradeLevel,
+    });
+
     const id = crypto.randomUUID();
 
     try {

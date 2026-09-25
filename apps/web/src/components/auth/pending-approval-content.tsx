@@ -12,20 +12,20 @@ interface ApprovalStep {
 
 const getMarkerClass = (state: ApprovalStep["state"]): string => {
   if (state === "done") {
-    return "border-[#013405] bg-[#013405] text-[#FFF8E7]";
+    return "border-primary bg-primary text-primary-foreground";
   }
 
   if (state === "current") {
-    return "border-[#A8730B] bg-[#A8730B] text-white";
+    return "border-gold bg-gold text-white";
   }
 
-  return "border-[#013405]/25 bg-transparent text-[#013405]/40";
+  return "border-primary/25 bg-transparent text-primary/40";
 };
 
 const getLabelClass = (state: ApprovalStep["state"]): string =>
   state === "upcoming"
-    ? "text-[14.5px] font-bold text-[#013405]/45"
-    : "text-[14.5px] font-bold text-[#013405]";
+    ? "text-[14.5px] font-bold text-primary/45"
+    : "text-[14.5px] font-bold text-primary";
 
 const getSteps = (name: string, email: string): ApprovalStep[] => [
   {
@@ -47,7 +47,7 @@ const getSteps = (name: string, email: string): ApprovalStep[] => [
   {
     label: "Teacher account activated",
     detail:
-      "Once approved you become a teacher and the teacher workspace opens automatically.",
+      "Once approved you become a teacher, and the teacher workspace opens when you check again.",
     state: "upcoming",
   },
 ];
@@ -93,22 +93,22 @@ export const PendingApprovalContent = ({
           className="block h-[52px] w-auto"
         />
         <div className="leading-[1.15]">
-          <div className="text-[14px] font-extrabold tracking-[0.06em] text-[#013405]">
+          <div className="text-primary text-[14px] font-extrabold tracking-[0.06em]">
             ST. ALOYSIUS&rsquo; COLLEGE
           </div>
-          <div className="text-xs tracking-[0.28em] text-[#A8730B]">
+          <div className="text-gold text-xs tracking-[0.28em]">
             GALLE &bull; SRI LANKA
           </div>
         </div>
       </div>
 
-      <div className="mb-2 text-xs font-bold tracking-[0.32em] text-[#A51919]">
+      <div className="text-destructive mb-2 text-xs font-bold tracking-[0.32em]">
         TEACHER REGISTRATION
       </div>
-      <h1 className="font-heading m-0 mb-3 text-[clamp(30px,5vw,42px)] leading-[1.05] font-semibold text-[#013405]">
+      <h1 className="font-heading text-primary m-0 mb-3 text-[clamp(30px,5vw,42px)] leading-[1.05] font-semibold">
         Waiting for approval
       </h1>
-      <p className="m-0 mb-8 text-[14px] leading-[1.6] text-[#013405]/65">
+      <p className="text-primary/65 m-0 mb-8 text-[14px] leading-[1.6]">
         Your request to join the College as a teacher has been received. An
         administrator or the Principal has to confirm that you are on the
         College establishment before the teacher role is granted. You do not
@@ -116,10 +116,10 @@ export const PendingApprovalContent = ({
         soon as that happens.
       </p>
 
-      <ol className="m-0 flex list-none flex-col gap-0 border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
+      <ol className="border-primary/14 bg-card m-0 flex list-none flex-col gap-0 border px-[22px] py-5">
         {steps.map((step, index) => (
           <li
-            className={`flex gap-4 ${index === steps.length - 1 ? "" : "border-b border-[#013405]/10 pb-4"} ${index > 0 ? "pt-4" : ""}`}
+            className={`flex gap-4 ${index === steps.length - 1 ? "" : "border-primary/10 border-b pb-4"} ${index > 0 ? "pt-4" : ""}`}
             key={step.label}
           >
             <span
@@ -132,12 +132,12 @@ export const PendingApprovalContent = ({
               <div className={getLabelClass(step.state)}>
                 {step.label}
                 {step.state === "current" && (
-                  <span className="ml-2 align-middle text-[10px] font-extrabold tracking-[0.18em] text-[#A8730B]">
+                  <span className="text-gold ml-2 align-middle text-[10px] font-extrabold tracking-[0.18em]">
                     IN PROGRESS
                   </span>
                 )}
               </div>
-              <div className="mt-1 text-[13px] leading-relaxed text-[#013405]/60">
+              <div className="text-primary/60 mt-1 text-[13px] leading-relaxed">
                 {step.detail}
               </div>
             </div>
@@ -147,14 +147,14 @@ export const PendingApprovalContent = ({
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <Button
-          className="bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] hover:bg-[#064A12]"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover px-5 py-2.5 text-xs font-extrabold tracking-[0.04em]"
           disabled={isChecking}
           onClick={recheck}
         >
           {isChecking ? "CHECKING…" : "CHECK AGAIN"}
         </Button>
         <Button
-          className="border border-[#013405]/30 px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#013405] hover:bg-[#013405]/5"
+          className="border-primary/30 text-primary hover:bg-primary/5 border px-5 py-2.5 text-xs font-extrabold tracking-[0.04em]"
           onClick={async () => {
             await authClient.signOut();
             window.location.assign("/login");
@@ -165,7 +165,7 @@ export const PendingApprovalContent = ({
         </Button>
       </div>
 
-      <p className="mt-6 max-w-prose text-xs leading-relaxed text-[#013405]/50">
+      <p className="text-primary/50 mt-6 max-w-prose text-xs leading-relaxed">
         Verification and approval are separate. Confirming your address only
         proved that the email is yours; staff access is granted by a person. If
         the request was not yours, sign out and tell an administrator.

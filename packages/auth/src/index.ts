@@ -11,6 +11,7 @@ import {
   username,
 } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
+import { eq } from "drizzle-orm";
 
 import { sendAuthEmail } from "./email";
 import { assertOtpSendAllowed, recordOtpSend } from "./otp-throttle";
@@ -163,7 +164,7 @@ const buildAuthOptions = (
   databaseHooks: {
     user: {
       update: {
-        before: (updated) => {
+        before: async (updated) => {
           const nextUsername =
             typeof updated.username === "string" ? updated.username : null;
 
@@ -174,7 +175,38 @@ const buildAuthOptions = (
             });
           }
 
-          return Promise.resolve({ data: updated });
+          if (typeof updated.role === "string" && updated.id) {
+            const [current] = await database
+              .select({
+                username: schema.user.username,
+                role: schema.user.role,
+              })
+              .from(schema.user)
+              .where(eq(schema.user.id, updated.id))
+              .limit(1);
+            const protectedAccount = isSeededAccount(
+              nextUsername ?? current?.username
+            );
+
+            if (protectedAccount && updated.role !== current?.role) {
+              throw new APIError("FORBIDDEN", {
+                message:
+                  "The administrator, Principal and Deputy Principal roles cannot be changed",
+              });
+            }
+
+            if (
+              !protectedAccount &&
+              updated.role !== current?.role &&
+              !["teacher", "user"].includes(updated.role)
+            ) {
+              throw new APIError("FORBIDDEN", {
+                message: "User roles may only be changed to Teacher or User",
+              });
+            }
+          }
+
+          return { data: updated };
         },
       },
     },

@@ -1,4 +1,4 @@
-import type { staff } from "@school-student-teacher-management/db/schema/staff";
+import type { StaffListItem } from "@school-student-teacher-management/api/routers/staff/list-staff";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -11,16 +11,16 @@ import { IconCalendarTime, IconId } from "@tabler/icons-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-type Staff = typeof staff.$inferSelect;
+type TeacherReference = Pick<StaffListItem, "id" | "name" | "email" | "phone">;
 
 interface NewTeacherNextStepsDialogProps {
-  teacher: Staff | null;
+  teacher: TeacherReference | null;
   /** Login username (the teacher's NIC) returned by createStaff. */
   loginUsername?: string | null;
   /** One-time initial password shown only right after creation. */
   initialPassword?: string | null;
   onOpenChange: (open: boolean) => void;
-  onManageTimetableClick: (teacher: Staff) => void;
+  onManageTimetableClick: (teacher: TeacherReference) => void;
 }
 
 /** Shown right after a teacher is created: their fresh login credentials —

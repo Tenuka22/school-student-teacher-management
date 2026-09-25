@@ -225,10 +225,14 @@ const RouteComponent = () => {
         <AlertDialogContent>
           <AlertDialogTitle>Delete Academic Year</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete {deleteTarget?.year}? This only
-            works if the year has no classes, position assignments, periods, or
-            homeroom history attached — otherwise it will be rejected. This
-            action cannot be undone.
+            Are you sure you want to delete {deleteTarget?.year}? A year can
+            only be deleted while nothing is attached to it — no classes,
+            position assignments, subject assignments, leave requests, leave
+            entitlements, attendance records, attendance policy, attendance
+            usage, period assignments or homeroom history. Every year created
+            here is seeded with leave entitlements and an attendance policy, so
+            in practice a year must be emptied first. The active year cannot be
+            deleted at all; switch to another year first. This cannot be undone.
           </AlertDialogDescription>
           <div className="flex justify-end gap-4">
             <AlertDialogCancel>Cancel</AlertDialogCancel>

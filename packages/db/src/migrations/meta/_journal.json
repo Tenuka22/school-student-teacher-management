@@ -78,6 +78,48 @@
       "when": 1790095811866,
       "tag": "0010_staff-category-leave-entitlement-attendance-policy",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790257276659,
+      "tag": "0011_robust_midnight",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790258686606,
+      "tag": "0012_careless_sue_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790258970963,
+      "tag": "0013_volatile_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790266258218,
+      "tag": "0014_thick_secret_warriors",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790316039124,
+      "tag": "0015_add_attendance_ranges_and_maternity_payment",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790316104032,
+      "tag": "0016_remove_monthly_half_day_allowance",
+      "breakpoints": true
     }
   ]
 }

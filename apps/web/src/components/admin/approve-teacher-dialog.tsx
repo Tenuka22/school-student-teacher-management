@@ -1,3 +1,4 @@
+import { roleLabel } from "@school-student-teacher-management/auth/roles";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,8 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 import { useState } from "react";
 
+import { describeBlocker, employmentStatusLabel } from "./request-blocker";
+
 /** One row of the review, as `listTeacherRequests` returns it. */
 export interface TeacherRequest {
   id: string;
@@ -16,22 +19,22 @@ export interface TeacherRequest {
   username: string | null;
   displayUsername: string | null;
   hasAvatar: boolean;
-  role: string;
+  role: string | null;
   emailVerified: boolean;
   banned: boolean;
   banReason: string | null;
   createdAt: string;
   updatedAt: string;
-  sessionCount: number;
-  lastSeenAt: string | null;
-  lastSeenIp: string | null;
-  lastSeenAgent: string | null;
+  signInCount: number;
+  lastSignInAt: string | null;
+  lastSignInIp: string | null;
+  lastSignInAgent: string | null;
+  staffRecord: {
+    id: string;
+    staffCategory: string;
+    employmentStatus: string | null;
+  } | null;
 }
-
-const ROLE_LABELS: Record<string, string> = {
-  "teacher-requester": "Asked to join as staff",
-  user: "General account",
-};
 
 const formatDateTime = (value: string | null): string => {
   if (!value) {
@@ -39,7 +42,6 @@ const formatDateTime = (value: string | null): string => {
   }
 
   const parsed = new Date(value);
-
   if (Number.isNaN(parsed.getTime())) {
     return value;
   }
@@ -74,14 +76,14 @@ const getWaitingFor = (createdAt: string): string => {
 };
 const getToneClass = (tone: "default" | "good" | "bad"): string => {
   if (tone === "good") {
-    return "text-[#0B5E1A]";
+    return "text-success";
   }
 
   if (tone === "bad") {
-    return "text-[#A51919]";
+    return "text-destructive";
   }
 
-  return "text-[#013405]";
+  return "text-primary";
 };
 
 const getBrowser = (userAgent: string): string => {
@@ -145,8 +147,8 @@ const DetailRow = ({
   value: string;
   tone?: "default" | "good" | "bad";
 }) => (
-  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[#013405]/8 py-2 last:border-b-0">
-    <dt className="text-[12px] font-bold tracking-[0.14em] text-[#013405]/55">
+  <div className="border-primary/8 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b py-2 last:border-b-0">
+    <dt className="text-primary/55 text-[12px] font-bold tracking-[0.14em]">
       {label}
     </dt>
     <dd
@@ -186,6 +188,48 @@ const getVerification = (
       }
     : { value: "Not confirmed — approval will be refused", tone: "bad" };
 
+const describeStaffRecord = (request: TeacherRequest): string => {
+  if (!request.staffRecord) {
+    return "Not linked to a staff record";
+  }
+
+  const category =
+    request.staffRecord.staffCategory === "teacher"
+      ? "teaching staff"
+      : "office staff";
+
+  return `Linked · ${category}`;
+};
+
+/**
+ * How the employment status reads, and whether it is a problem.
+ *
+ * An unset status is a gap in the record, not a refusal: approval records it as
+ * Active, so it is shown in the positive tone. A status that stands against
+ * employment is the thing the approver has to notice.
+ */
+const describeEmploymentStatus = (request: TeacherRequest): string => {
+  if (!request.staffRecord) {
+    return "—";
+  }
+
+  if (!request.staffRecord.employmentStatus) {
+    return "Not set — approval will record it as Active";
+  }
+
+  return employmentStatusLabel(request.staffRecord.employmentStatus);
+};
+
+const getEmploymentTone = (request: TeacherRequest): "good" | "bad" => {
+  const status = request.staffRecord?.employmentStatus;
+
+  if (!status || status === "active") {
+    return "good";
+  }
+
+  return "bad";
+};
+
 const getConfirmLabel = (isPending: boolean, isConfirming: boolean): string => {
   if (isPending) {
     return "APPROVING…";
@@ -219,6 +263,8 @@ export const ApproveTeacherDialog = ({
 }: ApproveTeacherDialogProps) => {
   const [isConfirming, setIsConfirming] = useState(false);
   const isOpen = request !== null;
+  // The same rules the server enforces, stated before the click.
+  const blocker = request ? describeBlocker(request) : null;
 
   // The second click is the approval: the first reveals what is about to
   // happen, so nobody grants a role by muscle memory.
@@ -247,10 +293,10 @@ export const ApproveTeacherDialog = ({
     <Dialog onOpenChange={handleOpenChange} open={isOpen}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
-          <div className="text-[12px] font-extrabold tracking-[0.24em] text-[#A51919]">
+          <div className="text-destructive text-[12px] font-extrabold tracking-[0.24em]">
             STAFF REGISTRATION REVIEW
           </div>
-          <DialogTitle className="font-heading text-[26px] font-semibold text-[#013405]">
+          <DialogTitle className="font-heading text-primary text-[26px] font-semibold">
             {request?.name}
           </DialogTitle>
           <DialogDescription>
@@ -261,7 +307,7 @@ export const ApproveTeacherDialog = ({
         </DialogHeader>
 
         {request && (
-          <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-2">
+          <div className="border-primary/14 bg-card border px-[22px] py-2">
             <dl>
               <DetailRow label="FULL NAME" value={request.name} />
               <DetailRow label="EMAIL ADDRESS" value={request.email} />
@@ -272,12 +318,22 @@ export const ApproveTeacherDialog = ({
               />
               <DetailRow
                 label="REGISTERED AS"
-                value={ROLE_LABELS[request.role] ?? request.role}
+                value={roleLabel(request.role)}
               />
               <DetailRow
                 label="EMAIL VERIFIED"
                 tone={getVerification(request).tone}
                 value={getVerification(request).value}
+              />
+              <DetailRow
+                label="STAFF RECORD"
+                tone={request.staffRecord ? "good" : "bad"}
+                value={describeStaffRecord(request)}
+              />
+              <DetailRow
+                label="EMPLOYMENT STATUS"
+                tone={getEmploymentTone(request)}
+                value={describeEmploymentStatus(request)}
               />
               <DetailRow
                 label="ACCOUNT STATE"
@@ -289,20 +345,20 @@ export const ApproveTeacherDialog = ({
                 value={`${formatDateTime(request.createdAt)} · waiting ${getWaitingFor(request.createdAt)}`}
               />
               <DetailRow
-                label="LAST ACTIVE"
-                value={formatDateTime(request.lastSeenAt)}
+                label="MOST RECENT SIGN-IN"
+                value={formatDateTime(request.lastSignInAt)}
               />
               <DetailRow
-                label="ACTIVE SESSIONS"
+                label="SIGN-INS ON RECORD"
                 value={
-                  request.sessionCount === 0
+                  request.signInCount === 0
                     ? "None — they have not signed in since registering"
-                    : `${request.sessionCount}`
+                    : `${request.signInCount}`
                 }
               />
               <DetailRow
-                label="LAST USED FROM"
-                value={`${getAgentSummary(request.lastSeenAgent)}${request.lastSeenIp ? ` · ${request.lastSeenIp}` : ""}`}
+                label="LAST SIGNED IN FROM"
+                value={`${getAgentSummary(request.lastSignInAgent)}${request.lastSignInIp ? ` · ${request.lastSignInIp}` : ""}`}
               />
             </dl>
           </div>
@@ -312,24 +368,23 @@ export const ApproveTeacherDialog = ({
           <button
             type="button"
             onClick={() => handleOpenChange(false)}
-            className="border border-[#013405]/30 px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#013405] transition-colors hover:bg-[#013405]/5"
+            className="border-primary/30 text-primary hover:bg-primary/5 border px-4 py-2 text-xs font-extrabold tracking-[0.04em] transition-colors"
           >
             CANCEL
           </button>
           <button
             type="button"
-            disabled={isPending || request?.emailVerified !== true}
+            disabled={isPending || blocker !== null}
             onClick={handlePrimary}
-            className="bg-[#013405] px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover px-4 py-2 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:opacity-50"
           >
             {getConfirmLabel(isPending, isConfirming)}
           </button>
         </DialogFooter>
 
-        {request && !request.emailVerified && (
-          <p className="text-[12.5px] leading-relaxed text-[#A51919]">
-            This account has not confirmed its email address. Ask them to enter
-            the code already sent to {request.email}, then review again.
+        {request && blocker !== null && (
+          <p className="text-destructive text-[12.5px] leading-relaxed">
+            {blocker}
           </p>
         )}
       </DialogContent>

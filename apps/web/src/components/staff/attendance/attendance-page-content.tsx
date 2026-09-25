@@ -1,6 +1,15 @@
 "use client";
 
+import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@school-student-teacher-management/ui/components/card";
 import {
   Empty,
   EmptyContent,
@@ -9,135 +18,495 @@ import {
 } from "@school-student-teacher-management/ui/components/empty";
 import {
   Field,
+  FieldDescription,
+  FieldGroup,
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
 import { Input } from "@school-student-teacher-management/ui/components/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@school-student-teacher-management/ui/components/select";
+import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import { IconSearch, IconUsersPlus } from "@tabler/icons-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { AttendanceGrid } from "@/components/staff/attendance/attendance-grid";
+import type { AcademicYear } from "@/components/staff/attendance/use-attendance-page";
 import { useAttendancePage } from "@/components/staff/attendance/use-attendance-page";
 import { PortTeachersDialog } from "@/components/staff/teacher-management/port-teachers-dialog";
+import { orpc } from "@/utils/orpc";
 
-export const AttendancePageContent = () => {
-  const page = useAttendancePage();
+interface AttendancePolicyValues {
+  arrivalCutoffTime: string;
+  shortLeavesPerMonth: number;
+  primaryStartPeriodNumber: number;
+  primaryEndPeriodNumber: number;
+  secondaryStartPeriodNumber: number;
+  secondaryEndPeriodNumber: number;
+}
+
+interface AttendancePolicyUsage {
+  yearMonth: string;
+  shortLeavesUsed: number;
+}
+
+interface AttendancePolicyEditorProps {
+  academicYear: AcademicYear;
+  policy: AttendancePolicyValues;
+  usage: AttendancePolicyUsage | null;
+  isSaving: boolean;
+  onSave: (values: AttendancePolicyValues) => Promise<void>;
+}
+
+const AttendancePolicyEditor = ({
+  academicYear,
+  policy,
+  usage,
+  isSaving,
+  onSave,
+}: AttendancePolicyEditorProps) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    await onSave({
+      arrivalCutoffTime: String(formData.get("arrivalCutoffTime")),
+      shortLeavesPerMonth: Number(formData.get("shortLeavesPerMonth")),
+      primaryStartPeriodNumber: Number(
+        formData.get("primaryStartPeriodNumber")
+      ),
+      primaryEndPeriodNumber: Number(formData.get("primaryEndPeriodNumber")),
+      secondaryStartPeriodNumber: Number(
+        formData.get("secondaryStartPeriodNumber")
+      ),
+      secondaryEndPeriodNumber: Number(
+        formData.get("secondaryEndPeriodNumber")
+      ),
+    });
+  };
+
+  return (
+    <Card size="sm" className="w-full">
+      <form onSubmit={handleSubmit}>
+        <CardHeader className="border-b">
+          <CardTitle>Attendance policy</CardTitle>
+          <CardDescription>
+            Arrival, short leave, and half-day period rules for{" "}
+            {academicYear.year}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <Field>
+              <FieldLabel htmlFor="attendance-policy-cutoff">
+                Arrival cut-off
+              </FieldLabel>
+              <Input
+                id="attendance-policy-cutoff"
+                name="arrivalCutoffTime"
+                type="time"
+                defaultValue={policy.arrivalCutoffTime}
+                required
+                disabled={isSaving}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="attendance-policy-short-leaves">
+                Short leaves / month
+              </FieldLabel>
+              <Input
+                id="attendance-policy-short-leaves"
+                name="shortLeavesPerMonth"
+                type="number"
+                min="0"
+                max="31"
+                step="1"
+                defaultValue={policy.shortLeavesPerMonth}
+                required
+                disabled={isSaving}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="attendance-policy-primary-start">
+                Primary range starts
+              </FieldLabel>
+              <Input
+                id="attendance-policy-primary-start"
+                name="primaryStartPeriodNumber"
+                type="number"
+                min="1"
+                max="8"
+                step="1"
+                defaultValue={policy.primaryStartPeriodNumber}
+                required
+                disabled={isSaving}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="attendance-policy-primary-end">
+                Primary range ends
+              </FieldLabel>
+              <Input
+                id="attendance-policy-primary-end"
+                name="primaryEndPeriodNumber"
+                type="number"
+                min="1"
+                max="8"
+                step="1"
+                defaultValue={policy.primaryEndPeriodNumber}
+                required
+                disabled={isSaving}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="attendance-policy-secondary-start">
+                Secondary range starts
+              </FieldLabel>
+              <Input
+                id="attendance-policy-secondary-start"
+                name="secondaryStartPeriodNumber"
+                type="number"
+                min="1"
+                max="8"
+                step="1"
+                defaultValue={policy.secondaryStartPeriodNumber}
+                required
+                disabled={isSaving}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="attendance-policy-secondary-end">
+                Secondary range ends
+              </FieldLabel>
+              <Input
+                id="attendance-policy-secondary-end"
+                name="secondaryEndPeriodNumber"
+                type="number"
+                min="1"
+                max="8"
+                step="1"
+                defaultValue={policy.secondaryEndPeriodNumber}
+                required
+                disabled={isSaving}
+              />
+              <FieldDescription>
+                Half-days have no monthly allowance. Two half-days count as one
+                full leave day; a third in the same month is recorded as a half
+                day.
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </CardContent>
+        <CardFooter className="flex-wrap justify-between gap-3">
+          <div>
+            <p className="font-medium">Your short leaves this month</p>
+            <p className="text-muted-foreground">
+              {usage
+                ? `${usage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record`
+                : "This policy is school-wide; the count here is your own usage, not the whole staff."}
+            </p>
+          </div>
+          <Button type="submit" size="sm" disabled={isSaving}>
+            {isSaving ? "Saving…" : "Save policy"}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+};
+
+const AttendancePolicyCard = ({
+  academicYear,
+}: {
+  academicYear: AcademicYear | undefined;
+}) => {
+  const queryClient = useQueryClient();
+  const updateMutation = useMutation(
+    orpc.staff.attendance.updatePolicy.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Attendance policy updated");
+        if (academicYear) {
+          await queryClient.invalidateQueries({
+            queryKey: orpc.staff.attendance.getPolicy.queryOptions({
+              input: { academicYearId: academicYear.id },
+            }).queryKey,
+          });
+        }
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      },
+    })
+  );
+  const policyQuery = useQuery({
+    ...orpc.staff.attendance.getPolicy.queryOptions({
+      input: { academicYearId: academicYear?.id ?? "" },
+    }),
+    enabled: Boolean(academicYear?.id),
+  });
+
+  if (!academicYear || policyQuery.isLoading) {
+    return (
+      <Card size="sm">
+        <CardHeader className="border-b">
+          <CardTitle>Attendance policy</CardTitle>
+          <CardDescription>Loading year policy…</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton key={index} className="h-8" />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (policyQuery.isError || !policyQuery.data) {
+    return (
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle>Attendance policy</CardTitle>
+          <CardDescription>
+            The policy for {academicYear.year} could not be loaded.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              await policyQuery.refetch();
+            }}
+          >
+            Try again
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!policyQuery.data.policy) {
+    return (
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle>Attendance policy</CardTitle>
+          <CardDescription>
+            Arrival, short leave, and half-day period rules for{" "}
+            {academicYear.year}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Empty className="min-h-32 border-none py-2">
+            <EmptyTitle>Attendance policy not configured</EmptyTitle>
+            <EmptyDescription>
+              Configure the arrival cut-off, short-leave allowance, and
+              Primary/Secondary period ranges for this academic year.
+            </EmptyDescription>
+            <EmptyContent>
+              <Button
+                type="button"
+                size="sm"
+                disabled={updateMutation.isPending}
+                onClick={() =>
+                  updateMutation.mutate({ academicYearId: academicYear.id })
+                }
+              >
+                {updateMutation.isPending
+                  ? "Configuring…"
+                  : "Configure default policy"}
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <AttendancePolicyEditor
+      key={`${academicYear.id}:${policyQuery.dataUpdatedAt}`}
+      academicYear={academicYear}
+      policy={policyQuery.data.policy}
+      usage={policyQuery.data.usage}
+      isSaving={updateMutation.isPending}
+      onSave={async (values) => {
+        await updateMutation.mutateAsync({
+          academicYearId: academicYear.id,
+          ...values,
+        });
+      }}
+    />
+  );
+};
+
+const formatDateRange = (startDate: string, endDate: string) =>
+  `${format(new Date(`${startDate}T00:00:00`), "d MMM yyyy")} – ${format(
+    new Date(`${endDate}T00:00:00`),
+    "d MMM yyyy"
+  )}`;
+
+interface AttendancePageContentProps {
+  academicYear: number;
+}
+
+export const AttendancePageContent = ({
+  academicYear,
+}: AttendancePageContentProps) => {
+  const page = useAttendancePage(academicYear);
   const [filter, setFilter] = useState("");
   const [isPortDialogOpen, setIsPortDialogOpen] = useState(false);
   const showImportBanner =
     !page.isLoadingTeachers &&
+    !page.isErrorTeachers &&
     page.teachers.length === 0 &&
     page.hasPreviousYear;
 
+  const hasDateRange = Boolean(
+    page.currentYear?.startDate && page.currentYear.endDate
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-3xl font-bold">Attendance</h1>
         <p className="text-muted-foreground mt-2">
-          Tick a period off to mark that teacher absent for it (with a reason) -
-          saves immediately, no separate save step. A teacher absent for every
-          scheduled period that day is treated as absent for the whole day.
+          Each tick is saved as soon as you make it — there is no separate save
+          step. Empty a period to record an absence for it, and add a reason to
+          help the Principal decide on leave. A teacher absent for all{" "}
+          {page.periods.length} periods is recorded as absent for the whole day.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="flex flex-wrap items-end gap-2">
-          <Field className="w-24">
-            <FieldLabel htmlFor="attendance-day">Day</FieldLabel>
-            <Select
-              value={String(page.day)}
-              onValueChange={(value: string | null) => {
-                if (value) {
-                  page.setDay(Number(value));
-                }
-              }}
-            >
-              <SelectTrigger id="attendance-day">
-                <SelectValue placeholder="Day">
-                  {(value: string | null) => value ?? "Day"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {page.dayOptions.map((option) => (
-                  <SelectItem key={option.value} value={String(option.value)}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field className="w-40">
-            <FieldLabel htmlFor="attendance-month">Month</FieldLabel>
-            <Select
-              value={String(page.month)}
-              onValueChange={(value: string | null) => {
-                if (value) {
-                  page.setMonth(Number(value));
-                }
-              }}
-            >
-              <SelectTrigger id="attendance-month">
-                <SelectValue placeholder="Month">
-                  {(value: string | null) =>
-                    page.monthOptions.find((o) => String(o.value) === value)
-                      ?.label ?? "Month"
+      <AttendancePolicyCard academicYear={page.currentYear} />
+
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-wrap items-end gap-2">
+            <Field className="w-24">
+              <FieldLabel htmlFor="attendance-day">Day</FieldLabel>
+              <Select
+                value={String(page.day)}
+                onValueChange={(value: string | null) => {
+                  if (value) {
+                    page.setDay(Number(value));
                   }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {page.monthOptions.map((option) => (
-                  <SelectItem key={option.value} value={String(option.value)}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field className="w-28">
-            <FieldLabel htmlFor="attendance-year">Year</FieldLabel>
-            <Select
-              value={String(page.year)}
-              onValueChange={(value: string | null) => {
-                if (value) {
-                  page.setYear(Number(value));
-                }
-              }}
-            >
-              <SelectTrigger id="attendance-year">
-                <SelectValue placeholder="Year">
-                  {(value: string | null) => value ?? "Year"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {page.yearOptions.map((yearOption) => (
-                  <SelectItem key={yearOption} value={String(yearOption)}>
-                    {yearOption}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                }}
+              >
+                <SelectTrigger id="attendance-day">
+                  <SelectValue placeholder="Day">
+                    {(value: string | null) => value ?? "Day"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {page.dayOptions.map((option) => (
+                      <SelectItem
+                        key={option.value}
+                        value={String(option.value)}
+                      >
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="w-40">
+              <FieldLabel htmlFor="attendance-month">Month</FieldLabel>
+              <Select
+                value={String(page.month)}
+                onValueChange={(value: string | null) => {
+                  if (value) {
+                    page.setMonth(Number(value));
+                  }
+                }}
+              >
+                <SelectTrigger id="attendance-month">
+                  <SelectValue placeholder="Month">
+                    {(value: string | null) =>
+                      page.monthOptions.find(
+                        (option) => String(option.value) === value
+                      )?.label ?? "Month"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {page.monthOptions.map((option) => (
+                      <SelectItem
+                        key={option.value}
+                        value={String(option.value)}
+                      >
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="w-28">
+              <FieldLabel htmlFor="attendance-year">Calendar year</FieldLabel>
+              <Select
+                value={String(page.year)}
+                onValueChange={(value: string | null) => {
+                  if (value) {
+                    page.setYear(Number(value));
+                  }
+                }}
+              >
+                <SelectTrigger id="attendance-year">
+                  <SelectValue placeholder="Year">
+                    {(value: string | null) => value ?? "Year"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {page.yearOptions.map((yearOption) => (
+                      <SelectItem key={yearOption} value={String(yearOption)}>
+                        {yearOption}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          <Field className="w-64 sm:ml-auto">
+            <FieldLabel htmlFor="attendance-filter">Filter teachers</FieldLabel>
+            <div className="relative">
+              <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+              <Input
+                id="attendance-filter"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Search by name..."
+                className="pl-8"
+              />
+            </div>
           </Field>
         </div>
-
-        <Field className="w-64 sm:ml-auto">
-          <FieldLabel htmlFor="attendance-filter">Filter teachers</FieldLabel>
-          <div className="relative">
-            <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-            <Input
-              id="attendance-filter"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="IconSearch by name..."
-              className="pl-8"
-            />
-          </div>
-        </Field>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={hasDateRange ? "outline" : "destructive"}>
+            Academic year {page.currentYear?.year ?? "—"}
+          </Badge>
+          <p className="text-muted-foreground text-xs">
+            {hasDateRange
+              ? `Attendance dates are limited to ${formatDateRange(
+                  page.currentYear?.startDate ?? "",
+                  page.currentYear?.endDate ?? ""
+                )}.`
+              : "This year has no date range. Add its start and end dates to enforce attendance limits."}
+          </p>
+        </div>
       </div>
 
       {showImportBanner ? (
@@ -149,7 +518,7 @@ export const AttendancePageContent = () => {
           </EmptyDescription>
           <EmptyContent>
             <Button onClick={() => setIsPortDialogOpen(true)}>
-              <IconUsersPlus className="mr-2 size-4" />
+              <IconUsersPlus data-icon="inline-start" />
               Import from Previous Year
             </Button>
           </EmptyContent>

@@ -55,9 +55,11 @@ export const ClassCard = ({
   return (
     <Card
       className={
+        // A 2px edge, not a 4px one: the state is already stated in words below
+        // ("Not assigned"), and the bar only has to reinforce it.
         hasTeacher
-          ? "border-l-primary gap-3.5 border-l-4 p-5"
-          : "border-l-muted-foreground/30 gap-3.5 border-l-4 p-5"
+          ? "border-l-primary gap-3.5 border-l-2 p-5"
+          : "border-l-muted-foreground/30 gap-3.5 border-l-2 p-5"
       }
     >
       <div className="flex items-start justify-between gap-2">

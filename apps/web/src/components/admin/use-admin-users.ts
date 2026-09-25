@@ -19,32 +19,19 @@ export interface AdminUserRow {
   createdAt: Date | string;
 }
 
-export const ROLES = [
-  "admin",
-  "principal",
-  "vicePrincipal",
-  "teacher",
-  "user",
-] as const;
-
-export type Role = (typeof ROLES)[number];
-
-export const ROLE_LABELS: Record<Role, string> = {
-  admin: "Admin",
-  principal: "Principal",
-  vicePrincipal: "Deputy Principal",
-  teacher: "Teacher",
-  user: "User",
-};
-
-/** Narrows a stored or form value to a known role, defaulting to `user`. */
-export const toRole = (value: string | null | undefined): Role =>
-  ROLES.includes(value as Role) ? (value as Role) : "user";
-
 /** Which ban dialog is open: none, ban, or unban. */
 export type BanDialogState = { target: BanTarget; banned: boolean } | null;
 
 const USERS_QUERY_KEY = ["auth", "admin", "list-users"];
+
+/**
+ * How many accounts one page of the table holds.
+ *
+ * This used to be a bare `limit: 200` with no `total` and no paging, so a
+ * College with more than 200 accounts saw a list that silently stopped and a
+ * heading that claimed it was "every account that can sign in".
+ */
+export const USERS_PAGE_SIZE = 50;
 
 /**
  * Data and mutations for the users page.
@@ -52,45 +39,41 @@ const USERS_QUERY_KEY = ["auth", "admin", "list-users"];
  * Kept out of the component so the markup reads as markup: five queries and
  * mutations in one render function is how a table turns into a maze, and the
  * cognitive-complexity budget is better spent on what the page shows.
+ *
+ * Roles are deliberately read-only here. A role promotes someone into a
+ * workspace, but the checks that belong with that — a verified address, a staff
+ * record, a category, an employment status — are the approval service's job
+ * (`teacher-requests.ts`), and leadership review authority comes from a
+ * `staff_position` row rather than from this table.
  */
 export const useAdminUsers = () => {
   const queryClient = useQueryClient();
   const [banDialog, setBanDialog] = useState<BanDialogState>(null);
   const [isPurgeOpen, setIsPurgeOpen] = useState(false);
+  const [page, setPage] = useState(0);
 
   const usersQuery = useQuery({
-    queryKey: USERS_QUERY_KEY,
+    queryKey: [...USERS_QUERY_KEY, page],
     queryFn: async () => {
       const { data } = await authClient.admin.listUsers({
-        query: { limit: 200, sortBy: "createdAt", sortDirection: "asc" },
+        query: {
+          limit: USERS_PAGE_SIZE,
+          offset: page * USERS_PAGE_SIZE,
+          sortBy: "createdAt",
+          sortDirection: "asc",
+        },
       });
-      return (data?.users ?? []) as unknown as AdminUserRow[];
+
+      return {
+        users: (data?.users ?? []) as unknown as AdminUserRow[],
+        total: data?.total ?? 0,
+      };
     },
   });
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
   };
-
-  // The admin plugin's client type only knows Better Auth's built-in roles,
-  // because the configured role set lives on the server. `teacher` is a real
-  // role here, so the value is narrowed rather than dropped from the UI.
-  const setRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: Role }) => {
-      const { error } = await authClient.admin.setRole({
-        userId,
-        role: role as "admin" | "user",
-      });
-      if (error) {
-        throw new Error(error.message ?? "Failed to change role");
-      }
-    },
-    onSuccess: async () => {
-      await invalidate();
-      toast.success("Role updated");
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
 
   const banMutation = useMutation({
     mutationFn: async ({
@@ -117,12 +100,19 @@ export const useAdminUsers = () => {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const purgePreviewQuery = useQuery({
-    ...orpc.staff.previewUnverifiedPurge.queryOptions(),
-    // Re-read on open rather than keeping a stale count, so the list in the
-    // dialog is current at the moment of the decision.
-    enabled: !isPurgeOpen,
-  });
+  const purgePreviewQuery = useQuery(
+    orpc.staff.previewUnverifiedPurge.queryOptions()
+  );
+
+  /**
+   * Re-read the purge preview at the moment of the decision, so the count in
+   * the dialog describes the accounts about to be deleted rather than whatever
+   * was true when the page loaded.
+   */
+  const openPurgeDialog = () => {
+    setIsPurgeOpen(true);
+    void purgePreviewQuery.refetch();
+  };
 
   const purgeMutation = useMutation(
     orpc.staff.purgeUnverified.mutationOptions({
@@ -139,15 +129,25 @@ export const useAdminUsers = () => {
     })
   );
 
+  const total = usersQuery.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / USERS_PAGE_SIZE));
+
   return {
-    users: usersQuery.data ?? [],
+    users: usersQuery.data?.users ?? [],
+    totalUsers: total,
+    page,
+    pageCount,
+    goToPage: setPage,
     isLoadingUsers: usersQuery.isPending,
-    setRoleMutation,
+    isErrorUsers: usersQuery.isError,
+    errorUsers: usersQuery.error as Error | null,
+    refetchUsers: usersQuery.refetch,
     banDialog,
     setBanDialog,
     banMutation,
     isPurgeOpen,
     setIsPurgeOpen,
+    openPurgeDialog,
     purgePreview: purgePreviewQuery.data,
     isLoadingPurgePreview: purgePreviewQuery.isPending,
     purgeMutation,

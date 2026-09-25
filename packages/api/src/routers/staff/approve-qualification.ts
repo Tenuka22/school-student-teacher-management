@@ -3,16 +3,17 @@ import {
   teacherQualification,
   teacherQualificationIdSchema,
 } from "@school-student-teacher-management/db/schema/qualifications";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { requireQualificationPermission } from "../../index";
 
 /**
  * Approve or reject a qualification's supporting document.
- * Admin only. Sets the reviewedBy, reviewNote, and reviewedAt fields.
+ * Requires qualification:approve. Sets the reviewedBy, reviewNote, and reviewedAt fields.
  */
-export const approveQualification = adminProcedure
+export const approveQualification = requireQualificationPermission("approve")
   .input(
     v.object({
       id: teacherQualificationIdSchema,
@@ -32,11 +33,17 @@ export const approveQualification = adminProcedure
       });
     }
 
+    const [reviewer] = await context.db
+      .select({ id: staff.id })
+      .from(staff)
+      .where(eq(staff.userId, context.session.user.id))
+      .limit(1);
+
     const [record] = await context.db
       .update(teacherQualification)
       .set({
         documentStatus: input.status,
-        reviewedBy: context.session.user.id,
+        reviewedBy: reviewer?.id ?? null,
         reviewNote: input.reviewNote,
         reviewedAt: new Date(),
       })

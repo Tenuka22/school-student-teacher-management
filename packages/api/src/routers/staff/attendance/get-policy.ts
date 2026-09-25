@@ -10,13 +10,8 @@ import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
 import { protectedProcedure } from "../../../index";
+import { requireAttendanceAcademicYear } from "./academic-year";
 
-/**
- * The attendance policy for one academic year, with the signed-in staff
- * member's current month usage (when they have a staff record). Policy
- * values are the "maximum", usage the "current" — the min/max/current
- * record pattern, all read from data so it follows year edits.
- */
 export const getPolicy = protectedProcedure
   .input(
     v.object({
@@ -24,7 +19,8 @@ export const getPolicy = protectedProcedure
     })
   )
   .handler(async ({ input, context }) => {
-    // Independent lookups — run in parallel.
+    await requireAttendanceAcademicYear(context.db, input.academicYearId);
+
     const [[policy], [staffRecord]] = await Promise.all([
       context.db
         .select()
@@ -41,7 +37,6 @@ export const getPolicy = protectedProcedure
     let usage: {
       yearMonth: string;
       shortLeavesUsed: number;
-      halfDaysUsed: number;
     } | null = null;
 
     if (staffRecord) {
@@ -53,6 +48,7 @@ export const getPolicy = protectedProcedure
         .where(
           and(
             eq(shortLeaveUsage.staffId, staffRecord.id),
+            eq(shortLeaveUsage.academicYearId, input.academicYearId),
             eq(shortLeaveUsage.yearMonth, yearMonth)
           )
         )
@@ -61,7 +57,6 @@ export const getPolicy = protectedProcedure
       usage = {
         yearMonth,
         shortLeavesUsed: row?.shortLeavesUsed ?? 0,
-        halfDaysUsed: row ? Number(row.halfDaysUsed) : 0,
       };
     }
 
@@ -70,8 +65,10 @@ export const getPolicy = protectedProcedure
         ? {
             arrivalCutoffTime: policy.arrivalCutoffTime,
             shortLeavesPerMonth: policy.shortLeavesPerMonth,
-            halfDaysPerMonth: policy.halfDaysPerMonth,
-            halfDaysPerFullDay: Number(policy.halfDaysPerFullDay),
+            primaryStartPeriodNumber: policy.primaryStartPeriodNumber,
+            primaryEndPeriodNumber: policy.primaryEndPeriodNumber,
+            secondaryStartPeriodNumber: policy.secondaryStartPeriodNumber,
+            secondaryEndPeriodNumber: policy.secondaryEndPeriodNumber,
           }
         : null,
       usage,

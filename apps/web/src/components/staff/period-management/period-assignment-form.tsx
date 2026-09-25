@@ -1,5 +1,6 @@
 "use client";
 
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
 import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
 import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
@@ -107,7 +108,12 @@ export const PeriodAssignmentForm = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
 
-  const subjectsQuery = useQuery(orpc.staff.listSubjects.queryOptions({}));
+  const subjectsQuery = useQuery({
+    ...orpc.staff.listSubjects.queryOptions({
+      input: { academicYearId: academicYearId ?? "" },
+    }),
+    enabled: Boolean(academicYearId),
+  });
 
   const filteredSubjects = useMemo(() => {
     const subjects = subjectsQuery.data as unknown[] | undefined;
@@ -264,7 +270,7 @@ export const PeriodAssignmentForm = ({
           <SelectContent>
             {filteredSubjects.map((subject) => (
               <SelectItem key={subject.subjectKey} value={subject.subjectKey}>
-                {subject.subjectKey}
+                {subjectLabel(subject.subjectKey)}
               </SelectItem>
             ))}
           </SelectContent>

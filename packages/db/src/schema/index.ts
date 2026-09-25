@@ -6,6 +6,7 @@ export * from "./attendance";
 export * from "./leaves";
 export * from "./marking";
 export * from "./staff";
+export * from "./teacher-subjects";
 export * from "./qualifications";
 export * from "./files";
 export * from "./primitives";
@@ -41,15 +42,9 @@ export {
 } from "./academics";
 
 export {
-  type PeriodConfigId,
-  periodConfigIdSchema,
   type ClassPeriodAssignmentId,
   classPeriodAssignmentIdSchema,
-  periodConfig,
   classPeriodAssignment,
-  periodConfigSelectSchema,
-  periodConfigInsertSchema,
-  periodConfigUpdateSchema,
   classPeriodAssignmentSelectSchema,
   classPeriodAssignmentInsertSchema,
   classPeriodAssignmentUpdateSchema,

@@ -72,7 +72,7 @@ export const ClassDialogs = ({
             Add a new class to the academic year
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {academicYearId && (
             <ClassForm
               formId="create-class-form"
@@ -94,7 +94,9 @@ export const ClassDialogs = ({
           <Button
             type="submit"
             form="create-class-form"
-            disabled={isCreatePending}
+            // The form only exists once a year is selected; without this the
+            // button submits nothing and reads as broken.
+            disabled={isCreatePending || !academicYearId}
           >
             {isCreatePending ? "Saving..." : "Save Class"}
           </Button>
@@ -109,7 +111,7 @@ export const ClassDialogs = ({
           <DialogTitle>Edit Class</DialogTitle>
           <DialogDescription>Update class details</DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {academicYearId && selectedClass && (
             <ClassForm
               formId="edit-class-form"
@@ -145,11 +147,12 @@ export const ClassDialogs = ({
             Select a teacher for the homeroom assignment
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {selectedClass && (
             <AssignTeacherForm
               formId="assign-teacher-form"
               currentTeacherId={selectedClass.homeroomTeacherId}
+              academicYearId={academicYearId}
               onSubmit={onAssignTeacherSubmit}
               isLoading={isAssignTeacherPending}
             />
@@ -180,8 +183,9 @@ export const ClassDialogs = ({
       <AlertDialogContent>
         <AlertDialogTitle>Delete Class</AlertDialogTitle>
         <AlertDialogDescription>
-          Are you sure you want to delete this class? This action cannot be
-          undone.
+          Deleting this class also removes everything scoped to it: its
+          timetable slots, its students&rsquo; class assignments, and its
+          homeroom history. Teachers keep their records. This cannot be undone.
         </AlertDialogDescription>
         <div className="flex justify-end gap-4">
           <AlertDialogCancel>Cancel</AlertDialogCancel>

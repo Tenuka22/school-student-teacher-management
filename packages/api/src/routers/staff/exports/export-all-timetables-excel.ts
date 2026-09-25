@@ -1,8 +1,7 @@
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
-import {
-  classPeriodAssignment,
-  periodConfig,
-} from "@school-student-teacher-management/db/schema/periods";
+import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYearIdSchema,
   staff,
@@ -10,26 +9,21 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireAssignmentPermission } from "../../../index";
+import { adminProcedure } from "../../../index";
 import { buildExcelExport } from "../../../lib/export";
 import type { ExcelSheet } from "../../../lib/export";
 
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 /** Exports every class's weekly timetable for an academic year, one worksheet per class. */
-export const exportAllTimetablesExcel = requireAssignmentPermission("read")
+export const exportAllTimetablesExcel = adminProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
-    const [classes, periods, assignments] = await Promise.all([
+    const [classes, assignments] = await Promise.all([
       context.db
         .select()
         .from(class_)
         .where(eq(class_.academicYearId, input.academicYearId)),
-      context.db
-        .select()
-        .from(periodConfig)
-        .where(eq(periodConfig.academicYearId, input.academicYearId))
-        .orderBy(periodConfig.periodNumber),
       context.db
         .select({
           classId: classPeriodAssignment.classId,
@@ -52,7 +46,7 @@ export const exportAllTimetablesExcel = requireAssignmentPermission("read")
           (a) => a.dayOfWeek === dayOfWeek && a.periodNumber === periodNumber
         );
         return assignment
-          ? `${assignment.subjectKey} - ${assignment.teacherName}`
+          ? `${subjectLabel(assignment.subjectKey)} - ${assignment.teacherName}`
           : "";
       };
 
@@ -62,7 +56,7 @@ export const exportAllTimetablesExcel = requireAssignmentPermission("read")
           { header: "Period", key: "period", width: 20 },
           ...DAY_LABELS.map((day) => ({ header: day, key: day, width: 24 })),
         ],
-        rows: periods.map((period) => ({
+        rows: CODE_DEFINED_PERIODS.map((period) => ({
           period: `${period.periodNumber} (${period.startTime}-${period.endTime})`,
           ...Object.fromEntries(
             DAY_LABELS.map((day, index) => [

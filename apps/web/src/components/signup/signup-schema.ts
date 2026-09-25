@@ -1,3 +1,7 @@
+import {
+  NIC_FORMAT_MESSAGE,
+  isValidNicFormat,
+} from "@school-student-teacher-management/db/schema/primitives";
 import * as v from "valibot";
 
 export type AccountType = "user" | "teacher";
@@ -8,7 +12,6 @@ export interface FormState {
   nic: string;
   email: string;
   phone: string;
-  staffCategory: string;
   password: string;
   confirmPassword: string;
 }
@@ -21,13 +24,9 @@ export const EMPTY_FORM: FormState = {
   nic: "",
   email: "",
   phone: "",
-  staffCategory: "",
   password: "",
   confirmPassword: "",
 };
-
-/** NIC validation mirrors the server schema (9 digits + V/X, or 12 digits). */
-const NIC_PATTERN = /^(?<nic>\d{9}[VvXx]|\d{12})$/u;
 
 const EMAIL_SCHEMA = v.pipe(v.string(), v.email());
 
@@ -35,6 +34,10 @@ const EMAIL_SCHEMA = v.pipe(v.string(), v.email());
  * Client-side mirror of the server schema. Kept in one place so both account
  * types validate through the same branch that decides which fields are even
  * collected — a `user` is never asked for a NIC, so never fails on one.
+ *
+ * The NIC rule is the `staff` table's own, imported rather than restated: a
+ * form that accepts `123456789X` and a table that refuses it produces an
+ * account with no staff record behind it.
  */
 export const validateSignup = (form: FormState): FormErrors => {
   const errors: FormErrors = {};
@@ -48,12 +51,8 @@ export const validateSignup = (form: FormState): FormErrors => {
     errors.email = "Enter a valid email address";
   }
 
-  if (isTeacher && !NIC_PATTERN.test(form.nic.trim())) {
-    errors.nic = "Enter a valid NIC (e.g. 199912345678 or 991234567V)";
-  }
-
-  if (isTeacher && !form.staffCategory) {
-    errors.staffCategory = "Select your staff category";
+  if (isTeacher && !isValidNicFormat(form.nic.trim())) {
+    errors.nic = NIC_FORMAT_MESSAGE;
   }
 
   if (form.password.length < 8) {
@@ -80,7 +79,6 @@ export const toSignupPayload = (form: FormState) => {
     ...base,
     nic: form.nic.trim(),
     phone: form.phone.trim() || undefined,
-    staffCategory: form.staffCategory as "teacher" | "officeStaff",
     password: form.password,
   };
 };

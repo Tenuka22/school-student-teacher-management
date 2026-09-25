@@ -1,17 +1,18 @@
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
 import { teacherAttendance } from "@school-student-teacher-management/db/schema/attendance";
 import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
-import { student } from "@school-student-teacher-management/db/schema/marking";
 import {
-  classPeriodAssignment,
-  periodConfig,
-} from "@school-student-teacher-management/db/schema/periods";
+  student,
+  studentClassAssignment,
+} from "@school-student-teacher-management/db/schema/marking";
+import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYear,
   staff,
+  staffPosition,
 } from "@school-student-teacher-management/db/schema/staff";
 import { createServerFn } from "@tanstack/react-start";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/services.server";
 
@@ -78,38 +79,74 @@ export const getLandingStats = createServerFn({ method: "GET" }).handler(
     const serverTime = new Date().toISOString();
 
     try {
+      const yearRows = await db
+        .select({
+          id: academicYear.id,
+          year: academicYear.year,
+          startDate: academicYear.startDate,
+          endDate: academicYear.endDate,
+        })
+        .from(academicYear)
+        .where(eq(academicYear.isCurrent, true))
+        .limit(1);
+
+      const [year] = yearRows;
+      const yearId = yearRows[0]?.id;
+
+      // Every figure below is scoped to the open year, because that is what the
+      // page says it is showing. They used to be lifetime totals wearing a
+      // "this year" caption, and the attendance tile counted every stored row —
+      // including `present` — under a label reading "absence exceptions".
       const [
-        yearRows,
         staffRows,
         studentRows,
         classRows,
-        periodRows,
         slotRows,
-        pendingLeaves,
-        teacherAttendRows,
-      ] = await Promise.all([
-        db
-          .select({
-            year: academicYear.year,
-            startDate: academicYear.startDate,
-            endDate: academicYear.endDate,
-          })
-          .from(academicYear)
-          .where(eq(academicYear.isCurrent, true))
-          .limit(1),
-        db.select({ id: staff.id }).from(staff),
-        db.select({ id: student.id }).from(student),
-        db.select({ id: class_.id }).from(class_),
-        db.select({ id: periodConfig.id }).from(periodConfig),
-        db.select({ id: classPeriodAssignment.id }).from(classPeriodAssignment),
-        db
-          .select({ id: leaveRequest.id })
-          .from(leaveRequest)
-          .where(eq(leaveRequest.status, "pending")),
-        db.select({ id: teacherAttendance.id }).from(teacherAttendance),
-      ]);
-
-      const [year] = yearRows;
+        openLeaveRows,
+        absenceRows,
+      ] = yearId
+        ? await Promise.all([
+            db
+              .select({ id: staff.id })
+              .from(staff)
+              .innerJoin(staffPosition, eq(staffPosition.staffId, staff.id))
+              .where(eq(staffPosition.academicYearId, yearId)),
+            db
+              .select({ id: student.id })
+              .from(student)
+              .innerJoin(
+                studentClassAssignment,
+                eq(studentClassAssignment.studentId, student.id)
+              )
+              .where(eq(studentClassAssignment.academicYearId, yearId)),
+            db
+              .select({ id: class_.id })
+              .from(class_)
+              .where(eq(class_.academicYearId, yearId)),
+            db
+              .select({ id: classPeriodAssignment.id })
+              .from(classPeriodAssignment)
+              .where(eq(classPeriodAssignment.academicYearId, yearId)),
+            db
+              .select({ id: leaveRequest.id })
+              .from(leaveRequest)
+              .where(
+                and(
+                  eq(leaveRequest.academicYearId, yearId),
+                  isNull(leaveRequest.finalizedAt)
+                )
+              ),
+            db
+              .select({ id: teacherAttendance.id })
+              .from(teacherAttendance)
+              .where(
+                and(
+                  eq(teacherAttendance.academicYearId, yearId),
+                  ne(teacherAttendance.status, "present")
+                )
+              ),
+          ])
+        : [[], [], [], [], [], []];
 
       return {
         version,
@@ -125,14 +162,14 @@ export const getLandingStats = createServerFn({ method: "GET" }).handler(
           {
             num: "01",
             name: "Staff",
-            desc: "Establishment roll and appointments",
+            desc: "Teachers holding a position this year",
             value: staffRows.length,
-            unit: "on roll",
+            unit: "positioned",
           },
           {
             num: "02",
             name: "Students",
-            desc: "Enrolment across all grades",
+            desc: "Students assigned to a class this year",
             value: studentRows.length,
             unit: "enrolled",
           },
@@ -146,23 +183,23 @@ export const getLandingStats = createServerFn({ method: "GET" }).handler(
           {
             num: "04",
             name: "Timetable",
-            desc: "Periods configured and slots filled",
-            value: periodRows.length === 0 ? 0 : slotRows.length,
-            unit: periodRows.length === 0 ? "no periods set" : "slots assigned",
+            desc: "Weekly slots filled this year",
+            value: slotRows.length,
+            unit: "slots assigned",
           },
           {
             num: "05",
             name: "Leave",
-            desc: "Requests awaiting a decision",
-            value: pendingLeaves.length,
-            unit: "pending",
+            desc: "Requests still waiting on a decision",
+            value: openLeaveRows.length,
+            unit: "open",
           },
           {
             num: "06",
             name: "Attendance",
-            desc: "Staff attendance marks recorded",
-            value: teacherAttendRows.length,
-            unit: "marks",
+            desc: "Absence records raised this year",
+            value: absenceRows.length,
+            unit: "exceptions",
           },
         ],
       };

@@ -13,6 +13,7 @@ import {
 } from "drizzle-valibot";
 import * as v from "valibot";
 
+import { LEAVE_DAY_PARTS, LEAVE_PAYMENT_STATUSES } from "../constants/leave";
 import { brand } from "./brand";
 import type { Brand } from "./brand";
 import { isoDateSchema } from "./primitives";
@@ -44,6 +45,12 @@ export const leaveTypeSchema = v.picklist([
   "other",
 ]);
 export type LeaveType = v.InferOutput<typeof leaveTypeSchema>;
+
+export const leaveDayPartSchema = v.picklist(LEAVE_DAY_PARTS);
+export type LeaveDayPart = v.InferOutput<typeof leaveDayPartSchema>;
+
+export const leavePaymentStatusSchema = v.picklist(LEAVE_PAYMENT_STATUSES);
+export type LeavePaymentStatus = v.InferOutput<typeof leavePaymentStatusSchema>;
 
 export const leaveStatusSchema = v.picklist([
   "pending",
@@ -96,6 +103,8 @@ export const leaveRequest = pgTable(
     startDate: text("start_date").notNull(),
     /** ISO date string, inclusive; same as startDate for single-day leave */
     endDate: text("end_date").notNull(),
+    dayPart: text("day_part").notNull().default("full"),
+    paymentStatus: text("payment_status").notNull().default("notApplicable"),
     reason: text("reason"),
     /** Overall status derived from the two-step chain; kept in sync server-side. */
     status: text("status").notNull().default("pending"),
@@ -154,6 +163,7 @@ export const leaveEntitlement = pgTable(
       .notNull()
       .references(() => academicYear.id, { onDelete: "cascade" }),
     leaveType: text("leave_type").notNull(),
+    paymentStatus: text("payment_status").notNull().default("notApplicable"),
     /** Maximum days for this type in this year (e.g. 21 medical, 20 other). */
     maxDays: integer("max_days").notNull(),
     /** Floor used for validation/warnings (e.g. minimum notice). */
@@ -165,9 +175,10 @@ export const leaveEntitlement = pgTable(
       .notNull(),
   },
   (table) => [
-    unique("leave_entitlement_year_type_unique").on(
+    unique("leave_entitlement_year_type_payment_unique").on(
       table.academicYearId,
-      table.leaveType
+      table.leaveType,
+      table.paymentStatus
     ),
     index("leave_entitlement_year_idx").on(table.academicYearId),
   ]
@@ -180,6 +191,8 @@ const leaveRequestColumnRefinements = {
   type: () => leaveTypeSchema,
   startDate: () => isoDateSchema,
   endDate: () => isoDateSchema,
+  dayPart: () => leaveDayPartSchema,
+  paymentStatus: () => leavePaymentStatusSchema,
   reason: () => v.optional(v.nullable(v.string())),
   status: () => leaveStatusSchema,
   deputyStatus: () => deputyStatusSchema,
@@ -200,6 +213,7 @@ const leaveEntitlementColumnRefinements = {
   id: () => leaveEntitlementIdSchema,
   academicYearId: () => academicYearIdSchema,
   leaveType: () => leaveTypeSchema,
+  paymentStatus: () => leavePaymentStatusSchema,
   maxDays: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   minDays: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
 };

@@ -14,6 +14,7 @@ import {
 } from "drizzle-valibot";
 import * as v from "valibot";
 
+import { CODE_DEFINED_PERIODS } from "../periods";
 import { classIdSchema, class_ } from "./academics";
 import { brand } from "./brand";
 import type { Brand } from "./brand";
@@ -24,21 +25,10 @@ import {
   staffIdSchema,
 } from "./staff";
 
-export type PeriodConfigId = Brand<string, "PeriodConfigId">;
-export const periodConfigIdSchema = v.pipe(
-  v.string(),
-  brand<string, "PeriodConfigId">()
-);
-
 export type ClassPeriodAssignmentId = Brand<string, "ClassPeriodAssignmentId">;
 export const classPeriodAssignmentIdSchema = v.pipe(
   v.string(),
   brand<string, "ClassPeriodAssignmentId">()
-);
-
-const periodTimeSchema = v.pipe(
-  v.string(),
-  v.regex(/^\d{2}:\d{2}$/u, "Time must be in HH:MM format")
 );
 
 // Monday–Friday
@@ -54,30 +44,7 @@ const periodNumberSchema = v.pipe(
   v.number(),
   v.integer(),
   v.minValue(1),
-  v.maxValue(8)
-);
-
-/**
- * School day period configuration: times for each period (1–8).
- * Immutable once created; if school changes periods, create a new academic year.
- * One row per period per academic year.
- */
-export const periodConfig = pgTable(
-  "period_config",
-  {
-    id: text("id").primaryKey(),
-    academicYearId: text("academic_year_id")
-      .notNull()
-      .references(() => academicYear.id, { onDelete: "cascade" }),
-    periodNumber: integer("period_number").notNull(),
-    startTime: text("start_time").notNull(),
-    endTime: text("end_time").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => [
-    unique("period_config_unique").on(table.academicYearId, table.periodNumber),
-    index("period_config_year_idx").on(table.academicYearId),
-  ]
+  v.maxValue(CODE_DEFINED_PERIODS.length)
 );
 
 /**
@@ -135,28 +102,6 @@ export const classPeriodAssignment = pgTable(
 
 // Export schemas for use in column refinements
 export { dayOfWeekSchema, periodNumberSchema };
-
-// Column refinements for periodConfig valibot schemas
-const periodConfigColumnRefinements = {
-  id: () => periodConfigIdSchema,
-  academicYearId: () => academicYearIdSchema,
-  periodNumber: () => periodNumberSchema,
-  startTime: () => periodTimeSchema,
-  endTime: () => periodTimeSchema,
-};
-
-export const periodConfigSelectSchema = createSelectSchema(
-  periodConfig,
-  periodConfigColumnRefinements
-);
-export const periodConfigInsertSchema = createInsertSchema(
-  periodConfig,
-  periodConfigColumnRefinements
-);
-export const periodConfigUpdateSchema = createUpdateSchema(
-  periodConfig,
-  periodConfigColumnRefinements
-);
 
 // Column refinements for classPeriodAssignment valibot schemas
 const classPeriodAssignmentColumnRefinements = {

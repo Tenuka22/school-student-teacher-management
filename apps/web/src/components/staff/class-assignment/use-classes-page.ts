@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { downloadExportFile } from "@/lib/download-export";
+import { useActiveYear } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
 type Class = typeof classTable.$inferSelect;
@@ -17,6 +18,7 @@ interface AcademicYear {
 }
 
 export const useClassesPage = () => {
+  const activeYear = useActiveYear();
   const currentYearQuery = useQuery(
     orpc.staff.listAcademicYears.queryOptions()
   );
@@ -26,12 +28,12 @@ export const useClassesPage = () => {
     if (!years) {
       return;
     }
+    const typedYears = years as AcademicYear[];
     return (
-      (years.find(
-        (y) => (y as Record<string, unknown>).isCurrent === true
-      ) as AcademicYear) || undefined
+      typedYears.find((item) => item.year === Number(activeYear)) ??
+      typedYears.find((item) => item.isCurrent)
     );
-  }, [currentYearQuery.data]);
+  }, [activeYear, currentYearQuery.data]);
 
   const listQuery = useQuery(
     orpc.staff.listClasses.queryOptions({
@@ -40,7 +42,12 @@ export const useClassesPage = () => {
     })
   );
 
-  const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
+  const staffQuery = useQuery(
+    orpc.staff.listStaff.queryOptions({
+      input: { academicYearId: currentYear?.id },
+      enabled: Boolean(currentYear?.id),
+    })
+  );
 
   const createMutation = useMutation(orpc.staff.createClass.mutationOptions());
   const updateMutation = useMutation(orpc.staff.updateClass.mutationOptions());

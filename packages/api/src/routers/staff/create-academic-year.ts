@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { isStructureEntryOfferedBySchool } from "@school-student-teacher-management/db/config/school";
+import { DEFAULT_LEAVE_ENTITLEMENTS } from "@school-student-teacher-management/db/constants/leave";
 import {
   COMPULSORY_BASKET_CATEGORY,
   getStructureVersion,
@@ -7,6 +8,8 @@ import {
 } from "@school-student-teacher-management/db/constants/structureVersions/index";
 import type { StructureVersionEntry } from "@school-student-teacher-management/db/constants/structureVersions/index";
 import { gradeSubjectConfig } from "@school-student-teacher-management/db/schema/academics";
+import { attendancePolicy } from "@school-student-teacher-management/db/schema/attendance";
+import { leaveEntitlement } from "@school-student-teacher-management/db/schema/leaves";
 import {
   academicYear,
   academicYearInsertSchema,
@@ -14,7 +17,7 @@ import {
 import { desc } from "drizzle-orm";
 import { object, optional, pick } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 
 const inputSchema = object({
   ...pick(academicYearInsertSchema, ["year", "startDate", "endDate"]).entries,
@@ -28,11 +31,11 @@ const inputSchema = object({
   ),
 });
 
-export const createAcademicYear = adminProcedure
+export const createAcademicYear = adminOnlyProcedure
   .input(inputSchema)
   .handler(async ({ input, context }) => {
     // Default to the most recently created academic year's structure
-    // version — the common case (no scheme change) needs no explicit pick.
+    // version â€” the common case (no scheme change) needs no explicit pick.
     const [mostRecent] = await context.db
       .select({
         structureVersionKey: academicYear.structureVersionKey,
@@ -51,7 +54,7 @@ export const createAcademicYear = adminProcedure
       });
     }
 
-    // Validates against the code registry — throws if the key is unknown,
+    // Validates against the code registry â€” throws if the key is unknown,
     // rather than silently accepting a typo'd or unshipped version.
     try {
       getStructureVersion(structureVersionKey);
@@ -89,7 +92,7 @@ export const createAcademicYear = adminProcedure
         structureVersionKey,
         structureSubversionKey: structureSubversionKey ?? null,
         // The very first academic year ever created has nothing to be
-        // "current" relative to — without this the whole app stays locked
+        // "current" relative to â€” without this the whole app stays locked
         // behind "select an academic year" forever, since nothing is ever
         // marked current. Every subsequent year is created inactive and
         // switched to explicitly.
@@ -123,6 +126,22 @@ export const createAcademicYear = adminProcedure
         }))
       );
     }
+
+    await context.db.insert(leaveEntitlement).values(
+      DEFAULT_LEAVE_ENTITLEMENTS.map((entitlement) => ({
+        id: crypto.randomUUID(),
+        academicYearId: id,
+        leaveType: entitlement.leaveType,
+        paymentStatus: entitlement.paymentStatus,
+        maxDays: entitlement.maxDays,
+        minDays: entitlement.minDays,
+      }))
+    );
+
+    await context.db.insert(attendancePolicy).values({
+      id: crypto.randomUUID(),
+      academicYearId: id,
+    });
 
     return {
       id: record.id,

@@ -1,4 +1,18 @@
-# Period Management (Timetable) UI Design
+# Period Assignment & Timetables
+
+> **This file is a planning document, and parts of it no longer describe the product.** The divergences below are deliberate and were resolved in favour of the shipped UI. Treat everything below the list as history, not specification.
+
+## What actually shipped
+
+| Planned | Shipped | Why |
+| --- | --- | --- |
+| Editable "Period Configuration" section with per-year start/end times | No editor. Period times come from `CODE_DEFINED_PERIODS` in `packages/db/src/periods.ts` | A `period_config` table was planned and never created; `createPeriodConfig` is a stub that throws. A section that cannot be edited is worse than none, and three readers (this grid, the teacher grid, attendance) now share one list of periods. |
+| `Sheet` sliding in from the right | `Dialog` (centred) | A period assignment is a short, single-decision form. The grid behind it is not being edited alongside. |
+| Class / Teacher view toggle | Two pages: Period Assignment (per class) and Teacher Timetable (per teacher) | Splitting the route keeps each grid's query and its empty state honest. |
+| Keyboard shortcuts `A`/`E`/`D`/`P`/`T` | None | Shipped with no shortcut layer rather than half of one. Do not document shortcuts that do not exist. |
+| "Period configuration not yet set up" empty state | Cannot occur | The period list is code, not data. |
+
+Subjects are shown through `subjectLabel` (`packages/db/src/constants/display.ts`) and a slot marked as a combined session is labelled as such rather than reported as a conflict.
 
 ## Overview
 

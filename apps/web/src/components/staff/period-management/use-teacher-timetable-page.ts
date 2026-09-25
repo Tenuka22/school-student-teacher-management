@@ -1,5 +1,5 @@
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import type { class_ as classTable } from "@school-student-teacher-management/db/schema/academics";
-import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
 import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { orpc } from "@/utils/orpc";
 
 type Class = typeof classTable.$inferSelect;
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
 type Staff = typeof staffTable.$inferSelect;
 
 interface AcademicYear {
@@ -49,13 +48,6 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
   const classesQuery = useQuery(
     orpc.staff.listClasses.queryOptions({
       input: { academicYearId: currentYear?.id ?? "", gradeLevel: undefined },
-      enabled: !!currentYear?.id,
-    })
-  );
-
-  const periodConfigQuery = useQuery(
-    orpc.staff.periods.listPeriodConfig.queryOptions({
-      input: { academicYearId: currentYear?.id ?? "" },
       enabled: !!currentYear?.id,
     })
   );
@@ -189,11 +181,6 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
     [classesQuery.data]
   );
 
-  const periodConfig = useMemo(
-    () => (periodConfigQuery.data || []) as unknown as PeriodConfig[],
-    [periodConfigQuery.data]
-  );
-
   const entries = useMemo(
     () => (timetableQuery.data || []) as unknown as TeacherTimetableEntry[],
     [timetableQuery.data]
@@ -205,7 +192,7 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
     currentYear,
     currentStaff,
     classes,
-    periodConfig,
+    periods: CODE_DEFINED_PERIODS,
     entries,
     isLoadingEntries: timetableQuery.isLoading,
     isAddDialogOpen,

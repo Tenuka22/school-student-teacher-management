@@ -3,6 +3,8 @@ import {
   leaveStatusSchema,
 } from "@school-student-teacher-management/db/schema/leaves";
 import type {
+  LeaveDayPart,
+  LeavePaymentStatus,
   LeaveStatus,
   LeaveType,
 } from "@school-student-teacher-management/db/schema/leaves";
@@ -49,9 +51,12 @@ export const listMyLeaves = teacherProcedure
         type: leaveRequest.type,
         startDate: leaveRequest.startDate,
         endDate: leaveRequest.endDate,
+        dayPart: leaveRequest.dayPart,
+        paymentStatus: leaveRequest.paymentStatus,
         reason: leaveRequest.reason,
         status: leaveRequest.status,
         reviewComment: leaveRequest.reviewComment,
+        principalComment: leaveRequest.principalComment,
         reviewedAt: leaveRequest.reviewedAt,
         createdAt: leaveRequest.createdAt,
       })
@@ -65,9 +70,12 @@ export const listMyLeaves = teacherProcedure
         type: row.type as LeaveType,
         startDate: row.startDate,
         endDate: row.endDate,
+        dayPart: row.dayPart as LeaveDayPart,
+        paymentStatus: row.paymentStatus as LeavePaymentStatus,
         reason: row.reason,
         status: row.status as LeaveStatus,
         reviewComment: row.reviewComment,
+        principalComment: row.principalComment,
         reviewedAt: row.reviewedAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),
       })),

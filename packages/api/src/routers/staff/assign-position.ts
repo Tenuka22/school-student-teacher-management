@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { leadershipRoleForPosition } from "@school-student-teacher-management/auth";
 import { user as userTable } from "@school-student-teacher-management/db/schema/auth";
 import {
+  academicYear,
   staff,
   staffPosition,
   staffPositionInsertSchema,
@@ -22,28 +23,31 @@ export const assignPosition = adminProcedure
   )
   .handler(async ({ input, context }) => {
     const id = crypto.randomUUID();
-
-    const [record] = await context.db
-      .insert(staffPosition)
-      .values({
-        id,
-        staffId: input.staffId,
-        academicYearId: input.academicYearId,
-        position: input.position,
-        sectionalScope: input.sectionalScope,
-      })
-      .returning();
+    const [[targetYear], [record]] = await Promise.all([
+      context.db
+        .select({ isCurrent: academicYear.isCurrent })
+        .from(academicYear)
+        .where(eq(academicYear.id, input.academicYearId))
+        .limit(1),
+      context.db
+        .insert(staffPosition)
+        .values({
+          id,
+          staffId: input.staffId,
+          academicYearId: input.academicYearId,
+          position: input.position,
+          sectionalScope: input.sectionalScope,
+        })
+        .returning(),
+    ]);
 
     if (!record) {
       throw new ORPCError("INTERNAL_SERVER_ERROR");
     }
 
-    // Leadership positions promote the holder: the auth role becomes the
-    // seat's own role (`principal` / `vicePrincipal`) so the account is
-    // self-describing and the admin workspace stays reachable.
     const leadershipRole = leadershipRoleForPosition(input.position);
 
-    if (leadershipRole) {
+    if (leadershipRole && targetYear?.isCurrent) {
       const [staffRow] = await context.db
         .select({ userId: staff.userId })
         .from(staff)

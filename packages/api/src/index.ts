@@ -71,12 +71,24 @@ const requireRole = (...allowedRoles: string[]) =>
 
 /**
  * Roles that may reach the admin surface. Principal and Vice Principal are
- * seeded with their own roles (see `packages/auth/permissions.ts`) but hold
- * the same management authority as `admin`, so all three are accepted here.
+ * seeded with their own roles (see `packages/auth/permissions.ts`) but hold the
+ * same management authority as `admin`, so all three are accepted here.
  */
 const ADMIN_ROLES = ["admin", "principal", "vicePrincipal"];
 
 export const adminProcedure = publicProcedure.use(requireRole(...ADMIN_ROLES));
+
+/**
+ * School-wide writes that only the administrator makes.
+ *
+ * Switching the active academic year, opening or removing a year, seeding the
+ * establishment, editing the attendance policy and setting leave quotas are not
+ * per-class edits — each one changes what the whole school believes is true.
+ * The leadership seats can read the ledger and act on their own queues (see
+ * `leaves.leadershipReview`), but they do not get to move the goalposts for
+ * everyone else, so these sit above `adminProcedure`.
+ */
+export const adminOnlyProcedure = publicProcedure.use(requireRole("admin"));
 
 export const teacherProcedure = publicProcedure.use(
   requireRole(...ADMIN_ROLES, "teacher")

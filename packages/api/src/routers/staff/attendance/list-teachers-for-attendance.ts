@@ -7,7 +7,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireAssignmentPermission } from "../../../index";
+import { adminProcedure } from "../../../index";
 
 /**
  * Every staff member plus the distinct grade levels they teach this
@@ -17,7 +17,7 @@ import { requireAssignmentPermission } from "../../../index";
  * gets an empty `gradeLevels` array (still returned - they belong in an
  * "unassigned" group, not hidden).
  */
-export const listTeachersForAttendance = requireAssignmentPermission("read")
+export const listTeachersForAttendance = adminProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [staffRows, gradeRows] = await Promise.all([

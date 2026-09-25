@@ -1,13 +1,15 @@
+import { ORPCError } from "@orpc/server";
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
 import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYearIdSchema,
+  staff,
   staffIdSchema,
 } from "@school-student-teacher-management/db/schema/staff";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireAssignmentPermission } from "../../../index";
+import { adminProcedure } from "../../../index";
 
 /**
  * List all period assignments for a teacher in a given academic year, with
@@ -16,7 +18,7 @@ import { requireAssignmentPermission } from "../../../index";
  * Dance/Music teacher running several classes at once) are intentional, not
  * a data error.
  */
-export const listTeacherTimetable = requireAssignmentPermission("read")
+export const listTeacherTimetable = adminProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,
@@ -24,6 +26,22 @@ export const listTeacherTimetable = requireAssignmentPermission("read")
     })
   )
   .handler(async ({ input, context }) => {
+    const canViewAll = ["admin", "principal", "vicePrincipal"].includes(
+      context.session.user.role ?? ""
+    );
+    if (!canViewAll) {
+      const [linkedStaff] = await context.db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(eq(staff.userId, context.session.user.id))
+        .limit(1);
+      if (!linkedStaff || linkedStaff.id !== input.staffId) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "Teachers may only view their own timetable",
+        });
+      }
+    }
+
     const records = await context.db
       .select({
         id: classPeriodAssignment.id,

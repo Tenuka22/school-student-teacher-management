@@ -1,4 +1,3 @@
-import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +22,6 @@ interface Class {
   name: string;
   gradeLevel: number;
 }
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
 
 interface TeacherTimetableEntry {
   id: string;
@@ -37,7 +35,7 @@ interface TeacherTimetableEntry {
 
 interface TeacherTimetableDialogsProps {
   classes: Class[];
-  periodConfig: PeriodConfig[];
+  academicYearId?: string;
   selectedEntry: TeacherTimetableEntry | null;
   addSlot: { dayOfWeek: number; periodNumber: number } | null;
   isAddOpen: boolean;
@@ -56,7 +54,7 @@ interface TeacherTimetableDialogsProps {
 
 export const TeacherTimetableDialogs = ({
   classes,
-  periodConfig,
+  academicYearId,
   selectedEntry,
   addSlot,
   isAddOpen,
@@ -84,11 +82,11 @@ export const TeacherTimetableDialogs = ({
             sessions.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           <TeacherPeriodAssignmentForm
             formId="add-teacher-period-form"
             classes={classes}
-            periodConfig={periodConfig}
+            academicYearId={academicYearId}
             onSubmit={onAddSubmit}
             isLoading={isAddPending}
             prefillSlot={addSlot ?? undefined}
@@ -123,12 +121,12 @@ export const TeacherTimetableDialogs = ({
             Update the subject for this slot
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {selectedEntry && (
             <TeacherPeriodAssignmentForm
               formId="edit-teacher-period-form"
               classes={classes}
-              periodConfig={periodConfig}
+              academicYearId={academicYearId}
               onSubmit={onEditSubmit}
               isLoading={isEditPending}
               initialData={{

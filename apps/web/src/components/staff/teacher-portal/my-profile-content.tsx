@@ -13,9 +13,11 @@ import {
 import { Input } from "@school-student-teacher-management/ui/components/input";
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useParams } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { TeacherSubjectAssignments } from "@/components/staff/teacher-management/teacher-subject-assignments";
 import { orpc } from "@/utils/orpc";
 
 /**
@@ -25,7 +27,18 @@ import { orpc } from "@/utils/orpc";
  */
 export const MyProfileContent = () => {
   const queryClient = useQueryClient();
+  const { year } = useParams({ from: "/_auth/teacher/$year" });
   const myStaffQuery = useQuery(orpc.staff.getMyStaff.queryOptions());
+  const academicYearsQuery = useQuery(
+    orpc.staff.listAcademicYears.queryOptions()
+  );
+  const academicYearId = useMemo(() => {
+    const years = academicYearsQuery.data as
+      | { id: string; year: number }[]
+      | undefined;
+    return years?.find((academicYear) => academicYear.year === Number(year))
+      ?.id;
+  }, [academicYearsQuery.data, year]);
   const profile = myStaffQuery.data?.profile;
 
   const [phone, setPhone] = useState("");
@@ -109,6 +122,14 @@ export const MyProfileContent = () => {
           </dl>
         </CardContent>
       </Card>
+
+      {academicYearId && (
+        <TeacherSubjectAssignments
+          staffId={profile.id}
+          academicYearId={academicYearId}
+          editable={false}
+        />
+      )}
 
       <Card>
         <CardContent className="p-6">

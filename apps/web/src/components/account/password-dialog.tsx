@@ -6,10 +6,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { getAuthEmailAvailability } from "@/functions/get-auth-email-availability";
 import { authClient } from "@/lib/auth-client";
 import { useOtpCooldown } from "@/lib/otp-cooldown";
 import type { OtpCooldown } from "@/lib/otp-cooldown";
@@ -17,8 +18,8 @@ import type { OtpCooldown } from "@/lib/otp-cooldown";
 type Mode = "current-password" | "email-code";
 
 const inputClass =
-  "w-full border border-[#013405]/22 bg-white px-3 py-2 text-sm text-[#013405] outline-none focus:border-[#013405]";
-const labelClass = "text-xs font-bold tracking-[0.12em] text-[#013405]/70";
+  "w-full border border-primary/22 bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary";
+const labelClass = "text-xs font-bold tracking-[0.12em] text-primary/70";
 
 const getSendCodeLabel = (cooldown: OtpCooldown, codeSent: boolean): string => {
   if (cooldown.isSending) {
@@ -51,7 +52,7 @@ const Field = ({
   <label className="flex flex-col gap-1.5">
     <span className={labelClass}>{label}</span>
     {children}
-    {error && <span className="text-xs text-[#A51919]">{error}</span>}
+    {error && <span className="text-destructive text-xs">{error}</span>}
   </label>
 );
 
@@ -205,47 +206,56 @@ export const PasswordDialog = ({
     setCodeSent(false);
   };
 
+  // A one-time code is only offered when this server can actually send one.
+  // The code path used to be presented unconditionally, including for the
+  // synthetic `@…internal` addresses that back username logins — an address
+  // that cannot receive mail, offered a "we'll email you" recovery.
+  const availabilityQuery = useQuery({
+    queryKey: ["auth", "email-availability"],
+    queryFn: ({ signal }) => getAuthEmailAvailability({ signal }),
+  });
+  const canSendCode = availabilityQuery.data?.canDeliver ?? true;
+  const isInternalLogin = email.endsWith(".internal");
+
+  const modes = canSendCode
+    ? (["current-password", "email-code"] as const)
+    : (["current-password"] as const);
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change password</DialogTitle>
           <DialogDescription>
-            Confirm with your current password, or use a one-time code sent to{" "}
-            {email}.
+            {canSendCode
+              ? "Confirm with your current password, or use a one-time code sent to your address."
+              : "Confirm with your current password to change it."}
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          role="tablist"
-          aria-label="Confirmation method"
-          className="grid grid-cols-2 gap-2"
-        >
-          {(
-            [
-              { value: "current-password", label: "CURRENT PASSWORD" },
-              { value: "email-code", label: "EMAIL CODE" },
-            ] as const
-          ).map((option) => (
+        <fieldset className="grid grid-cols-2 gap-2">
+          <legend className="sr-only">Confirmation method</legend>
+          {modes.map((option) => (
             <button
-              key={option.value}
+              key={option}
               type="button"
-              role="tab"
-              aria-selected={mode === option.value}
-              onClick={() => selectMode(option.value)}
+              aria-pressed={mode === option}
+              onClick={() => selectMode(option)}
               className={`px-3 py-2.5 text-xs font-extrabold tracking-[0.1em] transition-colors ${
-                mode === option.value
-                  ? "bg-[#013405] text-[#FFF8E7]"
-                  : "border border-[#013405]/20 text-[#013405]/70 hover:bg-[#013405]/5"
+                mode === option
+                  ? "bg-primary text-primary-foreground"
+                  : "border-primary/20 text-primary/70 hover:bg-primary/5 border"
               }`}
             >
-              {option.label}
+              {option === "current-password"
+                ? "CURRENT PASSWORD"
+                : "EMAIL CODE"}
             </button>
           ))}
-        </div>
+        </fieldset>
 
         {isEnvManaged ? (
-          <p className="border border-[#013405]/20 bg-[#013405]/5 px-4 py-3 text-[13px] leading-relaxed text-[#013405]/75">
+          <p className="border-primary/20 bg-primary/5 text-primary/75 border px-4 py-3 text-[13px] leading-relaxed">
             This is an institutional login. Its password is set by the
             College&rsquo;s server configuration and re-applied on every start,
             so it cannot be changed from here. Ask an administrator to update
@@ -293,13 +303,13 @@ export const PasswordDialog = ({
                         onSuccess: () => codeCooldown.registerSend(),
                       });
                     }}
-                    className="shrink-0 border border-[#013405]/30 px-3 py-2 text-xs font-bold text-[#013405] transition-colors hover:border-[#013405] disabled:opacity-50"
+                    className="border-primary/30 text-primary hover:border-primary shrink-0 border px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50"
                   >
                     {getSendCodeLabel(codeCooldown, codeSent)}
                   </button>
                 </div>
                 {codeSent && (
-                  <span className="text-xs text-[#013405]/55">
+                  <span className="text-primary/55 text-xs">
                     Check {email} — the code expires in 10 minutes, and only
                     three guesses are allowed.
                   </span>
@@ -331,12 +341,20 @@ export const PasswordDialog = ({
               />
             </Field>
 
-            {error && <p className="text-sm text-[#A51919]">{error}</p>}
+            {error && <p className="text-destructive text-sm">{error}</p>}
+
+            {!canSendCode && isInternalLogin && (
+              <p className="text-primary/60 text-xs leading-relaxed">
+                This login has no mailbox of its own, so a recovery code cannot
+                be sent to it. Use your current password, or ask an
+                administrator to issue a new one.
+              </p>
+            )}
 
             <button
               type="submit"
               disabled={changeMutation.isPending}
-              className="self-start bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-60"
+              className="bg-primary text-primary-foreground hover:bg-primary-hover self-start px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:opacity-60"
             >
               {changeMutation.isPending ? "SAVING…" : "UPDATE PASSWORD"}
             </button>

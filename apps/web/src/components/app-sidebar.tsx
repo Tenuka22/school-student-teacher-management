@@ -65,10 +65,35 @@ const resolveHome = (
   return { base: "/teacher", title: "My Dashboard" };
 };
 
+/**
+ * Which audience this sidebar is for, and the year it is scoped to.
+ *
+ * Read out of `AppSidebar` so the nav-building function does not also decide who
+ * is looking at it — the two used to live together, and the role branching is
+ * what made the component hard to follow.
+ */
+const useSidebarRole = (user: AppSidebarProps["user"]) => {
+  const role = user?.role;
+  const yearsQuery = useQuery(orpc.staff.listAcademicYears.queryOptions());
+  const currentYear = (
+    (yearsQuery.data || []) as unknown as AcademicYear[]
+  ).find((year) => year.isCurrent);
+
+  return {
+    isAdmin: role === "admin",
+    isDeputy: role === "vicePrincipal",
+    isPrincipal: role === "principal",
+    isLeader: role === "principal" || role === "vicePrincipal",
+    currentYear,
+  };
+};
+
 interface SidebarGroupsProps {
   isAdmin: boolean;
   isLeader: boolean;
   usersUrl: string;
+  staffRequestsUrl: string;
+  staffRequestsCount?: string;
   platformNav: NavItem[];
   leadershipNav: NavItem[];
   staffNav: NavItem[];
@@ -85,6 +110,8 @@ const SidebarGroups = ({
   isAdmin,
   isLeader,
   usersUrl,
+  staffRequestsUrl,
+  staffRequestsCount,
   platformNav,
   leadershipNav,
   staffNav,
@@ -104,7 +131,17 @@ const SidebarGroups = ({
     return (
       <>
         <NavMain label="Platform" items={platformNav} />
-        <NavMain label="Admin" items={[{ title: "Users", url: usersUrl }]} />
+        <NavMain
+          label="Admin"
+          items={[
+            { title: "Users", url: usersUrl },
+            {
+              title: "Staff Requests",
+              url: staffRequestsUrl,
+              count: staffRequestsCount,
+            },
+          ]}
+        />
         <NavMain label="Staff Management" items={staffNav} />
         <NavMain label="Academic" items={academicNav} />
       </>
@@ -126,19 +163,23 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   // Leadership carries its own seeded role (`principal` / `vicePrincipal`)
   // and is confined to its own workspace, so `isAdmin` here means strictly
   // the non-leadership admin account.
-  const role = user?.role;
-  const isPrincipal = role === "principal";
-  const isDeputy = role === "vicePrincipal";
-  const isLeader = isPrincipal || isDeputy;
-  const isAdmin = role === "admin";
-  const yearsQuery = useQuery(orpc.staff.listAcademicYears.queryOptions());
-  const currentYear = (
-    (yearsQuery.data || []) as unknown as AcademicYear[]
-  ).find((y) => y.isCurrent);
+  const { isAdmin, isDeputy, isLeader, isPrincipal, currentYear } =
+    useSidebarRole(user);
 
+  // The academic year is a path segment on every workspace link, so a
+  // bookmarked page keeps its year across a refresh. Read it from the URL
+  // so the switcher and the nav never disagree mid-navigation.
+  const year =
+    useActiveYear() ?? (currentYear ? String(currentYear.year) : undefined);
+  const selectedYear = year === undefined ? currentYear?.year : Number(year);
+
+  // The sidebar badge and the Teachers page must count the same people, so the
+  // sidebar asks for the same year roster rather than the unscoped establishment.
   const staffQuery = useQuery({
-    ...orpc.staff.listStaff.queryOptions(),
-    enabled: isAdmin,
+    ...orpc.staff.listStaff.queryOptions({
+      input: { academicYearId: currentYear?.id ?? "" },
+    }),
+    enabled: isAdmin && Boolean(currentYear),
   });
   const classesQuery = useQuery({
     ...orpc.staff.listClasses.queryOptions({
@@ -146,18 +187,18 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     }),
     enabled: isAdmin && Boolean(currentYear),
   });
-  const pendingLeavesQuery = useQuery({
+  // An administrator reads the whole leave ledger rather than one reviewer's
+  // queue, so the badge counts every request still waiting on a decision.
+  const openLeavesQuery = useQuery({
     ...orpc.staff.leaves.listLeaveRequests.queryOptions({
-      input: { queue: "deputy" },
+      input: { year: selectedYear ?? 0, queue: "all" },
     }),
+    enabled: isAdmin && selectedYear !== undefined,
+  });
+  const staffRequestsQuery = useQuery({
+    ...orpc.staff.listTeacherRequests.queryOptions(),
     enabled: isAdmin,
   });
-
-  // The academic year is a path segment on every workspace link, so a
-  // bookmarked page keeps its year across a refresh. Read it from the URL
-  // so the switcher and the nav never disagree mid-navigation.
-  const year =
-    useActiveYear() ?? (currentYear ? String(currentYear.year) : undefined);
   const admin = (...rest: string[]) => yearPath("/admin", year, ...rest);
   const teacher = (...rest: string[]) => yearPath("/teacher", year, ...rest);
   const principal = (...rest: string[]) =>
@@ -177,15 +218,24 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   // Leadership gets the review chain first — it is the work that defines
   // these two roles. Their queue lives inside their own workspace, never
   // under `/admin`, so neither can reach the other's area.
+  const leadershipQueue = isPrincipal
+    ? {
+        leave: principal("leaves"),
+        attendance: principal("staff", "attendance"),
+      }
+    : { leave: deputy("leaves"), attendance: deputy("staff", "attendance") };
+
   const leadershipNav: NavItem[] = [
-    isPrincipal
-      ? { title: "Finalise Leave", url: principal("leaves") }
-      : { title: "Recommend Leave", url: deputy("leaves") },
+    {
+      title: isPrincipal ? "Finalise Leave" : "Recommend Leave",
+      url: leadershipQueue.leave,
+    },
     // Only the Principal approves staffing; the Deputy has no say here, and
     // the server rejects the call regardless.
     ...(isPrincipal
       ? [{ title: "Teacher Requests", url: principal("teacher-requests") }]
       : []),
+    { title: "Attendance", url: leadershipQueue.attendance },
   ];
 
   const staffNav: NavItem[] = [
@@ -201,18 +251,24 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     },
     { title: "Period Assignment", url: admin("staff", "periods") },
     { title: "Teacher Timetable", url: admin("staff", "teacher-timetable") },
+    { title: "Historical Data", url: admin("staff", "historical-data") },
     { title: "Attendance", url: admin("staff", "attendance") },
     {
       title: "Leave Requests",
       url: admin("staff", "leaves"),
-      count: pendingLeavesQuery.data
-        ? String(pendingLeavesQuery.data.requests.length)
+      count: openLeavesQuery.data
+        ? String(
+            openLeavesQuery.data.requests.filter(
+              (request) => !request.finalizedAt
+            ).length
+          )
         : undefined,
     },
   ];
 
   const teacherNav: NavItem[] = [
     { title: "My Leave", url: teacher("leave") },
+    { title: "My Timetable", url: teacher("timetable") },
     { title: "My Profile", url: teacher("profile") },
   ];
 
@@ -253,6 +309,16 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
           isAdmin={isAdmin}
           isLeader={isLeader}
           usersUrl={admin("users")}
+          staffRequestsUrl={admin("teacher-requests")}
+          staffRequestsCount={
+            staffRequestsQuery.data
+              ? String(
+                  staffRequestsQuery.data.filter(
+                    (request) => request.emailVerified
+                  ).length
+                )
+              : undefined
+          }
           platformNav={platformNav}
           leadershipNav={leadershipNav}
           staffNav={staffNav}

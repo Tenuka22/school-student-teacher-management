@@ -49,10 +49,10 @@ export const PurgeUnverifiedDialog = ({
   <Dialog onOpenChange={onOpenChange} open={open}>
     <DialogContent className="sm:max-w-[520px]">
       <DialogHeader>
-        <div className="text-[12px] font-extrabold tracking-[0.24em] text-[#A51919]">
+        <div className="text-destructive text-[12px] font-extrabold tracking-[0.24em]">
           ACCOUNT CLEANUP
         </div>
-        <DialogTitle className="font-heading text-[26px] font-semibold text-[#013405]">
+        <DialogTitle className="font-heading text-primary text-[26px] font-semibold">
           {accounts.length === 0
             ? "Nothing to clean up"
             : `Delete ${accounts.length} unverified account${accounts.length === 1 ? "" : "s"}?`}
@@ -61,29 +61,35 @@ export const PurgeUnverifiedDialog = ({
           {accounts.length === 0 ? (
             <>
               No account has gone {retentionDays} days without confirming its
-              email address. The scheduled sweep will keep checking.
+              email address. The College server also clears stale accounts when
+              it starts.
             </>
           ) : (
             <>
               These accounts registered but never entered the code sent to their
               address, and are more than {retentionDays} days old. They are
               deleted along with their sessions. This cannot be undone.
+              <br />
+              <br />
+              Any staff record they created is kept, but loses its link to the
+              deleted account, so it appears in the staff list without a
+              username. Re-link or delete it under Teachers.
             </>
           )}
         </DialogDescription>
       </DialogHeader>
 
       {accounts.length > 0 && (
-        <ul className="max-h-[220px] overflow-y-auto border border-[#013405]/14 bg-[#fffdf6]">
+        <ul className="border-primary/14 bg-card max-h-[220px] overflow-y-auto border">
           {accounts.map((account) => (
             <li
-              className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-[#013405]/8 px-4 py-2.5 last:border-b-0"
+              className="border-primary/8 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b px-4 py-2.5 last:border-b-0"
               key={`${account.name}-${account.createdAt}`}
             >
-              <span className="text-[13.5px] font-semibold text-[#013405]">
+              <span className="text-primary text-[13.5px] font-semibold">
                 {account.name}
               </span>
-              <span className="text-[12px] text-[#013405]/55">
+              <span className="text-primary/55 text-[12px]">
                 registered {formatDate(account.createdAt)}
               </span>
             </li>
@@ -95,7 +101,7 @@ export const PurgeUnverifiedDialog = ({
         <button
           type="button"
           onClick={() => onOpenChange(false)}
-          className="border border-[#013405]/30 px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#013405] transition-colors hover:bg-[#013405]/5"
+          className="border-primary/30 text-primary hover:bg-primary/5 border px-4 py-2 text-xs font-extrabold tracking-[0.04em] transition-colors"
         >
           {accounts.length === 0 ? "CLOSE" : "CANCEL"}
         </button>
@@ -103,7 +109,7 @@ export const PurgeUnverifiedDialog = ({
           type="button"
           disabled={isPending || accounts.length === 0}
           onClick={onConfirm}
-          className="bg-[#A51919] px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-white transition-colors hover:bg-[#7F1212] disabled:opacity-50"
+          className="bg-destructive hover:bg-destructive-hover px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-white transition-colors disabled:opacity-50"
         >
           {isPending ? "CLEANING…" : "DELETE THESE ACCOUNTS"}
         </button>

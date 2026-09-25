@@ -13,7 +13,6 @@ import {
 } from "./leadership-review";
 import { listLeaveRequests } from "./list-leave-requests";
 import { listMyLeaves } from "./list-my-leaves";
-import { reviewLeave } from "./review-leave";
 
 /**
  * Leave management: staff apply for leave; the Deputy Principal
@@ -38,8 +37,6 @@ export const leavesRouter = {
   upsertLeaveEntitlement,
   seedLeaveEntitlements,
 
-  // Admin queue (full list, single-step legacy review kept for admins
-  // without a leadership position row)
+  // Admin queue
   listLeaveRequests,
-  reviewLeave,
 };

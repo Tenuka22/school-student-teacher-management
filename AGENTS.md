@@ -214,36 +214,36 @@ All procedures follow the existing pattern: oRPC handler + valibot schema valida
 
 **Period Configuration:**
 
-- `period_config` table: Stores school day periods (7:40 AM – 1:30 PM, 8 periods with tea/lunch breaks).
-- Columns: `id`, `academicYearId`, `periodNumber` (1–8), `startTime` (HH:MM), `endTime` (HH:MM), timestamps.
-- Unique constraint: `(academicYearId, periodNumber)` — one config per year+period.
-- Immutable once created (no update procedure); if periods change, create new academic year.
+There is no `period_config` table, and there never has been. Period times live in code: `CODE_DEFINED_PERIODS` in `packages/db/src/periods.ts` (07:50–13:30, eight periods). The period grid, the teacher grid and the attendance register all read that one list, so they cannot disagree about what "Period 3" is. `staff.periods.createPeriodConfig` is a stub that throws and is not exported.
+
+The planning note that described a per-year `period_config` table is superseded: building a data-driven period editor requires a migration, a version-selection UI, and a decision about what happens to assignments when a period's time changes. None of that is built. If a future year needs different bell times, that is a feature — do not describe it as existing.
 
 **Class Period Assignment:**
 
 - `class_period_assignment` table: Core timetable table mapping class + day + period → teacher + subject.
-- Columns: `id`, `academicYearId`, `classId`, `dayOfWeek` (1–5, Mon–Fri), `periodNumber` (1–8), `subjectKey`, `staffId`, timestamps.
+- Columns: `id`, `academicYearId`, `classId`, `dayOfWeek` (1–5, Mon–Fri), `periodNumber` (1–8), `subjectKey`, `staffId`, `isCombinedSession`, timestamps.
 - Unique constraints (enforced at DB level):
   - `(academicYearId, classId, dayOfWeek, periodNumber)` — no duplicate class slots.
   - `(academicYearId, staffId, dayOfWeek, periodNumber)` — no teacher double-booking.
 - Indexes: Composite indexes on (academicYearId, classId) and (academicYearId, staffId) for fast weekly-grid lookups.
+- `isCombinedSession` is how an intentional overlap is recorded. A teacher's legitimate second class in the same slot must set it, or the conflict scan reports it as double-booked.
 
 **Valibot & Branding:**
 
-- New schemas in `packages/db/src/schema/periods.ts`: `PeriodConfigId`, `ClassPeriodAssignmentId`, and their valibot counterparts.
-- Branded types follow the existing pattern: `export type PeriodConfigId = Brand<string, "PeriodConfigId">` + `v.pipe(v.string(), brand<...>())`.
-- Time validation schema: `HH:MM` ISO format regex + parsing.
+- `packages/db/src/schema/periods.ts` holds `ClassPeriodAssignmentId` and its valibot counterpart. `PeriodConfigId` was never added, because the table it described does not exist.
+- Branded types follow the existing pattern: `export type ClassPeriodAssignmentId = Brand<string, "ClassPeriodAssignmentId">` + `v.pipe(v.string(), brand<...>())`.
 
 **Historical Scope:**
 
 - All assignment tables are `academicYearId`-scoped. Changing years isolates data automatically.
 - No archiving needed; past years are queried with their `academicYearId`. The `academicYear` table already exists and tracks `isCurrent`.
+- Reading a _closed_ year is a route-level decision, not a global one: every year-scoped page is guarded to the current year, and only `/_auth/admin/$year/staff/historical-data` passes `allowAnyYear: true` to `loadAcademicYearRoute`.
 
-See `packages/db/src/schema/PERIOD_SCHEMA_PLAN.md` (detailed planning doc) for full schema specifications.
+See `packages/db/src/schema/PERIOD_SCHEMA_PLAN.md` (historical planning doc; its `period_config` section was never implemented — see above).
 
 ### UI Component Pattern
 
-Each feature folder contains a `UI.md` file documenting the complete interaction design, shadcn component choices, keyboard shortcuts, export options, and accessibility considerations. Implementation should closely follow these specs.
+Each feature folder contains a `UI.md` file. Those files began as plans and now open with a table of what actually shipped and where the plan was wrong — read the banner, not the plan. Two rules follow from that: never document a shortcut, export or field that does not exist, and when a screen's behaviour changes, the banner is the thing that must change with it.
 
 **shadcn Component Usage (Maximize Coverage):**
 
@@ -284,25 +284,31 @@ All exports are real, working oRPC procedures (not stubs). Files are generated s
 
 ### Permissions & Access Control
 
-The existing `assignment: ["create", "read", "update", "delete"]` permission resource in `packages/auth/src/permissions.ts` covers all period/timetable operations. No new permission resource needed.
+Three tiers, and the difference between them is a decision, not an accident (September 2026).
 
-- **Admin role:** Full CRUD on all staff, assignments, classes, periods, timetables.
-- **Teacher role:** Can read their own timetable; read assignment; read students in assigned classes (via `student: ["read"]`).
-- **User role:** Limited (by design; typically not used for staff features).
+- **`adminProcedure`** — `admin`, `principal`, `vicePrincipal`. Reading the ledger and acting inside your own queue: leave review, staff requests, attendance for the whole staff, and school-wide timetable reads.
+- **`adminOnlyProcedure`** — `admin` alone. The writes that change what the whole school believes: opening, switching or deleting an academic year, editing the attendance policy, setting leave quotas. The leadership seats can read and review, but they do not move the goalposts for everyone else.
+- **Permission resources** (`packages/auth/src/permissions.ts`) — per-role grants on `staff`, `assignment`, `student`, `mark`, `exam`, `qualification`. A teacher's `assignment: ["read"]` deliberately does **not** reach school-wide timetable reads, attendance reads or timetable exports: those are `adminProcedure`. A teacher reads their own timetable through `periods.getMyTeacherTimetable`, and enters marks only for the class they are the homeroom teacher of (`assertCanEnterMarkForAssignment`).
+
+Office staff have no self-service sign-up: their accounts are issued by an administrator, who creates the staff record and hands over the login.
 
 Enforce access control at the API layer (oRPC procedures) using better-auth's `ac` (access control) helper and the session context.
 
-### Keyboard Shortcuts (Common Across All Features)
+### Leave entitlements
 
-- **Cmd+K / Ctrl+K:** Open command palette / search box (global across admin interface).
-- **Cmd+N / Ctrl+N:** Create new entity (teacher, class, assignment, etc.).
-- **Cmd+E / Ctrl+E:** Open export menu.
-- **Cmd+Shift+C / Ctrl+Shift+C:** Run conflict check (period management only).
-- **Esc:** Close open dialog, sheet, or menu.
-- **Tab / Shift+Tab:** Navigate form fields, table rows.
-- **Enter:** Submit form, open selected row detail, trigger primary action.
-- **Delete / Backspace:** Delete selected rows (with confirmation).
-- **Arrow Keys:** Navigate grid cells (period timetable) or timeline items (history view).
+`leave_entitlement` is one row per (academic year, leave type, payment status), and the quota is **enforced** at `applyLeave`: a request that would exceed the remaining days is refused with the remaining figure in the message. Consumption is derived from approved requests, matching the balance a teacher is shown.
+
+Maternity is the College's own rule: **84 days on full pay and a further 84 days at half pay**, per person (`DEFAULT_LEAVE_ENTITLEMENTS` in `packages/db/src/constants/leave.ts`). `halfPay` is a distinct payment status from `unpaid` — the second maternity tier used to be recorded as `unpaid`, which told a teacher the wrong thing about their entitlement.
+
+The quota is counted per person per academic year. A "per delivery" reading of the 84 days would need a maternity-event reference on `leave_request` to group requests by delivery; that data model does not exist yet, so the UI states "per person" rather than implying a rule it does not enforce.
+
+### Keyboard Shortcuts
+
+There are no product-level keyboard shortcuts. The only one in the app is the sidebar's inherited Cmd/Ctrl+B toggle. Do not document shortcuts that are not implemented — the shortcut table that used to live here listed Cmd+K, Cmd+N, Cmd+E and Cmd+Shift+C, none of which exist.
+
+- **Esc:** Close an open dialog or menu.
+- **Tab / Shift+Tab:** Move through form fields, table rows and grid cells.
+- **Enter:** Submit the focused form, or activate the focused control.
 
 Documented per-feature in each `UI.md` file.
 

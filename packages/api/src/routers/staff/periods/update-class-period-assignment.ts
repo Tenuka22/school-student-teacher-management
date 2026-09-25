@@ -9,6 +9,10 @@ import { pick } from "valibot";
 import * as v from "valibot";
 
 import { requireAssignmentPermission } from "../../../index";
+import {
+  assertTeacherEligibleForYear,
+  getClassForAcademicYear,
+} from "../teacher-eligibility";
 
 /**
  * Update an existing class period assignment (teacher/subject for a slot).
@@ -37,12 +41,28 @@ export const updateClassPeriodAssignment = requireAssignmentPermission("update")
       });
     }
 
+    const targetStaffId = input.staffId ?? existing.staffId;
+    const targetSubjectKey = input.subjectKey ?? existing.subjectKey;
+    const classRecord = await getClassForAcademicYear(
+      context.db,
+      existing.academicYearId,
+      existing.classId
+    );
+
+    await assertTeacherEligibleForYear({
+      db: context.db,
+      academicYearId: existing.academicYearId,
+      staffId: targetStaffId,
+      subjectKey: targetSubjectKey,
+      gradeLevel: classRecord.gradeLevel,
+    });
+
     try {
       const [record] = await context.db
         .update(classPeriodAssignment)
         .set({
-          subjectKey: input.subjectKey,
-          staffId: input.staffId,
+          subjectKey: targetSubjectKey,
+          staffId: targetStaffId,
           isCombinedSession:
             input.isCombinedSession ?? existing.isCombinedSession,
         })

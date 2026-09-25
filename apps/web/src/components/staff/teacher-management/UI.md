@@ -1,4 +1,21 @@
-# Teacher Management UI Design
+# Teacher Management
+
+> **This file is a planning document, and parts of it no longer describe the product.** The divergences below are deliberate. Treat everything below the list as history, not specification.
+
+## What actually shipped
+
+| Planned | Shipped | Why |
+| --- | --- | --- |
+| `Sheet` create/edit forms | `Dialog` | Create and edit are short forms; a centred modal keeps them predictable. |
+| "Export as EXCEL coming soon" | Export is implemented | `staff.exports.teachersExcel` produces a real XLSX. It is scoped to the selected year by default, so the file and the on-screen roster describe the same people. |
+| Address field on the teacher form | Not collected | Out of scope for the staff record; the audit found no screen that reads it. |
+| Cmd+K / Cmd+N / Cmd+E shortcuts | None | No shortcut layer is implemented. |
+| NIC / Position / Status as list columns | Name, service number, employment | What a teacher list is for; the rest live in the profile dialog. |
+
+Two behaviours worth knowing:
+
+- **CSV import.** "Blank template" downloads a genuinely empty file with one example row. It used to write every teacher's name, email, phone, NIC, gender and date of birth into a file labelled "Template". Real data leaves through "Export as Excel", which says what it contains.
+- **Office staff** have no self-service sign-up. Their accounts are issued by an administrator, who creates the staff record and hands over the login.
 
 ## Overview
 

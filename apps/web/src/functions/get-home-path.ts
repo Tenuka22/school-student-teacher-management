@@ -109,20 +109,20 @@ export const getMyHomePath = createServerFn({ method: "GET" })
       return "/login";
     }
 
-    const [authority, currentYear] = await Promise.all([
-      resolveAuthority(db, session.user.id),
-      db
-        .select({ year: academicYear.year })
-        .from(academicYear)
-        .where(eq(academicYear.isCurrent, true))
-        .limit(1),
-    ]);
+    const [currentYear] = await db
+      .select({ id: academicYear.id, year: academicYear.year })
+      .from(academicYear)
+      .where(eq(academicYear.isCurrent, true))
+      .limit(1);
+    const authority = currentYear
+      ? await resolveAuthority(db, session.user.id, currentYear.id)
+      : null;
 
     return getHomePath({
       role: (session.user as SessionUser).role,
       isDeputy: authority?.isDeputy ?? false,
       isPrincipal: authority?.isPrincipal ?? false,
-      year: currentYear[0]?.year ?? null,
+      year: currentYear?.year ?? null,
       emailVerified: session.user.emailVerified,
     });
   });

@@ -4,13 +4,13 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireAssignmentPermission } from "../../../index";
+import { adminProcedure } from "../../../index";
 
 /**
  * List all period assignments for a class in a given academic year.
- * Returns a timetable grid: (dayOfWeek, periodNumber) → (subject, teacher).
+ * Returns a timetable grid: (dayOfWeek, periodNumber) â†’ (subject, teacher).
  */
-export const listClassTimetable = requireAssignmentPermission("read")
+export const listClassTimetable = adminProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

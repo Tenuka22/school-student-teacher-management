@@ -1,0 +1,2 @@
+ALTER TABLE "short_leave_usage" DROP CONSTRAINT "short_leave_usage_staff_month_unique";--> statement-breakpoint
+ALTER TABLE "short_leave_usage" ADD CONSTRAINT "short_leave_usage_staff_year_month_unique" UNIQUE("staff_id","academic_year_id","year_month");

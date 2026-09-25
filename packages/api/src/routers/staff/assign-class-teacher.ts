@@ -18,6 +18,7 @@ import {
 } from "valibot";
 
 import { requireAssignmentPermission } from "../../index";
+import { assertTeacherEligibleForYear } from "./teacher-eligibility";
 
 const reasonSchema = picklist(
   Object.keys(TEACHER_REASSIGNMENT_REASONS) as [string, ...string[]]
@@ -73,6 +74,14 @@ export const assignClassTeacher = requireAssignmentPermission("update")
       throw new ORPCError("BAD_REQUEST", {
         message:
           "A reason is required when replacing or clearing an existing homeroom teacher",
+      });
+    }
+
+    if (newTeacherId) {
+      await assertTeacherEligibleForYear({
+        db: context.db,
+        academicYearId: existing.academicYearId,
+        staffId: newTeacherId,
       });
     }
 

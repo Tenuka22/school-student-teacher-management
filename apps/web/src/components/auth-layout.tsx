@@ -80,10 +80,10 @@ export const AuthSplitLayout = ({
 
     {/* Brand panel */}
     <div className="auth-split-brand">
-      <div
-        className="auth-brand-photo"
-        style={{ backgroundImage: "url('/uploads/campus-photo.jpg')" }}
-      />
+      {/* No campus photograph is bundled: the shade below is already opaque
+          enough to carry the panel on its own, so a missing file only cost a
+          404 on the sign-in and sign-up pages. Add one at
+          /uploads/campus-photo.jpg and restore this layer when it exists. */}
       <div className="auth-brand-shade" />
       <div className="auth-orb" />
       <img

@@ -11,14 +11,14 @@ import { eq } from "drizzle-orm";
 import { pick } from "valibot";
 import * as v from "valibot";
 
-import { protectedProcedure } from "../../index";
+import { requireQualificationPermission } from "../../index";
 
 /**
  * Record a qualification and its supporting document.
  * Staff can upload for themselves; admin can upload for any staff member.
  * New uploads start with documentStatus "pending" requiring admin approval.
  */
-export const uploadQualification = protectedProcedure
+export const uploadQualification = requireQualificationPermission("create")
   .input(
     v.object({
       ...pick(teacherQualificationInsertSchema, [
@@ -33,33 +33,37 @@ export const uploadQualification = protectedProcedure
     })
   )
   .handler(async ({ input, context }) => {
-    const isAdmin = context.session.user.role === "admin";
+    const canManageAny = ["admin", "principal", "vicePrincipal"].includes(
+      context.session.user.role ?? ""
+    );
+    let targetStaffId: string | undefined = input.staffId;
 
-    // Determine target staff ID
-    const targetStaffId = input.staffId;
-    if (!targetStaffId) {
-      if (!isAdmin) {
+    if (!canManageAny) {
+      const [staffRecord] = await context.db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(eq(staff.userId, context.session.user.id))
+        .limit(1);
+
+      if (!staffRecord) {
         throw new ORPCError("FORBIDDEN", {
-          message: "staffId is required for non-admin users",
+          message: "A staff profile is required to upload qualifications",
         });
       }
-      throw new ORPCError("BAD_REQUEST", {
-        message: "staffId is required",
-      });
-    }
 
-    // Non-admin users can only upload for themselves
-    if (!isAdmin) {
-      const [staffRecord] = await context.db
-        .select()
-        .from(staff)
-        .where(eq(staff.email, context.session.user.email));
-
-      if (!staffRecord || staffRecord.id !== targetStaffId) {
+      if (targetStaffId && targetStaffId !== staffRecord.id) {
         throw new ORPCError("FORBIDDEN", {
           message: "You can only upload qualifications for yourself",
         });
       }
+
+      targetStaffId = staffRecord.id;
+    }
+
+    if (!targetStaffId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "staffId is required",
+      });
     }
 
     const id = crypto.randomUUID();

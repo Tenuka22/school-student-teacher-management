@@ -33,6 +33,21 @@ const TEMPLATE_COLUMNS = [
 ] as const;
 
 const NAMESPACE = "classes";
+
+/** A blank template with one example row — see the teacher importer. */
+const downloadBlankTemplate = () => {
+  const exampleRow = Object.fromEntries(
+    TEMPLATE_COLUMNS.map((column) => [
+      column,
+      column === "name" ? "Grade 8 - B" : "",
+    ])
+  );
+
+  downloadCsv(
+    "classes-template.csv",
+    toCsv([...TEMPLATE_COLUMNS], [exampleRow])
+  );
+};
 const comparableColumns = TEMPLATE_COLUMNS.filter((column) => column !== "id");
 
 const rowsDiffer = (
@@ -63,17 +78,7 @@ export const ClassCsvImport = ({
   );
   const [isImporting, setIsImporting] = useState(false);
 
-  const handleDownloadTemplate = () => {
-    const rows = classes.map((cls) => ({
-      id: cls.id,
-      name: cls.name,
-      gradeLevel: String(cls.gradeLevel),
-      medium: cls.medium,
-      homeroomTeacherId: cls.homeroomTeacherId ?? "",
-    }));
-    downloadCsv("classes-template.csv", toCsv([...TEMPLATE_COLUMNS], rows));
-  };
-
+  /** A blank template with one example row — see the teacher importer. */
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };
@@ -178,11 +183,28 @@ export const ClassCsvImport = ({
     }
   };
 
+  /**
+   * Writes the imported version of a conflicted class.
+   *
+   * The dialog showed the grade and homeroom differences side by side, and this
+   * used to apply only the name and medium — so "Apply Imported Version"
+   * silently dropped two of the three differences it had just displayed. Grade
+   * and homeroom are applied too now; homeroom only when the file actually
+   * carries one, so a blank column cannot unassign a teacher.
+   */
   const handleApplyConflict = async (conflict: ImportConflict<Class>) => {
     try {
+      const homeroomProvided =
+        conflict.incoming.homeroomTeacherId !== null &&
+        conflict.incoming.homeroomTeacherId !== undefined;
+
       await onUpdate(conflict.recordId, {
         name: conflict.incoming.name,
+        gradeLevel: conflict.incoming.gradeLevel,
         medium: conflict.incoming.medium,
+        ...(homeroomProvided
+          ? { homeroomTeacherId: conflict.incoming.homeroomTeacherId }
+          : {}),
       });
       removeImportConflict(NAMESPACE, conflict.conflictId);
       setConflicts(getImportConflicts<Class>(NAMESPACE));
@@ -201,9 +223,9 @@ export const ClassCsvImport = ({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+      <Button variant="outline" size="sm" onClick={downloadBlankTemplate}>
         <IconDownload className="mr-2 size-4" />
-        IconDownload Template
+        Blank template
       </Button>
       <Button
         variant="outline"
@@ -242,8 +264,9 @@ export const ClassCsvImport = ({
           <AlertDialogTitle>Resolve Import Conflicts</AlertDialogTitle>
           <AlertDialogDescription>
             These rows from your last import differ from the current server
-            data. Nothing was pushed — apply the imported version or discard it
-            for each row.
+            data. Applying a row writes its name, grade, medium and — where the
+            file names one — its homeroom teacher. Discarding leaves the class
+            as it is.
           </AlertDialogDescription>
           <div className="max-h-96 space-y-3 overflow-y-auto">
             {conflicts.map((conflict) => (

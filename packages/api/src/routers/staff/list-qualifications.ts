@@ -6,16 +6,18 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { protectedProcedure } from "../../index";
+import { requireQualificationPermission } from "../../index";
 
 const documentStatusSchema = v.picklist(["pending", "approved", "rejected"]);
+const canViewAllQualifications = (role: string | null | undefined) =>
+  role === "admin" || role === "principal" || role === "vicePrincipal";
 
 /**
  * List qualifications.
  * Admin can see all qualifications, optionally filtered by staffId and
  * document status. Regular staff can only see their own qualifications.
  */
-export const listQualifications = protectedProcedure
+export const listQualifications = requireQualificationPermission("read")
   .input(
     v.object({
       staffId: v.optional(staffIdSchema),
@@ -23,21 +25,25 @@ export const listQualifications = protectedProcedure
     })
   )
   .handler(async ({ input, context }) => {
-    const isAdmin = context.session.user.role === "admin";
     const conditions = [];
+    const canViewAll = canViewAllQualifications(context.session.user.role);
 
-    if (isAdmin && input.staffId) {
-      conditions.push(eq(teacherQualification.staffId, input.staffId));
-    } else if (!isAdmin) {
-      // Non-admin: only own qualifications
-      const [staffRecord] = await context.db
-        .select()
-        .from(staff)
-        .where(eq(staff.email, context.session.user.email));
-
-      if (staffRecord) {
-        conditions.push(eq(teacherQualification.staffId, staffRecord.id));
+    if (canViewAll) {
+      if (input.staffId) {
+        conditions.push(eq(teacherQualification.staffId, input.staffId));
       }
+    } else {
+      const [staffRecord] = await context.db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(eq(staff.userId, context.session.user.id))
+        .limit(1);
+
+      if (!staffRecord) {
+        return [];
+      }
+
+      conditions.push(eq(teacherQualification.staffId, staffRecord.id));
     }
 
     if (input.status) {

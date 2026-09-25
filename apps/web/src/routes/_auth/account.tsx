@@ -25,11 +25,11 @@ const PasswordSection = ({
   onOpenChange: (open: boolean) => void;
   username?: string | null;
 }) => (
-  <section className="border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-    <h2 className="font-heading text-[23px] font-semibold text-[#013405]">
+  <section className="border-primary/14 bg-card px-[22px] py-5">
+    <h2 className="font-heading text-primary text-[23px] font-semibold">
       Password
     </h2>
-    <p className="mt-1.5 max-w-prose text-[13px] text-[#013405]/60">
+    <p className="text-primary/60 mt-1.5 max-w-prose text-[13px]">
       {isEnvManaged
         ? "This is an institutional login. Its password is set by the College's server configuration and re-applied on every start, so it is managed outside the app."
         : `Change it with your current password, or confirm with a one-time code sent to ${email} if you cannot remember it.`}
@@ -38,7 +38,7 @@ const PasswordSection = ({
       type="button"
       disabled={isEnvManaged}
       onClick={() => onOpenChange(true)}
-      className="mt-4 border border-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#013405] transition-colors hover:bg-[#013405] hover:text-[#FFF8E7] disabled:cursor-not-allowed disabled:border-[#013405]/25 disabled:text-[#013405]/35"
+      className="border-primary text-primary hover:bg-primary hover:text-primary-foreground disabled:border-primary/25 disabled:text-primary/35 mt-4 border px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:cursor-not-allowed"
     >
       CHANGE PASSWORD
     </button>
@@ -46,57 +46,55 @@ const PasswordSection = ({
 );
 
 const ProfileSection = ({ user }: { user: SessionUser | undefined }) => (
-  <section className="border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-    <h2 className="font-heading text-[23px] font-semibold text-[#013405]">
+  <section className="border-primary/14 bg-card px-[22px] py-5">
+    <h2 className="font-heading text-primary text-[23px] font-semibold">
       Profile
     </h2>
 
     <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
+        <dt className="text-primary/55 text-xs font-bold tracking-[0.12em]">
           FULL NAME
         </dt>
-        <dd className="mt-1 text-[15px] font-semibold text-[#013405]">
+        <dd className="text-primary mt-1 text-[15px] font-semibold">
           {user?.name ?? "—"}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
+        <dt className="text-primary/55 text-xs font-bold tracking-[0.12em]">
           EMAIL
         </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
-          {user?.email ?? "—"}
-        </dd>
+        <dd className="text-primary mt-1 text-[15px]">{user?.email ?? "—"}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
+        <dt className="text-primary/55 text-xs font-bold tracking-[0.12em]">
           USERNAME
         </dt>
-        <dd className="mt-1 font-mono text-[14px] text-[#013405]">
+        <dd className="text-primary mt-1 font-mono text-[14px]">
           {user?.username ?? "—"}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
+        <dt className="text-primary/55 text-xs font-bold tracking-[0.12em]">
           ROLE
         </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
+        <dd className="text-primary mt-1 text-[15px]">
           {ROLE_LABELS[user?.role ?? "user"] ?? user?.role}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
+        <dt className="text-primary/55 text-xs font-bold tracking-[0.12em]">
           EMAIL VERIFIED
         </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
+        <dd className="text-primary mt-1 text-[15px]">
           {user?.emailVerified ? "Yes" : "Not yet"}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
+        <dt className="text-primary/55 text-xs font-bold tracking-[0.12em]">
           DISPLAY NAME
         </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
+        <dd className="text-primary mt-1 text-[15px]">
           {user?.displayUsername ?? user?.username ?? "—"}
         </dd>
       </div>
@@ -105,11 +103,11 @@ const ProfileSection = ({ user }: { user: SessionUser | undefined }) => (
 );
 
 const SwitchAccountSection = () => (
-  <section className="border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-    <h2 className="font-heading text-[23px] font-semibold text-[#013405]">
+  <section className="border-primary/14 bg-card px-[22px] py-5">
+    <h2 className="font-heading text-primary text-[23px] font-semibold">
       Add or switch account
     </h2>
-    <p className="mt-1.5 max-w-prose text-[13px] text-[#013405]/60">
+    <p className="text-primary/60 mt-1.5 max-w-prose text-[13px]">
       Sign in as someone else without signing out of this account — useful for
       checking a teacher&rsquo;s portal or approving a request as a different
       role. Your current session stays active, and the sign-in page lists every
@@ -118,7 +116,7 @@ const SwitchAccountSection = () => (
     <Link
       to="/login"
       search={{ switch: 1 }}
-      className="mt-4 inline-block border border-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#013405] transition-colors hover:bg-[#013405] hover:text-[#FFF8E7]"
+      className="border-primary text-primary hover:bg-primary hover:text-primary-foreground mt-4 inline-block border px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors"
     >
       MANAGE ACCOUNTS
     </Link>
@@ -137,10 +135,10 @@ const AccountPage = () => {
   return (
     <div className="flex flex-col gap-[18px]">
       <div>
-        <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
+        <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
           Account
         </h1>
-        <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
+        <p className="text-primary/65 mt-1.5 text-[13.5px]">
           Your profile, password and signed-in devices.
         </p>
       </div>

@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  appointmentTypeLabel,
+  employmentStatusLabel,
+} from "@school-student-teacher-management/db/constants/display";
+import {
+  leavePaymentLabel,
+  leaveTypeLabel,
+} from "@school-student-teacher-management/db/constants/leave-labels";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -19,13 +27,28 @@ import { Link, useParams } from "@tanstack/react-router";
 
 import { orpc } from "@/utils/orpc";
 
-const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: "Annual",
-  casual: "Casual",
-  medical: "Medical",
-  maternity: "Maternity",
-  duty: "Official Duty",
-  other: "Other",
+/**
+ * A balance line, in words.
+ *
+ * Maternity is the only type with more than one payment status, so it is the
+ * only one that needs the status in its name � and the status is read from the
+ * shared label map so a request recorded as half pay says so, rather than
+ * falling through to "Unpaid".
+ */
+const getLeaveBalanceLabel = (balance: {
+  leaveType: string;
+  paymentStatus: string;
+}) => {
+  const typeLabel = leaveTypeLabel(balance.leaveType);
+  if (balance.leaveType !== "maternity") {
+    return typeLabel;
+  }
+
+  if (balance.paymentStatus === "notApplicable") {
+    return typeLabel;
+  }
+
+  return `${typeLabel} (${leavePaymentLabel(balance.paymentStatus)})`;
 };
 
 /** Leave balance card: entitlement (max) vs derived usage for the year. */
@@ -47,19 +70,26 @@ const LeaveBalanceCard = () => {
           <h2 className="font-semibold">Leave Balance (this year)</h2>
         </div>
         <div className="space-y-3">
-          {balances.map((b) => {
+          {balances.map((balance) => {
+            const label = getLeaveBalanceLabel(balance);
             const pct =
-              b.maxDays > 0
-                ? Math.min(100, Math.round((b.usedDays / b.maxDays) * 100))
+              balance.maxDays > 0
+                ? Math.min(
+                    100,
+                    Math.round((balance.usedDays / balance.maxDays) * 100)
+                  )
                 : 0;
+            const isLoan = balance.remainingDays < 0;
+            const balanceLabel = isLoan
+              ? `${Math.abs(balance.remainingDays)} days loan`
+              : `${balance.remainingDays} days remaining`;
             return (
-              <div key={b.leaveType}>
+              <div key={`${balance.leaveType}:${balance.paymentStatus}`}>
                 <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium">
-                    {LEAVE_TYPE_LABELS[b.leaveType] ?? b.leaveType}
-                  </span>
+                  <span className="font-medium">{label}</span>
                   <span className="text-muted-foreground font-mono text-xs">
-                    {b.usedDays} / {b.maxDays} days
+                    {balance.usedDays} / {balance.maxDays} days Â·{" "}
+                    {balanceLabel}
                   </span>
                 </div>
                 <div
@@ -67,7 +97,7 @@ const LeaveBalanceCard = () => {
                   aria-valuenow={pct}
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-label={`${LEAVE_TYPE_LABELS[b.leaveType] ?? b.leaveType} leave used`}
+                  aria-label={`${label} leave used`}
                 >
                   <div
                     className={`h-full rounded-full ${pct >= 100 ? "bg-destructive" : "bg-primary"}`}
@@ -81,14 +111,6 @@ const LeaveBalanceCard = () => {
       </CardContent>
     </Card>
   );
-};
-
-const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
-  permanent: "Permanent",
-  probation: "Probation",
-  temporary: "Temporary",
-  substitute: "Substitute",
-  visiting: "Visiting Lecturer",
 };
 
 export const TeacherDashboard = () => {
@@ -142,7 +164,7 @@ export const TeacherDashboard = () => {
           Welcome, {profile.name}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Your teacher workspace — profile, leave and timetable in one place.
+          Your teacher workspace â€” profile, leave and timetable in one place.
         </p>
       </div>
 
@@ -157,33 +179,32 @@ export const TeacherDashboard = () => {
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Badge number</dt>
                 <dd className="font-mono font-medium">
-                  {profile.teacherServiceNo ?? "—"}
+                  {profile.teacherServiceNo ?? "â€”"}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Login username</dt>
-                <dd className="font-mono font-medium">{username ?? "—"}</dd>
+                <dd className="font-mono font-medium">{username ?? "â€”"}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Email</dt>
-                <dd className="truncate">{profile.email ?? "—"}</dd>
+                <dd className="truncate">{profile.email ?? "â€”"}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Phone</dt>
-                <dd>{profile.phone ?? "—"}</dd>
+                <dd>{profile.phone ?? "â€”"}</dd>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted-foreground">Employment</dt>
                 <dd className="flex items-center gap-2">
                   {profile.appointmentType && (
                     <Badge variant="outline">
-                      {APPOINTMENT_TYPE_LABELS[profile.appointmentType] ??
-                        profile.appointmentType}
+                      {appointmentTypeLabel(profile.appointmentType)}
                     </Badge>
                   )}
                   {profile.employmentStatus && (
                     <Badge variant="secondary">
-                      {profile.employmentStatus}
+                      {employmentStatusLabel(profile.employmentStatus)}
                     </Badge>
                   )}
                 </dd>
@@ -195,7 +216,7 @@ export const TeacherDashboard = () => {
               className="mt-4"
               render={<Link to="/teacher/$year/profile" params={{ year }} />}
             >
-              Edit contact details
+              Edit phone number
             </Button>
           </CardContent>
         </Card>
@@ -219,10 +240,7 @@ export const TeacherDashboard = () => {
               <Button
                 variant="outline"
                 render={
-                  <Link
-                    to="/admin/$year/staff/teacher-timetable"
-                    params={{ year }}
-                  />
+                  <Link to="/teacher/$year/timetable" params={{ year }} />
                 }
               >
                 Timetables

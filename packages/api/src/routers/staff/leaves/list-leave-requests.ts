@@ -5,14 +5,18 @@ import {
 import type {
   DeputyStatus,
   FinalStatus,
+  LeaveDayPart,
+  LeavePaymentStatus,
   LeaveStatus,
   LeaveType,
 } from "@school-student-teacher-management/db/schema/leaves";
 import { staff } from "@school-student-teacher-management/db/schema/staff";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import * as v from "valibot";
 
 import { adminProcedure } from "../../../index";
+import { leaveYearSchema, requireLeaveAcademicYear } from "./leadership-review";
 
 export const leaveStatusFilterSchema = v.optional(leaveStatusSchema);
 
@@ -38,12 +42,16 @@ export type LeaveQueue = (typeof LEAVE_QUEUE_FILTERS)[number];
 export const listLeaveRequests = adminProcedure
   .input(
     v.object({
+      year: leaveYearSchema,
       status: leaveStatusFilterSchema,
       queue: v.optional(v.picklist(LEAVE_QUEUE_FILTERS)),
     })
   )
   .handler(async ({ input, context }) => {
-    const conditions = [];
+    const selectedYear = await requireLeaveAcademicYear(context.db, input.year);
+    const conditions: SQL[] = [
+      eq(leaveRequest.academicYearId, selectedYear.id),
+    ];
 
     if (input.status) {
       conditions.push(eq(leaveRequest.status, input.status));
@@ -56,7 +64,7 @@ export const listLeaveRequests = adminProcedure
       );
     } else if (input.queue === "principal") {
       conditions.push(
-        eq(leaveRequest.status, "recommended"),
+        inArray(leaveRequest.status, ["recommended", "rejected"]),
         isNull(leaveRequest.finalizedAt)
       );
     }
@@ -67,11 +75,14 @@ export const listLeaveRequests = adminProcedure
         type: leaveRequest.type,
         startDate: leaveRequest.startDate,
         endDate: leaveRequest.endDate,
+        dayPart: leaveRequest.dayPart,
+        paymentStatus: leaveRequest.paymentStatus,
         reason: leaveRequest.reason,
         status: leaveRequest.status,
         deputyStatus: leaveRequest.deputyStatus,
         deputyComment: leaveRequest.deputyComment,
         finalStatus: leaveRequest.finalStatus,
+        principalComment: leaveRequest.principalComment,
         finalizedAt: leaveRequest.finalizedAt,
         reviewComment: leaveRequest.reviewComment,
         reviewedAt: leaveRequest.reviewedAt,
@@ -94,11 +105,14 @@ export const listLeaveRequests = adminProcedure
         type: row.type as LeaveType,
         startDate: row.startDate,
         endDate: row.endDate,
+        dayPart: row.dayPart as LeaveDayPart,
+        paymentStatus: row.paymentStatus as LeavePaymentStatus,
         reason: row.reason,
         status: row.status as LeaveStatus,
         deputyStatus: row.deputyStatus as DeputyStatus,
         deputyComment: row.deputyComment,
         finalStatus: row.finalStatus as FinalStatus,
+        principalComment: row.principalComment,
         finalizedAt: row.finalizedAt?.toISOString() ?? null,
         reviewComment: row.reviewComment,
         reviewedAt: row.reviewedAt?.toISOString() ?? null,

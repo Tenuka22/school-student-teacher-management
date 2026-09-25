@@ -1,7 +1,5 @@
-import type {
-  classPeriodAssignment as periodAssignmentTable,
-  periodConfig as periodConfigTable,
-} from "@school-student-teacher-management/db/schema/periods";
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
+import type { classPeriodAssignment as periodAssignmentTable } from "@school-student-teacher-management/db/schema/periods";
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -16,7 +14,6 @@ import { downloadExportFile } from "@/lib/download-export";
 import { orpc } from "@/utils/orpc";
 
 type Staff = typeof staff.$inferSelect;
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
 type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
 
 const handleMutationError = (error: unknown, defaultMsg: string) => {
@@ -109,13 +106,6 @@ export const usePeriodsPage = () => {
     }
     return classesData.find((c) => c.id === selectedClassId) || undefined;
   }, [classesData, selectedClassId]);
-
-  const periodConfigQuery = useQuery(
-    orpc.staff.periods.listPeriodConfig.queryOptions({
-      input: { academicYearId: currentYear?.id ?? "" },
-      enabled: !!currentYear?.id,
-    })
-  );
 
   const timetableQuery = useQuery(
     orpc.staff.periods.listClassTimetable.queryOptions({
@@ -296,14 +286,6 @@ export const usePeriodsPage = () => {
     }
   }, [selectedAssignment, deleteMutation, timetableQuery, conflictsQuery]);
 
-  const periodConfig = useMemo(() => {
-    const data = periodConfigQuery.data as unknown[] | undefined;
-    if (!data || !Array.isArray(data)) {
-      return [];
-    }
-    return data as PeriodConfig[];
-  }, [periodConfigQuery.data]);
-
   const timetableData = useMemo(() => {
     const data = timetableQuery.data as unknown[] | undefined;
     return (data || []) as PeriodAssignment[];
@@ -321,7 +303,7 @@ export const usePeriodsPage = () => {
     selectedClassId,
     setSelectedClassId,
     selectedClass,
-    periodConfig,
+    periods: CODE_DEFINED_PERIODS,
     timetableData,
     conflictingAssignmentIds,
     staffMap,

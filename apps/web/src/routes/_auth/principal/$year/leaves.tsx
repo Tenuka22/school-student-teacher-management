@@ -7,6 +7,12 @@ import { LeaveRequestsContent } from "@/components/staff/leave-management/leave-
  * rather than under `/admin` so leadership is confined to its own surface;
  * the component gates its own buttons off `getMyAuthority` as before.
  */
+const PrincipalLeavePage = () => {
+  const { year } = Route.useParams();
+
+  return <LeaveRequestsContent year={Number(year)} />;
+};
+
 export const Route = createFileRoute("/_auth/principal/$year/leaves")({
-  component: LeaveRequestsContent,
+  component: PrincipalLeavePage,
 });

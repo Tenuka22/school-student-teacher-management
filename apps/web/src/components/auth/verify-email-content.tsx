@@ -1,13 +1,14 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { getAuthEmailAvailability } from "@/functions/get-auth-email-availability";
 import { authClient } from "@/lib/auth-client";
 import { useOtpCooldown } from "@/lib/otp-cooldown";
 import type { OtpCooldown } from "@/lib/otp-cooldown";
 
 const inputClass =
-  "w-full border border-[#013405]/22 bg-white px-3 py-2.5 text-sm text-[#013405] outline-none focus:border-[#013405]";
+  "w-full border border-primary/22 bg-white px-3 py-2.5 text-sm text-primary outline-none focus:border-primary";
 
 const getSendLabel = (cooldown: OtpCooldown): string => {
   if (cooldown.isSending) {
@@ -43,6 +44,14 @@ export const VerifyEmailContent = ({
 }) => {
   const [otp, setOtp] = useState("");
   const [sent, setSent] = useState(false);
+
+  // Whether a code can actually be delivered. When it cannot, the page says so
+  // instead of promising a message that will never arrive.
+  const availabilityQuery = useQuery({
+    queryKey: ["auth", "email-availability"],
+    queryFn: ({ signal }) => getAuthEmailAvailability({ signal }),
+  });
+  const canDeliver = availabilityQuery.data?.canDeliver ?? true;
 
   const sendMutation = useMutation({
     mutationFn: async () => {
@@ -97,18 +106,46 @@ export const VerifyEmailContent = ({
     return (
       <div className="flex flex-col gap-[18px]">
         <div>
-          <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
+          <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
             Email verified
           </h1>
-          <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
+          <p className="text-primary/65 mt-1.5 text-[13.5px]">
             {email} is confirmed. Continue to your workspace.
           </p>
         </div>
         <a
           href="/"
-          className="self-start bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12]"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover self-start px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors"
         >
           CONTINUE
+        </a>
+      </div>
+    );
+  }
+
+  if (availabilityQuery.isSuccess && !canDeliver) {
+    return (
+      <div className="flex max-w-lg flex-col gap-[18px]">
+        <div>
+          <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
+            Address not confirmed yet
+          </h1>
+          <p className="text-primary/65 mt-1.5 text-[13.5px] leading-relaxed">
+            Your account exists for <strong>{email}</strong>, but this server
+            cannot send a confirmation code, so the address cannot be confirmed
+            from here.
+          </p>
+        </div>
+        <div className="border-destructive/30 bg-card border px-[22px] py-5">
+          <p className="text-primary/80 text-[13.5px] leading-relaxed">
+            {availabilityQuery.data.guidance}
+          </p>
+        </div>
+        <a
+          href="/account"
+          className="border-primary/30 text-primary hover:border-primary self-start border px-4 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors"
+        >
+          GO TO ACCOUNT
         </a>
       </div>
     );
@@ -117,22 +154,22 @@ export const VerifyEmailContent = ({
   return (
     <div className="flex max-w-lg flex-col gap-[18px]">
       <div>
-        <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
+        <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
           Verify your email
         </h1>
-        <p className="mt-1.5 text-[13.5px] leading-relaxed text-[#013405]/65">
+        <p className="text-primary/65 mt-1.5 text-[13.5px] leading-relaxed">
           Your account exists, but the address on it has not been confirmed.
-          Enter the code we send to <strong>{email}</strong> to unlock the rest
-          of the system.
+          Enter the code sent to <strong>{email}</strong> to unlock the rest of
+          the system.
         </p>
-        <p className="mt-2 text-[13px] leading-relaxed text-[#013405]/55">
+        <p className="text-primary/55 mt-2 text-[13px] leading-relaxed">
           Verifying confirms the address is yours. If you asked to join as
           College staff, an administrator still has to approve you before you
           become a teacher.
         </p>
       </div>
 
-      <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
+      <div className="border-primary/14 bg-card border px-[22px] py-5">
         <form
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -141,7 +178,7 @@ export const VerifyEmailContent = ({
           }}
         >
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-bold tracking-[0.12em] text-[#013405]/70">
+            <span className="text-primary/70 text-xs font-bold tracking-[0.12em]">
               ONE-TIME CODE
             </span>
             <div className="flex gap-2">
@@ -163,13 +200,13 @@ export const VerifyEmailContent = ({
                     onSuccess: () => cooldown.registerSend(),
                   });
                 }}
-                className="shrink-0 border border-[#013405]/30 px-3 py-2 text-xs font-bold text-[#013405] transition-colors hover:border-[#013405] disabled:opacity-50"
+                className="border-primary/30 text-primary hover:border-primary shrink-0 border px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50"
               >
                 {getSendLabel(cooldown)}
               </button>
             </div>
             {sent && (
-              <span className="text-xs text-[#013405]/55">
+              <span className="text-primary/55 text-xs">
                 Code sent — it expires in 10 minutes. Only three guesses are
                 allowed before a new code is needed.
               </span>
@@ -179,17 +216,16 @@ export const VerifyEmailContent = ({
           <button
             type="submit"
             disabled={verifyMutation.isPending}
-            className="self-start bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-60"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover self-start px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:opacity-60"
           >
             {verifyMutation.isPending ? "VERIFYING…" : "VERIFY EMAIL"}
           </button>
         </form>
       </div>
 
-      <p className="text-xs text-[#013405]/50">
-        In development the code is printed in the server console — there is no
-        mail provider wired up yet. Repeated requests are held back: each resend
-        waits twice as long as the last, up to five minutes.
+      <p className="text-primary/50 text-xs">
+        Repeated requests are held back: each resend waits twice as long as the
+        last, up to five minutes.
       </p>
     </div>
   );

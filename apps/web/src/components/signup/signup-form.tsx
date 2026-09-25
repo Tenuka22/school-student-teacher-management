@@ -18,11 +18,6 @@ import { SignupSuccess } from "@/components/signup/signup-success";
 import { formatApiErrorMessage, validationFieldErrors } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
-const STAFF_CATEGORY_OPTIONS = [
-  { value: "teacher", label: "Teacher" },
-  { value: "officeStaff", label: "Office Staff" },
-] as const;
-
 /**
  * A `teacher` is on the College's establishment, so the form is long and the
  * theme deepens to the formal green — a staff-facing surface. A `user` is just
@@ -46,32 +41,33 @@ const THEMES: Record<
   }
 > = {
   teacher: {
-    panel: "bg-[#04220A]",
-    form: "text-[#FFF8E7]",
-    kicker: "text-[#FFB203]",
-    heading: "text-[#FFF8E7]",
-    intro: "text-[#FFF8E7]/70",
-    submit: "bg-[#FFB203] text-[#04220A] hover:bg-[#FFD45A]",
-    toggleActive: "bg-[#FFB203] text-[#04220A]",
-    toggleIdle: "bg-[#FFF8E7]/8 text-[#FFF8E7]/70 hover:bg-[#FFF8E7]/14",
-    toggleTextActive: "text-[#04220A]",
-    toggleTextIdle: "text-[#FFF8E7]/70",
+    panel: "bg-sidebar",
+    form: "text-primary-foreground",
+    kicker: "text-accent",
+    heading: "text-primary-foreground",
+    intro: "text-primary-foreground/70",
+    submit: "bg-accent text-sidebar hover:bg-accent-hover",
+    toggleActive: "bg-accent text-sidebar",
+    toggleIdle:
+      "bg-primary-foreground/8 text-primary-foreground/70 hover:bg-primary-foreground/14",
+    toggleTextActive: "text-sidebar",
+    toggleTextIdle: "text-primary-foreground/70",
   },
   user: {
     panel: "bg-[#F4F6F1]",
-    form: "text-[#013405]",
-    kicker: "text-[#0B5E1A]",
-    heading: "text-[#013405]",
-    intro: "text-[#013405]/70",
-    submit: "bg-[#0B5E1A] text-[#FFF8E7] hover:bg-[#084512]",
-    toggleActive: "bg-[#013405] text-[#FFF8E7]",
-    toggleIdle: "bg-[#013405]/6 text-[#013405]/70 hover:bg-[#013405]/12",
-    toggleTextActive: "text-[#FFF8E7]",
-    toggleTextIdle: "text-[#013405]/70",
+    form: "text-primary",
+    kicker: "text-success",
+    heading: "text-primary",
+    intro: "text-primary/70",
+    submit: "bg-success text-primary-foreground hover:bg-[#084512]",
+    toggleActive: "bg-primary text-primary-foreground",
+    toggleIdle: "bg-primary/6 text-primary/70 hover:bg-primary/12",
+    toggleTextActive: "text-primary-foreground",
+    toggleTextIdle: "text-primary/70",
   },
 };
 const INPUT_CLASS =
-  "w-full border border-current/22 bg-white/70 px-[15px] py-[13px] text-sm text-[#013405] outline-none placeholder:text-[#013405]/38 focus:border-[#013405] focus:bg-white";
+  "w-full border border-current/22 bg-white/70 px-[15px] py-[13px] text-sm text-primary outline-none placeholder:text-primary/38 focus:border-primary focus:bg-white";
 
 const getSubmitLabel = (isTeacher: boolean, isSubmitting: boolean) => {
   if (isSubmitting) {
@@ -89,24 +85,20 @@ const AccountTypeToggle = ({
   theme: (typeof THEMES)[AccountType];
   onChange: (next: AccountType) => void;
 }) => (
-  <div
-    role="tablist"
-    aria-label="Account type"
-    className="grid grid-cols-2 gap-2"
-  >
+  <fieldset className="grid grid-cols-2 gap-2">
+    <legend className="sr-only">Account type</legend>
     {(["user", "teacher"] as const).map((type) => {
       const isActive = value === type;
       return (
         <button
           key={type}
           type="button"
-          role="tab"
-          aria-selected={isActive}
+          aria-pressed={isActive}
           onClick={() => onChange(type)}
           className={`px-4 py-3 text-left transition-colors ${isActive ? theme.toggleActive : theme.toggleIdle}`}
         >
           <span className="block text-[13px] font-extrabold tracking-[0.08em]">
-            {type === "user" ? "USER" : "TEACHER / STAFF"}
+            {type === "user" ? "USER" : "TEACHER"}
           </span>
           <span
             className={`mt-1 block text-xs leading-tight ${isActive ? theme.toggleTextActive : theme.toggleTextIdle}`}
@@ -118,7 +110,7 @@ const AccountTypeToggle = ({
         </button>
       );
     })}
-  </div>
+  </fieldset>
 );
 
 interface SignupFieldProps {
@@ -136,7 +128,7 @@ const SignupField = ({ label, error, hint, children }: SignupFieldProps) => (
     {children}
     {hint && <span className="mt-1.5 block text-xs opacity-60">{hint}</span>}
     {error && (
-      <span className="mt-1.5 block text-xs text-[#A51919]">{error}</span>
+      <span className="text-destructive mt-1.5 block text-xs">{error}</span>
     )}
   </label>
 );
@@ -354,40 +346,25 @@ export const SignupForm = () => {
             </SignupField>
 
             {isTeacher && (
-              <>
-                <SignupField label="PHONE (OPTIONAL)">
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={(e) => setField("phone", e.target.value)}
-                    placeholder="07X XXX XXXX"
-                    autoComplete="tel"
-                    disabled={isSubmitting}
-                    className={INPUT_CLASS}
-                  />
-                </SignupField>
+              <SignupField label="PHONE (OPTIONAL)">
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setField("phone", e.target.value)}
+                  placeholder="07X XXX XXXX"
+                  autoComplete="tel"
+                  disabled={isSubmitting}
+                  className={INPUT_CLASS}
+                />
+              </SignupField>
+            )}
 
-                <SignupField
-                  label="STAFF CATEGORY"
-                  error={errors.staffCategory}
-                >
-                  <select
-                    value={form.staffCategory}
-                    onChange={(e) => setField("staffCategory", e.target.value)}
-                    disabled={isSubmitting}
-                    className={INPUT_CLASS}
-                  >
-                    <option value="" disabled>
-                      Select category
-                    </option>
-                    {STAFF_CATEGORY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </SignupField>
-              </>
+            {isTeacher && (
+              <p className="text-[12.5px] leading-relaxed opacity-75">
+                Office staff accounts are issued by the College administrator,
+                who creates the record and hands over the login. Register here
+                if you are joining as a teacher.
+              </p>
             )}
 
             <PasswordField

@@ -42,12 +42,11 @@ export const LoginForm = () => {
 
   return (
     <div
-      className="flex h-dvh max-h-dvh overflow-hidden bg-[#013405] text-[#FFF8E7]"
+      className="bg-primary text-primary-foreground flex h-dvh max-h-dvh overflow-hidden"
       style={{ fontFamily: "Manrope, sans-serif" }}
     >
       {/* Brand panel */}
-      <div className="relative hidden min-w-0 flex-[1.15_1_420px] flex-col justify-between overflow-hidden bg-[#013405] p-[clamp(28px,4vh,52px)_clamp(32px,4vw,58px)] md:flex">
-        <div className="absolute inset-0 bg-[url('/uploads/campus-photo.jpg')] bg-cover bg-center" />
+      <div className="bg-primary relative hidden min-w-0 flex-[1.15_1_420px] flex-col justify-between overflow-hidden p-[clamp(28px,4vh,52px)_clamp(32px,4vw,58px)] md:flex">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,rgba(1,52,5,0.84)_0%,rgba(1,52,5,0.91)_55%,rgba(6,43,10,0.97)_100%)]" />
         <div className="pointer-events-none absolute -top-[150px] -right-[190px] size-[520px] rounded-full bg-[radial-gradient(circle,rgba(255,178,3,0.22),transparent_65%)] motion-safe:animate-[om-pulse_9s_ease-in-out_infinite]" />
         <img
@@ -67,14 +66,14 @@ export const LoginForm = () => {
             <div className="text-[14px] font-extrabold tracking-[0.06em] whitespace-nowrap">
               ST. ALOYSIUS&rsquo; COLLEGE
             </div>
-            <div className="text-xs tracking-[0.28em] whitespace-nowrap text-[#FFB203]">
+            <div className="text-accent text-xs tracking-[0.28em] whitespace-nowrap">
               GALLE &bull; SRI LANKA
             </div>
           </div>
         </div>
 
         <div className="relative max-w-[26ch]">
-          <div className="mb-[clamp(12px,2vh,20px)] text-xs font-bold tracking-[0.44em] text-[#FFB203]">
+          <div className="text-accent mb-[clamp(12px,2vh,20px)] text-xs font-bold tracking-[0.44em]">
             CERTA VIRILITER
           </div>
           <div
@@ -83,25 +82,24 @@ export const LoginForm = () => {
           >
             School Management System
           </div>
-          <div className="my-[clamp(16px,2.6vh,26px)] h-0.5 w-13 bg-[#FFB203]" />
+          <div className="bg-accent my-[clamp(16px,2.6vh,26px)] h-0.5 w-13" />
           <p
-            className="m-0 text-[clamp(16px,2.2vh,21px)] leading-[1.5] text-[#FFF8E7]/82 italic"
+            className="text-primary-foreground/82 m-0 text-[clamp(16px,2.2vh,21px)] leading-[1.5] italic"
             style={{ fontFamily: "'Cormorant Garamond', serif" }}
           >
-            Attendance, results, timetables and College communications in one
-            place.
+            Staff records, timetables, attendance and leave in one place.
           </p>
         </div>
 
-        <div className="relative text-xs tracking-[0.16em] text-[#FFF8E7]/65">
-          For College staff, students and parents.
+        <div className="text-primary-foreground/65 relative text-xs tracking-[0.16em]">
+          For College teaching staff and office staff.
         </div>
       </div>
 
       {/* Sign-in form panel */}
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto bg-[#FFF8E7] p-[clamp(24px,4vh,56px)_clamp(20px,4vw,52px)] text-[#013405]">
+      <div className="bg-primary-foreground text-primary flex min-w-0 flex-1 items-center justify-center overflow-y-auto p-[clamp(24px,4vh,56px)_clamp(20px,4vw,52px)]">
         <div className="w-full max-w-[420px]">
-          <div className="mb-3 text-xs font-bold tracking-[0.32em] text-[#A51919]">
+          <div className="text-destructive mb-3 text-xs font-bold tracking-[0.32em]">
             SIGN IN
           </div>
           <h1
@@ -110,17 +108,18 @@ export const LoginForm = () => {
           >
             Welcome back
           </h1>
-          <p className="m-0 mb-[clamp(18px,3vh,30px)] text-[13.5px] leading-[1.55] text-[#013405]/65">
+          <p className="text-primary/65 m-0 mb-[clamp(18px,3vh,30px)] text-[13.5px] leading-[1.55]">
             Enter your username and password to access your account.
           </p>
-          <p className="m-0 mb-[clamp(12px,2vh,20px)] text-[12.5px] leading-[1.5] text-[#013405]/55">
-            Teachers and office staff: use your <strong>NIC number</strong> as
-            the username. Principal and Deputy Principal: use your assigned
-            username.
+          <p className="text-primary/55 m-0 mb-[clamp(12px,2vh,20px)] text-[12.5px] leading-[1.5]">
+            Teachers: use your <strong>NIC number</strong> as the username.
+            Office staff, Principal and Deputy Principal: use the username
+            issued with your account. General accounts sign in with the email
+            address they registered.
           </p>
 
           {isSwitching && (
-            <p className="m-0 mb-[clamp(12px,2vh,20px)] border-l-[3px] border-[#FFB203] bg-[#013405]/5 py-2 pl-3 text-[12.5px] leading-[1.5] text-[#013405]/70">
+            <p className="border-accent bg-primary/5 text-primary/70 m-0 mb-[clamp(12px,2vh,20px)] border-l-[3px] py-2 pl-3 text-[12.5px] leading-[1.5]">
               You are already signed in. Adding or switching accounts here keeps
               your current session active.
             </p>
@@ -138,7 +137,7 @@ export const LoginForm = () => {
                 disabled={isSubmitting}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full border border-[#013405]/22 bg-[#fffdf6] px-[15px] py-[13px] text-sm text-[#013405] outline-none placeholder:text-[#013405]/38 focus:border-[#013405] focus:bg-white"
+                className="border-primary/22 bg-card text-primary placeholder:text-primary/38 focus:border-primary w-full border px-[15px] py-[13px] text-sm outline-none focus:bg-white"
               />
             </label>
 
@@ -153,12 +152,12 @@ export const LoginForm = () => {
                   disabled={isSubmitting}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border border-[#013405]/22 bg-[#fffdf6] py-[13px] pr-[70px] pl-[15px] text-sm text-[#013405] outline-none focus:border-[#013405] focus:bg-white"
+                  className="border-primary/22 bg-card text-primary focus:border-primary w-full border py-[13px] pr-[70px] pl-[15px] text-sm outline-none focus:bg-white"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
-                  className="absolute top-1/2 right-[13px] -translate-y-1/2 border-b border-[#013405]/30 text-xs font-extrabold tracking-[0.1em] text-[#013405]/55"
+                  className="border-primary/30 text-primary/55 absolute top-1/2 right-[13px] -translate-y-1/2 border-b text-xs font-extrabold tracking-[0.1em]"
                 >
                   {showPassword ? "HIDE" : "SHOW"}
                 </button>
@@ -168,7 +167,7 @@ export const LoginForm = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="block w-full bg-[#013405] py-[15px] text-center text-[13.5px] font-extrabold tracking-[0.08em] text-[#FFB203] transition-colors hover:bg-[#062B0A] disabled:opacity-60"
+              className="bg-primary text-accent block w-full py-[15px] text-center text-[13.5px] font-extrabold tracking-[0.08em] transition-colors hover:bg-[#062B0A] disabled:opacity-60"
             >
               {isSubmitting ? "SIGNING IN..." : "SIGN IN"}
             </button>
@@ -178,12 +177,12 @@ export const LoginForm = () => {
             <SavedAccounts />
           </div>
 
-          <div className="mt-[clamp(16px,2.8vh,28px)] flex flex-wrap justify-between gap-3.5 border-t border-[#013405]/12 pt-[clamp(12px,2vh,20px)] text-[12.5px] text-[#013405]/65">
+          <div className="border-primary/12 text-primary/65 mt-[clamp(16px,2.8vh,28px)] flex flex-wrap justify-between gap-3.5 border-t pt-[clamp(12px,2vh,20px)] text-[12.5px]">
             <span>
               No account?{" "}
               <a
                 href={isSwitching ? "/signup?switch=1" : "/signup"}
-                className="font-bold text-[#013405] underline underline-offset-2 hover:text-[#A51919]"
+                className="text-primary hover:text-destructive font-bold underline underline-offset-2"
               >
                 Staff sign-up
               </a>
@@ -193,13 +192,13 @@ export const LoginForm = () => {
                 Changed your mind?{" "}
                 <a
                   href="/account"
-                  className="font-bold text-[#013405] underline underline-offset-2 hover:text-[#A51919]"
+                  className="text-primary hover:text-destructive font-bold underline underline-offset-2"
                 >
                   Back to my account
                 </a>
               </span>
             ) : (
-              <span className="font-bold tracking-[0.18em] text-[#013405]/45">
+              <span className="text-primary/45 font-bold tracking-[0.18em]">
                 CERTA VIRILITER
               </span>
             )}

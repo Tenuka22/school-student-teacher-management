@@ -274,9 +274,14 @@ export const UNVERIFIED_ACCOUNT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  *
  * Only `emailVerified: false` rows are eligible, so this can never touch the
  * seeded institutional accounts (seeded verified) or a real staff member who
- * has since confirmed. Cascades take their sessions, accounts and — for a
- * teacher requester — the linked `staff` row with them, so a sweep does not
- * leave an orphaned staff record behind.
+ * has since confirmed. Deleting a user cascades to their sessions and accounts.
+ *
+ * It does **not** remove the `staff` row a self-registered teacher created:
+ * `staff.userId` is `ON DELETE SET NULL`, so the person is left as an unlinked
+ * staff record rather than a deleted one. That is deliberate — the record holds
+ * real personal data an administrator may want to keep or re-link — and the
+ * dialog says so, because the previous comment here claimed the opposite and
+ * told a future reader the sweep was tidier than it is.
  *
  * Returns the ids removed, so the caller can log the sweep.
  */

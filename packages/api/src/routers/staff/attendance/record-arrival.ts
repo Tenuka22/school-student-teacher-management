@@ -1,44 +1,63 @@
 import { ORPCError } from "@orpc/server";
+import { getPeriodNumbers } from "@school-student-teacher-management/db/periods";
 import {
   attendancePolicy,
   shortLeaveUsage,
   teacherAttendance,
+  teacherPeriodAbsence,
   timeOfDaySchema,
 } from "@school-student-teacher-management/db/schema/attendance";
+import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
+import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
 import {
   academicYearIdSchema,
   staffIdSchema,
 } from "@school-student-teacher-management/db/schema/staff";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireAssignmentPermission } from "../../../index";
+import { adminProcedure } from "../../../index";
+import {
+  assertDateWithinAcademicYear,
+  requireAttendanceAcademicYear,
+} from "./academic-year";
 
-/**
- * Automatic late-arrival policy, evaluated server-side (see
- * LEAVE_SYSTEM_DESIGN.md §5). Given the teacher's arrival time and the
- * academic year's `attendance_policy` row:
- *
- * 1. arrival ≤ cutoff            → present (full day)
- * 2. late, pool has room         → "lateShortLeave"; monthly usage +1
- * 3. late, pool exhausted        → "halfDay"; monthly half-day usage +0.5
- *
- * Usage counters live in `short_leave_usage` (one row per staff ×
- * "YYYY-MM"), created on demand and only ever incremented, so policy
- * changes never rewrite history.
- */
-export const recordArrival = requireAssignmentPermission("create")
+export const recordArrival = adminProcedure
   .input(
     v.object({
       staffId: staffIdSchema,
       academicYearId: academicYearIdSchema,
-      /** Calendar date of arrival, "YYYY-MM-DD". */
-      date: v.pipe(v.string(), v.regex(/^\d{4}-\d{2}-\d{2}$/u)),
-      /** Arrival time, "HH:MM" 24-hour (school-local). */
+      date: isoDateSchema,
       arrivalTime: timeOfDaySchema,
     })
   )
   .handler(async ({ input, context }) => {
+    const year = await requireAttendanceAcademicYear(
+      context.db,
+      input.academicYearId
+    );
+    assertDateWithinAcademicYear(input.date, year);
+
+    const [approvedLeave] = await context.db
+      .select({ id: leaveRequest.id })
+      .from(leaveRequest)
+      .where(
+        and(
+          eq(leaveRequest.staffId, input.staffId),
+          eq(leaveRequest.academicYearId, input.academicYearId),
+          eq(leaveRequest.status, "approved"),
+          lte(leaveRequest.startDate, input.date),
+          gte(leaveRequest.endDate, input.date)
+        )
+      )
+      .limit(1);
+
+    if (approvedLeave) {
+      throw new ORPCError("CONFLICT", {
+        message: "Arrival cannot be recorded during approved leave",
+      });
+    }
+
     const [policy] = await context.db
       .select()
       .from(attendancePolicy)
@@ -47,117 +66,124 @@ export const recordArrival = requireAssignmentPermission("create")
 
     if (!policy) {
       throw new ORPCError("PRECONDITION_FAILED", {
-        message:
-          "No attendance policy is configured for this academic year yet",
+        message: "No attendance policy is configured for this academic year",
       });
     }
 
     const isLate = input.arrivalTime > policy.arrivalCutoffTime;
-
-    // "YYYY-MM" of the arrival date drives the monthly counter.
     const yearMonth = input.date.slice(0, 7);
 
     return await context.db.transaction(async (tx) => {
       let status: "present" | "lateShortLeave" | "halfDay" = "present";
       let note: string | null = null;
+      const missedPeriods: number[] = [];
 
       if (isLate) {
-        // Lock the usage row for this month (insert if first use).
-        let [usage] = await tx
+        await tx
+          .insert(shortLeaveUsage)
+          .values({
+            id: crypto.randomUUID(),
+            staffId: input.staffId,
+            academicYearId: input.academicYearId,
+            yearMonth,
+            shortLeavesUsed: 0,
+          })
+          .onConflictDoNothing();
+
+        const [usage] = await tx
           .select()
           .from(shortLeaveUsage)
           .where(
             and(
               eq(shortLeaveUsage.staffId, input.staffId),
+              eq(shortLeaveUsage.academicYearId, input.academicYearId),
               eq(shortLeaveUsage.yearMonth, yearMonth)
             )
           )
+          .for("update")
           .limit(1);
-
-        if (!usage) {
-          [usage] = await tx
-            .insert(shortLeaveUsage)
-            .values({
-              id: crypto.randomUUID(),
-              staffId: input.staffId,
-              academicYearId: input.academicYearId,
-              yearMonth,
-              shortLeavesUsed: 0,
-              halfDaysUsed: "0",
-            })
-            .returning();
-        }
 
         if (!usage) {
           throw new ORPCError("INTERNAL_SERVER_ERROR");
         }
 
-        const { shortLeavesUsed } = usage;
-        const shortLeavesRemaining =
-          policy.shortLeavesPerMonth - shortLeavesUsed;
-
-        if (shortLeavesRemaining > 0) {
-          // Step 2: within the monthly short-leave allowance.
+        if (usage.shortLeavesUsed < policy.shortLeavesPerMonth) {
           status = "lateShortLeave";
-          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) — short leave ${shortLeavesUsed + 1}/${policy.shortLeavesPerMonth} this month`;
+          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) â€” short leave ${usage.shortLeavesUsed + 1}/${policy.shortLeavesPerMonth} this month`;
           await tx
             .update(shortLeaveUsage)
-            .set({ shortLeavesUsed: shortLeavesUsed + 1 })
-            .where(eq(shortLeaveUsage.id, usage.id));
+            .set({ shortLeavesUsed: usage.shortLeavesUsed + 1 })
+            .where(
+              and(
+                eq(shortLeaveUsage.id, usage.id),
+                eq(shortLeaveUsage.academicYearId, input.academicYearId)
+              )
+            );
         } else {
-          // Step 3: pool exhausted — record a half day (increments by 0.5).
           status = "halfDay";
-          const halfDaysUsed = Number(usage.halfDaysUsed);
-          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) — short-leave allowance used, recorded as half day`;
-          await tx
-            .update(shortLeaveUsage)
-            .set({ halfDaysUsed: (halfDaysUsed + 0.5).toString() })
-            .where(eq(shortLeaveUsage.id, usage.id));
+          missedPeriods.push(
+            ...getPeriodNumbers({
+              startPeriodNumber: policy.primaryStartPeriodNumber,
+              endPeriodNumber: policy.primaryEndPeriodNumber,
+            })
+          );
+          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) â€” Primary half day recorded`;
         }
       }
 
-      // Upsert the day-level attendance row.
-      const [existing] = await tx
-        .select({ id: teacherAttendance.id })
-        .from(teacherAttendance)
-        .where(
-          and(
-            eq(teacherAttendance.staffId, input.staffId),
-            eq(teacherAttendance.date, input.date)
+      if (status === "halfDay") {
+        const [existing] = await tx
+          .select({ id: teacherAttendance.id })
+          .from(teacherAttendance)
+          .where(
+            and(
+              eq(teacherAttendance.staffId, input.staffId),
+              eq(teacherAttendance.academicYearId, input.academicYearId),
+              eq(teacherAttendance.date, input.date)
+            )
           )
-        )
-        .limit(1);
+          .limit(1);
+        const id = existing?.id ?? crypto.randomUUID();
 
-      const id = existing?.id ?? crypto.randomUUID();
+        if (existing) {
+          await tx
+            .update(teacherAttendance)
+            .set({ status: "partial", reason: note, markedAt: new Date() })
+            .where(eq(teacherAttendance.id, id));
+          await tx
+            .delete(teacherPeriodAbsence)
+            .where(eq(teacherPeriodAbsence.teacherAttendanceId, id));
+        } else {
+          await tx.insert(teacherAttendance).values({
+            id,
+            staffId: input.staffId,
+            academicYearId: input.academicYearId,
+            date: input.date,
+            status: "partial",
+            reason: note,
+          });
+        }
 
-      const dayRow = {
-        id,
-        staffId: input.staffId,
-        academicYearId: input.academicYearId,
-        date: input.date,
-        status,
-        reason: note,
-      };
-
-      // oxlint-disable-next-line unicorn/prefer-ternary -- upsert reads clearer as branches
-      if (existing) {
-        await tx
-          .update(teacherAttendance)
-          .set({ status, reason: note, markedAt: new Date() })
-          .where(eq(teacherAttendance.id, id));
-      } else {
-        await tx.insert(teacherAttendance).values(dayRow);
+        await tx.insert(teacherPeriodAbsence).values(
+          missedPeriods.map((periodNumber) => ({
+            id: crypto.randomUUID(),
+            teacherAttendanceId: id,
+            periodNumber,
+            reason: note ?? "Late arrival",
+          }))
+        );
       }
 
       return {
-        id,
         status,
         note,
         policy: {
           arrivalCutoffTime: policy.arrivalCutoffTime,
           shortLeavesPerMonth: policy.shortLeavesPerMonth,
-          halfDaysPerMonth: policy.halfDaysPerMonth,
-          halfDaysPerFullDay: policy.halfDaysPerFullDay,
+          primaryStartPeriodNumber: policy.primaryStartPeriodNumber,
+          primaryEndPeriodNumber: policy.primaryEndPeriodNumber,
+          secondaryStartPeriodNumber: policy.secondaryStartPeriodNumber,
+          secondaryEndPeriodNumber: policy.secondaryEndPeriodNumber,
         },
       };
     });

@@ -10,8 +10,10 @@ import { deleteAcademicYear } from "./delete-academic-year";
 import { deleteClass } from "./delete-class";
 import { deleteStaff } from "./delete-staff";
 import { exportsRouter } from "./exports";
+import { getAdminOverview } from "./get-admin-overview";
 import { getMyStaff } from "./get-my-staff";
 import { getStaff } from "./get-staff";
+import { getHistoricalData } from "./historical-data";
 import { leavesRouter } from "./leaves";
 import { seedLeaveEntitlements } from "./leaves/entitlements";
 import { listAcademicYears } from "./list-academic-years";
@@ -24,9 +26,11 @@ import { listQualifications } from "./list-qualifications";
 import { listStaff } from "./list-staff";
 import { listStructureVersions } from "./list-structure-versions";
 import { listSubjects } from "./list-subjects";
+import { listTeacherSubjects } from "./list-teacher-subjects";
 import { periodsRouter } from "./periods";
 import { portTeachersFromPreviousYear } from "./port-teachers-from-previous-year";
 import { removePosition } from "./remove-position";
+import { replaceTeacherSubjects } from "./replace-teacher-subjects";
 import { seedDefaultClasses } from "./seed-default-classes";
 import { setCurrentYear } from "./set-current-year";
 import { signupStaff } from "./signup";
@@ -68,6 +72,8 @@ export const staffRouter = {
 
   // Constants (read-only)
   listSubjects,
+  listTeacherSubjects,
+  replaceTeacherSubjects,
   listGrades,
   listPositions,
   listStructureVersions,
@@ -86,6 +92,10 @@ export const staffRouter = {
   // Self-service
   updateProfile,
   getMyStaff,
+  getHistoricalData,
+
+  // Administrator overview (live counts for the admin home page)
+  getAdminOverview,
 
   // Leave management (teacher apply / admin review)
   leaves: leavesRouter,

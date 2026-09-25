@@ -23,6 +23,43 @@ export const LEADERSHIP_ROLES = ["principal", "vicePrincipal"] as const;
 /** Roles that hold no management authority. */
 export const STAFF_ROLES = ["teacher", "teacher-requester", "user"] as const;
 
+/** Every role the server can store on a user. */
+export const ALL_ROLES = [
+  "admin",
+  "principal",
+  "vicePrincipal",
+  "teacher",
+  "teacher-requester",
+  "user",
+] as const;
+
+export type AnyRole = (typeof ALL_ROLES)[number];
+
+/**
+ * The one place a role becomes a word.
+ *
+ * These used to be three separate maps in the web app that disagreed with each
+ * other — and one of them could only ever produce two of the six roles, so a
+ * Principal was displayed to the administrator as "User".
+ */
+export const ROLE_LABELS: Record<AnyRole, string> = {
+  admin: "Administrator",
+  principal: "Principal",
+  vicePrincipal: "Deputy Principal",
+  teacher: "Teacher",
+  "teacher-requester": "Awaiting staff approval",
+  user: "General account",
+};
+
+/** A display name for any stored role, including ones this build does not know. */
+export const roleLabel = (value: string | null | undefined): string => {
+  if (!value) {
+    return ROLE_LABELS.user;
+  }
+
+  return ROLE_LABELS[value as AnyRole] ?? value;
+};
+
 /**
  * Login usernames of the env-seeded institutional accounts. Their password is
  * re-synced from server env on every boot, so an in-app password change would

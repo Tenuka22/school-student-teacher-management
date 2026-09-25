@@ -9,7 +9,6 @@ import {
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import { AcademicYearGate } from "@/components/staff/academic-year-switcher/academic-year-gate";
 import { getUser } from "@/functions/get-user";
 
 /**
@@ -74,9 +73,7 @@ const AuthLayout = () => {
           <Separator orientation="vertical" className="h-4" />
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-          <AcademicYearGate>
-            <Outlet />
-          </AcademicYearGate>
+          <Outlet />
         </div>
       </SidebarInset>
     </SidebarProvider>

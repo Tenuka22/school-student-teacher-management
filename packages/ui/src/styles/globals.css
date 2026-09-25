@@ -2,7 +2,19 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/roboto";
-@import "@fontsource-variable/figtree";
+/**
+ * The two faces the product is actually set in, served from the bundle.
+ *
+ * `--font-heading` (Cormorant Garamond) and `--font-sans` (Manrope) used to
+ * resolve only from a Google Fonts stylesheet injected by the root route. A
+ * school LAN, a privacy extension, a strict CSP or a slow link would collapse
+ * every heading in the product to a generic serif, and it sent every page view
+ * to a third party. Self-hosting removes the failure mode and the request.
+ */
+@import "@fontsource-variable/manrope";
+@import "@fontsource/cormorant-garamond/500.css";
+@import "@fontsource/cormorant-garamond/600.css";
+@import "@fontsource/cormorant-garamond/400-italic.css";
 @source "../../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
@@ -17,13 +29,23 @@
   --popover-foreground: #013405;
   --primary: #013405;
   --primary-foreground: #fff8e7;
+  /** Pressed/hover shade of the brand green, used by every primary button. */
+  --primary-hover: #064a12;
   --secondary: #f3f1e9;
   --secondary-foreground: #013405;
   --muted: #f3f1e9;
   --muted-foreground: color-mix(in oklab, #013405 60%, transparent);
   --accent: #ffb203;
   --accent-foreground: #013405;
+  /** Lighter gold, for the hover state of amber controls. */
+  --accent-hover: #ffd45a;
+  /** Deep gold, for gold text and rules that must not shout. */
+  --gold: #a8730b;
+  /** Confirmed/positive green, distinct from the brand green. */
+  --success: #0b5e1a;
   --destructive: #a51919;
+  /** Pressed shade of the destructive red. */
+  --destructive-hover: #7f1212;
   --border: color-mix(in oklab, #013405 16%, transparent);
   --input: color-mix(in oklab, #013405 22%, transparent);
   --ring: #013405;
@@ -43,42 +65,29 @@
   --sidebar-ring: #ffb203;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
+/**
+ * There is deliberately no dark palette here.
+ *
+ * A full `.dark` token set used to sit below this block: unreachable (nothing
+ * ever set `.dark` on `<html>`, and no `dark:` utilities existed in the app),
+ * unreviewed, and carrying shadcn's stock blue `--sidebar-primary` against the
+ * College's amber. Dead theme code is a promise the product does not keep.
+ *
+ * The application is light-only, and the brand depends on it: the crest, the
+ * cream paper surfaces and the deep green all assume a light ground, and the
+ * system is used in daylight offices and staff rooms.
+ *
+ * To add a real dark theme, do it as a feature rather than a leftover: define the
+ * tokens below `:root`, keep the sidebar branded green in both themes, and check
+ * contrast on the cream/green pairs before shipping a switch.
+ */
 @theme inline {
-  --font-sans: "Manrope", "Roboto Variable", sans-serif;
+  --font-sans: "Manrope Variable", "Manrope", "Roboto Variable", sans-serif;
+  --color-primary-hover: var(--primary-hover);
+  --color-accent-hover: var(--accent-hover);
+  --color-gold: var(--gold);
+  --color-success: var(--success);
+  --color-destructive-hover: var(--destructive-hover);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

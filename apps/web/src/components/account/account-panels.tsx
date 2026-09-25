@@ -47,21 +47,21 @@ export const AccountSessions = () => {
   const sessions = sessionsQuery.data ?? [];
 
   return (
-    <section className="border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-      <h2 className="font-heading text-[23px] font-semibold text-[#013405]">
+    <section className="border-primary/14 bg-card px-[22px] py-5">
+      <h2 className="font-heading text-primary text-[23px] font-semibold">
         Active sessions
       </h2>
-      <p className="mt-1.5 text-[13px] text-[#013405]/60">
+      <p className="text-primary/60 mt-1.5 text-[13px]">
         Every browser currently signed in as this account. Revoke anything you
         do not recognise.
       </p>
 
       {sessionsQuery.isPending && (
-        <p className="mt-4 text-sm text-[#013405]/60">Loading sessions…</p>
+        <p className="text-primary/60 mt-4 text-sm">Loading sessions…</p>
       )}
 
       {!sessionsQuery.isPending && sessions.length === 0 && (
-        <p className="mt-4 text-sm text-[#013405]/60">
+        <p className="text-primary/60 mt-4 text-sm">
           No other active sessions.
         </p>
       )}
@@ -72,21 +72,21 @@ export const AccountSessions = () => {
           return (
             <li
               key={session.token}
-              className="flex flex-wrap items-center gap-3 border-b border-[#013405]/10 py-3 last:border-b-0"
+              className="border-primary/10 flex flex-wrap items-center gap-3 border-b py-3 last:border-b-0"
             >
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-[#013405]">
+                <span className="text-primary block text-sm font-bold">
                   {describeAgent(session.userAgent)}
                   {index === 0 && (
-                    <span className="ml-2 text-xs font-semibold text-[#013405]/55">
+                    <span className="text-primary/55 ml-2 text-xs font-semibold">
                       most recent
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block text-xs text-[#013405]/55">
+                <span className="text-primary/55 mt-0.5 block text-xs">
                   {user.name} · {user.email}
                 </span>
-                <span className="mt-0.5 block text-xs text-[#013405]/55">
+                <span className="text-primary/55 mt-0.5 block text-xs">
                   {session.ipAddress ?? "unknown IP"} · signed in{" "}
                   {formatWhen(session.createdAt)} · expires{" "}
                   {formatWhen(session.expiresAt)}
@@ -96,7 +96,7 @@ export const AccountSessions = () => {
               <span className="flex shrink-0 gap-2">
                 <button
                   type="button"
-                  className="border border-[#A51919]/40 px-3 py-1.5 text-xs font-bold text-[#A51919] transition-colors hover:border-[#A51919] disabled:opacity-50"
+                  className="border-destructive/40 text-destructive hover:border-destructive border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
                   disabled={revokeMutation.isPending}
                   onClick={() => revokeMutation.mutate(session.token)}
                 >

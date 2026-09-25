@@ -2,9 +2,10 @@ import { ORPCError } from "@orpc/server";
 import { createStaffCredential } from "@school-student-teacher-management/auth";
 import { user as userTable } from "@school-student-teacher-management/db/schema/auth";
 import {
-  STAFF_CATEGORIES,
-  staff,
-} from "@school-student-teacher-management/db/schema/staff";
+  NIC_FORMAT_MESSAGE,
+  isValidNicFormat,
+} from "@school-student-teacher-management/db/schema/primitives";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
@@ -12,10 +13,7 @@ import { publicProcedure } from "../../index";
 
 const nicSchema = v.pipe(
   v.string(),
-  v.regex(
-    /^(?<nic>\d{9}[VvXx]|\d{12})$/u,
-    "Enter a valid Sri Lankan NIC (9 digits + V/X, or 12 digits)"
-  )
+  v.check(isValidNicFormat, NIC_FORMAT_MESSAGE)
 );
 
 /** Fields only a staff account needs — the NIC identifies them. */
@@ -26,7 +24,6 @@ const teacherSignupSchema = v.object({
   /** The staff member's own email — shown on their profile. */
   email: v.pipe(v.string(), v.email()),
   phone: v.optional(v.pipe(v.string(), v.minLength(9))),
-  staffCategory: v.picklist(STAFF_CATEGORIES),
   password: v.pipe(v.string(), v.minLength(8)),
 });
 
@@ -44,12 +41,17 @@ const userSignupSchema = v.object({
 /**
  * Self-service sign-up for two kinds of account.
  *
- * - **teacher / office staff** — identified by NIC, which is also the login
- *   username. Creates a linked `staff` row so they appear in staff lists,
- *   timetables and attendance.
+ * - **teacher** — identified by NIC, which is also the login username. Creates
+ *   a linked `staff` row so the person appears in staff lists while an
+ *   administrator decides on the request.
  * - **user** — no staff identity at all. The email is the username, and the
- *   account starts with the `user` role, which reaches no staff tooling until
- *   an admin grants more.
+ *   account starts with the `user` role, which reaches no staff tooling.
+ *
+ * Office staff deliberately have no self-service path. Their accounts are
+ * issued by an administrator, who creates the staff record and hands over the
+ * login. Accepting an office-staff registration here produced an account that
+ * could verify its address, reach the approval queue, and then be refused by
+ * approval for the one reason it could never fix itself.
  */
 export const signupStaff = publicProcedure
   .input(v.variant("accountType", [teacherSignupSchema, userSignupSchema]))
@@ -121,7 +123,9 @@ export const signupStaff = publicProcedure
         email,
         nic: input.nic,
         phone: input.phone ?? null,
-        staffCategory: input.staffCategory,
+        // Every self-service registration is a teaching applicant; office
+        // staff are added by an administrator under Teachers.
+        staffCategory: "teacher",
         userId: credential.userId,
       })
       .returning();

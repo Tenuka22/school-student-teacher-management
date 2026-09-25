@@ -16,11 +16,11 @@ import { protectedProcedure } from "../../index";
 export const updateProfile = protectedProcedure
   .input(pick(staffUpdateSchema, ["phone", "portraitFileId"]))
   .handler(async ({ input, context }) => {
-    // Find the staff record linked to this user by email
     const [staffRecord] = await context.db
-      .select()
+      .select({ id: staff.id })
       .from(staff)
-      .where(eq(staff.email, context.session.user.email));
+      .where(eq(staff.userId, context.session.user.id))
+      .limit(1);
 
     if (!staffRecord) {
       throw new ORPCError("NOT_FOUND", {

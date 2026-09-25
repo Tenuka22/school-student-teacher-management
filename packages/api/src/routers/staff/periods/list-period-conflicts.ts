@@ -3,7 +3,7 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireAssignmentPermission } from "../../../index";
+import { adminProcedure } from "../../../index";
 
 /**
  * Finds real double-bookings: a teacher assigned to more than one class in
@@ -12,7 +12,7 @@ import { requireAssignmentPermission } from "../../../index";
  * every assignment row involved in such a conflict, so callers can flag them
  * without re-deriving the grouping logic.
  */
-export const listPeriodConflicts = requireAssignmentPermission("read")
+export const listPeriodConflicts = adminProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const records = await context.db
@@ -40,7 +40,7 @@ export const listPeriodConflicts = requireAssignmentPermission("read")
         continue;
       }
       // If every overlapping row is explicitly marked combined, it's
-      // intentional (e.g. one teacher running several classes at once) —
+      // intentional (e.g. one teacher running several classes at once) â€”
       // not a conflict. Any unmarked row in an overlapping group is a real
       // accidental double-booking.
       const hasUnmarkedOverlap = group.some((r) => !r.isCombinedSession);

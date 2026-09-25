@@ -6,6 +6,7 @@ import { orpc } from "@/utils/orpc";
 
 import { ApproveTeacherDialog } from "./approve-teacher-dialog";
 import type { TeacherRequest } from "./approve-teacher-dialog";
+import { describeBlocker } from "./request-blocker";
 
 /**
  * People waiting on a staffing decision. The Principal and the administrator
@@ -33,66 +34,92 @@ export const TeacherRequestsContent = () => {
   );
 
   const requests = requestsQuery.data ?? [];
-  const waiting = requests.filter((request) => request.emailVerified);
-  const blocked = requests.filter((request) => !request.emailVerified);
+  const reviewable = requests.filter(
+    (request) => request.emailVerified && describeBlocker(request) === null
+  );
+  const blocked = requests.filter(
+    (request) => !request.emailVerified || describeBlocker(request) !== null
+  );
 
   return (
     <div className="flex flex-col gap-[18px]">
       <div>
-        <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
-          Teacher requests
+        <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
+          Staff requests
         </h1>
-        <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
-          Accounts that asked for staff access. Check the person is on the
-          College establishment, then approve — that grants the{" "}
-          <strong>teacher</strong> role.
+        <p className="text-primary/65 mt-1.5 text-[13.5px]">
+          People who registered asking for teaching access. Check the person is
+          on the College establishment, then approve — that grants the{" "}
+          <strong>teacher</strong> role and opens the teacher portal.
         </p>
       </div>
 
       {requestsQuery.isPending && (
-        <p className="text-sm text-[#013405]/60">Loading requests…</p>
+        <p className="text-primary/60 text-sm">Loading requests…</p>
       )}
 
-      {!requestsQuery.isPending && requests.length === 0 && (
-        <p className="text-sm text-[#013405]/60">
-          Nobody is waiting to be approved.
-        </p>
+      {requestsQuery.isError && (
+        <div className="border-destructive/30 bg-card border px-[22px] py-4">
+          <p className="text-destructive text-sm font-bold">
+            The request queue could not be loaded
+          </p>
+          <p className="text-primary/65 mt-1 text-[13px]">
+            {requestsQuery.error?.message ??
+              "The server did not return the queue."}{" "}
+            Nobody is missing from this list as far as this page knows — try
+            again.
+          </p>
+          <button
+            type="button"
+            className="border-primary/30 text-primary hover:border-primary mt-3 border px-3 py-1.5 text-xs font-bold transition-colors"
+            onClick={() => requestsQuery.refetch()}
+          >
+            Try again
+          </button>
+        </div>
       )}
 
-      {waiting.length > 0 && (
-        <section className="border-[#013405]/14 bg-[#fffdf6]">
-          <h2 className="border-b border-[#013405]/10 px-[22px] py-3 text-xs font-extrabold tracking-[0.16em] text-[#013405]/55">
+      {!requestsQuery.isPending &&
+        !requestsQuery.isError &&
+        requests.length === 0 && (
+          <p className="text-primary/60 text-sm">
+            Nobody is waiting to be approved.
+          </p>
+        )}
+
+      {reviewable.length > 0 && (
+        <section className="border-primary/14 bg-card">
+          <h2 className="border-primary/10 text-primary/55 border-b px-[22px] py-3 text-xs font-extrabold tracking-[0.16em]">
             READY TO REVIEW
           </h2>
           <ul>
-            {waiting.map((request) => (
+            {reviewable.map((request) => (
               <li
                 key={request.id}
-                className="flex flex-wrap items-center gap-3 border-b border-[#013405]/8 px-[22px] py-4 last:border-b-0"
+                className="border-primary/8 flex flex-wrap items-center gap-3 border-b px-[22px] py-4 last:border-b-0"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block font-bold text-[#013405]">
+                  <span className="text-primary block font-bold">
                     {request.name}
                   </span>
-                  <span className="block text-xs text-[#013405]/60">
+                  <span className="text-primary/60 block text-xs">
                     {request.email} · username{" "}
                     <span className="font-mono">{request.username ?? "—"}</span>
                   </span>
-                  <span className="mt-1 block text-xs text-[#0B5E1A]">
-                    Email verified ·{" "}
-                    {request.role === "teacher-requester"
-                      ? "Asked to join as staff"
-                      : "General account"}
-                    {request.lastSeenAt === null
+                  <span className="text-success mt-1 block text-xs">
+                    Email verified · staff record linked
+                    {request.lastSignInAt === null
                       ? " · never signed in"
-                      : ` · ${request.sessionCount} active session${request.sessionCount === 1 ? "" : "s"}`}
+                      : ` · ${request.signInCount} sign-in${
+                          request.signInCount === 1 ? "" : "s"
+                        } on record`}
                   </span>
                 </span>
                 <button
                   type="button"
                   disabled={approveMutation.isPending}
                   onClick={() => setReviewing(request)}
-                  className="shrink-0 border border-[#013405] bg-[#013405] px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-50"
+                  className="border-primary bg-primary text-primary-foreground hover:bg-primary-hover shrink-0 border px-4 py-2 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:opacity-50"
                 >
                   REVIEW &amp; APPROVE
                 </button>
@@ -103,25 +130,26 @@ export const TeacherRequestsContent = () => {
       )}
 
       {blocked.length > 0 && (
-        <section className="border-[#013405]/14 bg-[#fffdf6]">
-          <h2 className="border-b border-[#013405]/10 px-[22px] py-3 text-xs font-extrabold tracking-[0.16em] text-[#013405]/55">
-            AWAITING EMAIL VERIFICATION
+        <section className="border-primary/14 bg-card">
+          <h2 className="border-primary/10 text-primary/55 border-b px-[22px] py-3 text-xs font-extrabold tracking-[0.16em]">
+            NOT READY YET
           </h2>
           <ul>
             {blocked.map((request) => (
               <li
                 key={request.id}
-                className="border-b border-[#013405]/8 px-[22px] py-4 last:border-b-0"
+                className="border-primary/8 border-b px-[22px] py-4 last:border-b-0"
               >
-                <span className="block font-bold text-[#013405]">
+                <span className="text-primary block font-bold">
                   {request.name}
                 </span>
-                <span className="block text-xs text-[#013405]/60">
+                <span className="text-primary/60 block text-xs">
                   {request.email}
                 </span>
-                <span className="mt-1 block text-xs text-[#A51919]">
-                  Has not entered the code sent to their address yet — they
-                  cannot be approved until they do.
+                <span className="text-destructive mt-1 block text-xs">
+                  {request.emailVerified
+                    ? describeBlocker(request)
+                    : "Has not entered the code sent to their address yet — they cannot be approved until they do."}
                 </span>
               </li>
             ))}

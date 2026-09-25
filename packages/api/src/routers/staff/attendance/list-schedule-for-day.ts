@@ -7,7 +7,7 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireAssignmentPermission } from "../../../index";
+import { adminProcedure } from "../../../index";
 
 /**
  * Every teacher's scheduled periods on one weekday (Monday-Friday) for an
@@ -15,7 +15,7 @@ import { requireAssignmentPermission } from "../../../index";
  * this to know which cells are markable versus not-applicable, without one
  * `listTeacherTimetable` call per row.
  */
-export const listScheduleForDay = requireAssignmentPermission("read")
+export const listScheduleForDay = adminProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

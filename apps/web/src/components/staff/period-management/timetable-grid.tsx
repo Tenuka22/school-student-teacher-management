@@ -1,9 +1,8 @@
 "use client";
 
-import type {
-  classPeriodAssignment as periodAssignmentTable,
-  periodConfig as periodConfigTable,
-} from "@school-student-teacher-management/db/schema/periods";
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
+import type { classPeriodAssignment as periodAssignmentTable } from "@school-student-teacher-management/db/schema/periods";
 import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { Card } from "@school-student-teacher-management/ui/components/card";
@@ -26,7 +25,6 @@ import { useMemo } from "react";
 
 type Staff = typeof staffTable.$inferSelect;
 type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -74,7 +72,6 @@ const getInitials = (name: string) =>
 
 interface TimetableGridProps {
   assignments: PeriodAssignment[];
-  periodConfig: PeriodConfig[];
   staff: Map<string, Staff>;
   conflictingAssignmentIds: Set<string>;
   onAssignClick: (dayOfWeek: number, periodNumber: number) => void;
@@ -84,7 +81,6 @@ interface TimetableGridProps {
 
 export const TimetableGrid = ({
   assignments,
-  periodConfig,
   staff,
   conflictingAssignmentIds,
   onAssignClick,
@@ -100,11 +96,6 @@ export const TimetableGrid = ({
     }
     return map;
   }, [assignments]);
-
-  const sortedConfig = useMemo(
-    () => periodConfig.toSorted((a, b) => a.periodNumber - b.periodNumber),
-    [periodConfig]
-  );
 
   const subjectKeysPresent = useMemo(
     () => [...new Set(assignments.map((a) => a.subjectKey))].toSorted(),
@@ -131,12 +122,12 @@ export const TimetableGrid = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedConfig.map((period) => (
-              <TableRow key={period.id}>
+            {CODE_DEFINED_PERIODS.map((period) => (
+              <TableRow key={period.periodNumber}>
                 <TableCell className="border-primary/12 border-r font-medium">
                   <div className="text-sm font-bold">{`Period ${period.periodNumber}`}</div>
                   <div className="text-muted-foreground font-mono text-xs">
-                    {period.startTime}–{period.endTime}
+                    {period.startTime}â€“{period.endTime}
                   </div>
                 </TableCell>
                 {DAYS_OF_WEEK.map((_, dayIndex: number) => {
@@ -161,41 +152,52 @@ export const TimetableGrid = ({
                       )}`}
                     >
                       {assignment && assignedStaff ? (
-                        <button
-                          className="group bg-card hover:bg-accent/8 w-full cursor-pointer border-l-[3px] p-2 text-left text-xs transition-colors"
+                        <div
+                          className="group bg-card hover:bg-accent/8 relative w-full border-l-[3px] p-2 text-left text-xs transition-colors"
                           style={{
                             borderLeftColor: isConflict
                               ? "var(--color-destructive)"
                               : subjectColor,
                           }}
-                          onClick={() => onEditClick(assignment)}
-                          type="button"
                         >
-                          <div className="text-sm font-bold">
-                            {assignment.subjectKey}
-                          </div>
-                          <div className="mt-1.5 flex items-center gap-1.5">
-                            <span className="bg-primary/10 text-primary flex size-5 shrink-0 items-center justify-center text-[9px] font-bold">
-                              {getInitials(assignedStaff.name)}
-                            </span>
-                            <span className="text-muted-foreground truncate text-xs">
-                              {assignedStaff.name}
-                            </span>
-                          </div>
-                          {isConflict && (
-                            <div className="text-destructive mt-1.5 inline-flex items-center gap-1 text-[9px] font-extrabold tracking-wider">
-                              <span className="bg-destructive size-1.5 rotate-45" />
-                              DOUBLE-BOOKED
+                          <button
+                            className="block w-full cursor-pointer text-left"
+                            onClick={() => onEditClick(assignment)}
+                            type="button"
+                            aria-label={`Edit ${subjectLabel(assignment.subjectKey)} with ${assignedStaff.name}${
+                              isConflict ? " â€” double-booked" : ""
+                            }`}
+                          >
+                            <div className="text-sm font-bold">
+                              {subjectLabel(assignment.subjectKey)}
                             </div>
-                          )}
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <span className="bg-primary/10 text-primary flex size-5 shrink-0 items-center justify-center text-[9px] font-bold">
+                                {getInitials(assignedStaff.name)}
+                              </span>
+                              <span className="text-muted-foreground truncate text-xs">
+                                {assignedStaff.name}
+                              </span>
+                            </div>
+                            {isConflict && (
+                              <div className="text-destructive mt-1.5 inline-flex items-center gap-1 text-[9px] font-extrabold tracking-wider">
+                                <span className="bg-destructive size-1.5 rotate-45" />
+                                DOUBLE-BOOKED
+                              </div>
+                            )}
+                          </button>
+                          {/* Sibling of the cell's button, not a child: a
+                              dropdown inside a button is not focusable and
+                              not reachable by keyboard. It is also visible on
+                              focus, not only on hover. */}
                           <DropdownMenu>
                             <DropdownMenuTrigger
                               render={
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="absolute top-0 right-0 size-6 opacity-0 group-hover:opacity-100"
-                                  onClick={(e) => e.stopPropagation()}
+                                  className="absolute top-0 right-0 size-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                                  aria-label={`More actions for ${subjectLabel(assignment.subjectKey)} with ${assignedStaff.name}`}
                                 >
                                   <IconDotsVertical className="size-3" />
                                 </Button>
@@ -215,7 +217,7 @@ export const TimetableGrid = ({
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                        </button>
+                        </div>
                       ) : (
                         <Button
                           variant="ghost"
@@ -241,7 +243,7 @@ export const TimetableGrid = ({
       {subjectKeysPresent.length > 0 && (
         <div className="text-muted-foreground flex flex-wrap items-center gap-4 text-xs">
           <span className="text-xs font-extrabold tracking-[0.18em]">
-            SUBJECT KEY
+            SUBJECT
           </span>
           {subjectKeysPresent.map((subjectKey) => (
             <span key={subjectKey} className="inline-flex items-center gap-2">
@@ -249,7 +251,7 @@ export const TimetableGrid = ({
                 className="size-3"
                 style={{ background: getSubjectColor(subjectKey) }}
               />
-              {subjectKey}
+              {subjectLabel(subjectKey)}
             </span>
           ))}
         </div>

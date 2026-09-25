@@ -1,6 +1,5 @@
-import { periodConfig } from "@school-student-teacher-management/db/schema/periods";
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import { academicYearIdSchema } from "@school-student-teacher-management/db/schema/staff";
-import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
 import { requireAssignmentPermission } from "../../../index";
@@ -15,19 +14,4 @@ export const listPeriodConfig = requireAssignmentPermission("read")
       academicYearId: academicYearIdSchema,
     })
   )
-  .handler(async ({ input, context }) => {
-    const records = await context.db
-      .select()
-      .from(periodConfig)
-      .where(eq(periodConfig.academicYearId, input.academicYearId))
-      .orderBy(periodConfig.periodNumber);
-
-    return records.map((record) => ({
-      id: record.id,
-      academicYearId: record.academicYearId,
-      periodNumber: record.periodNumber,
-      startTime: record.startTime,
-      endTime: record.endTime,
-      createdAt: record.createdAt.toISOString(),
-    }));
-  });
+  .handler(() => CODE_DEFINED_PERIODS);

@@ -1,8 +1,8 @@
+import type { StaffListItem } from "@school-student-teacher-management/api/routers/staff/list-staff";
 import {
   staffInsertSchema,
   staffUpdateSchema,
 } from "@school-student-teacher-management/db/schema/staff";
-import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -25,7 +25,7 @@ import {
 } from "@/lib/import-conflicts";
 import type { ImportConflict } from "@/lib/import-conflicts";
 
-type Staff = typeof staff.$inferSelect;
+type Staff = StaffListItem;
 
 const TEMPLATE_COLUMNS = [
   "id",
@@ -38,6 +38,29 @@ const TEMPLATE_COLUMNS = [
 ] as const;
 
 const NAMESPACE = "teachers";
+
+/**
+ * A blank template, with one example row.
+ *
+ * This used to write every teacher's name, email, phone, NIC, gender and date of
+ * birth into a file labelled "Template" — a full personal-data export behind a
+ * button that promised an empty form. A template is now genuinely empty; real
+ * data leaves through the Teachers page's own "Export as Excel", which says what
+ * it contains.
+ */
+const downloadBlankTemplate = () => {
+  const exampleRow = Object.fromEntries(
+    TEMPLATE_COLUMNS.map((column) => [
+      column,
+      column === "name" ? "Nimal Perera" : "",
+    ])
+  );
+
+  downloadCsv(
+    "teachers-template.csv",
+    toCsv([...TEMPLATE_COLUMNS], [exampleRow])
+  );
+};
 
 interface TeacherCsvImportProps {
   teachers: Staff[];
@@ -65,19 +88,6 @@ export const TeacherCsvImport = ({
     getImportConflicts<Staff>(NAMESPACE)
   );
   const [isImporting, setIsImporting] = useState(false);
-
-  const handleDownloadTemplate = () => {
-    const rows = teachers.map((teacher) => ({
-      id: teacher.id,
-      name: teacher.name,
-      email: teacher.email ?? "",
-      phone: teacher.phone ?? "",
-      nic: teacher.nic ?? "",
-      gender: teacher.gender ?? "",
-      birthDate: teacher.birthDate ?? "",
-    }));
-    downloadCsv("teachers-template.csv", toCsv([...TEMPLATE_COLUMNS], rows));
-  };
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -231,9 +241,9 @@ export const TeacherCsvImport = ({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+      <Button variant="outline" size="sm" onClick={downloadBlankTemplate}>
         <IconDownload className="mr-2 size-4" />
-        IconDownload Template
+        Blank template
       </Button>
       <Button
         variant="outline"

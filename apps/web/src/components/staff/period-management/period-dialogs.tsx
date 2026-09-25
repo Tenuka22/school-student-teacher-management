@@ -1,7 +1,4 @@
-import type {
-  classPeriodAssignment as periodAssignmentTable,
-  periodConfig as periodConfigTable,
-} from "@school-student-teacher-management/db/schema/periods";
+import type { classPeriodAssignment as periodAssignmentTable } from "@school-student-teacher-management/db/schema/periods";
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import {
   AlertDialog,
@@ -24,7 +21,6 @@ import { PeriodAssignmentForm } from "@/components/staff/period-management/perio
 
 type Staff = typeof staff.$inferSelect;
 type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
-export type PeriodConfig = typeof periodConfigTable.$inferSelect;
 export interface AcademicYear {
   id: string;
   year: number;
@@ -63,7 +59,7 @@ export const AssignPeriodDialog = ({
           Assign a staff member to this time slot
         </DialogDescription>
       </DialogHeader>
-      <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         {selectedClass && selectedSlot && (
           <PeriodAssignmentForm
             formId="assign-period-form"
@@ -86,7 +82,13 @@ export const AssignPeriodDialog = ({
         >
           Cancel
         </Button>
-        <Button type="submit" form="assign-period-form" disabled={isLoading}>
+        <Button
+          type="submit"
+          form="assign-period-form"
+          // The form is only mounted when a class and a slot are chosen, so
+          // without this the button submits nothing and looks broken.
+          disabled={isLoading || !selectedClass || !selectedSlot}
+        >
           {isLoading ? "Saving..." : "Assign"}
         </Button>
       </div>
@@ -119,7 +121,7 @@ export const EditPeriodDialog = ({
         <DialogTitle>Edit Assignment</DialogTitle>
         <DialogDescription>Update the assignment details</DialogDescription>
       </DialogHeader>
-      <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         {selectedClass && selectedAssignment && (
           <PeriodAssignmentForm
             formId="edit-period-form"
@@ -144,7 +146,11 @@ export const EditPeriodDialog = ({
         >
           Cancel
         </Button>
-        <Button type="submit" form="edit-period-form" disabled={isLoading}>
+        <Button
+          type="submit"
+          form="edit-period-form"
+          disabled={isLoading || !selectedAssignment}
+        >
           {isLoading ? "Saving..." : "Save"}
         </Button>
       </div>

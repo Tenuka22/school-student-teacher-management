@@ -1,7 +1,6 @@
 import {
   index,
   integer,
-  numeric,
   pgTable,
   text,
   timestamp,
@@ -16,6 +15,7 @@ import * as v from "valibot";
 
 import { brand } from "./brand";
 import type { Brand } from "./brand";
+import { leaveRequest, leaveRequestIdSchema } from "./leaves";
 import { periodNumberSchema } from "./periods";
 import { isoDateSchema } from "./primitives";
 import {
@@ -81,6 +81,9 @@ export const teacherAttendance = pgTable(
     status: text("status").notNull(),
     /** Whole-day reason, set when status is "absent". */
     reason: text("reason"),
+    leaveRequestId: text("leave_request_id").references(() => leaveRequest.id, {
+      onDelete: "set null",
+    }),
     markedAt: timestamp("marked_at").defaultNow().notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -89,8 +92,9 @@ export const teacherAttendance = pgTable(
       .notNull(),
   },
   (table) => [
-    unique("teacher_attendance_staff_date_unique").on(
+    unique("teacher_attendance_staff_year_date_unique").on(
       table.staffId,
+      table.academicYearId,
       table.date
     ),
     index("teacher_attendance_staff_idx").on(table.staffId),
@@ -140,6 +144,7 @@ const teacherAttendanceColumnRefinements = {
   date: () => isoDateSchema,
   status: () => teacherAttendanceStatusSchema,
   reason: () => v.optional(v.nullable(v.string())),
+  leaveRequestId: () => v.optional(v.nullable(leaveRequestIdSchema)),
 };
 
 export const teacherAttendanceSelectSchema = createSelectSchema(
@@ -192,12 +197,18 @@ export const attendancePolicy = pgTable(
     arrivalCutoffTime: text("arrival_cutoff_time").notNull().default("07:30"),
     /** Short leaves allowed per calendar month. */
     shortLeavesPerMonth: integer("short_leaves_per_month").notNull().default(2),
-    /** Half days allowed per calendar month. */
-    halfDaysPerMonth: integer("half_days_per_month").notNull().default(2),
-    /** Half days that equal one full leave day (e.g. 2 ⇒ 21 days = 42 half days). */
-    halfDaysPerFullDay: numeric("half_days_per_full_day")
+    primaryStartPeriodNumber: integer("primary_start_period_number")
       .notNull()
-      .default("2"),
+      .default(1),
+    primaryEndPeriodNumber: integer("primary_end_period_number")
+      .notNull()
+      .default(4),
+    secondaryStartPeriodNumber: integer("secondary_start_period_number")
+      .notNull()
+      .default(5),
+    secondaryEndPeriodNumber: integer("secondary_end_period_number")
+      .notNull()
+      .default(8),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -226,7 +237,6 @@ export const shortLeaveUsage = pgTable(
     /** Calendar month key, "YYYY-MM" (school-local). */
     yearMonth: text("year_month").notNull(),
     shortLeavesUsed: integer("short_leaves_used").notNull().default(0),
-    halfDaysUsed: numeric("half_days_used").notNull().default("0"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -234,8 +244,9 @@ export const shortLeaveUsage = pgTable(
       .notNull(),
   },
   (table) => [
-    unique("short_leave_usage_staff_month_unique").on(
+    unique("short_leave_usage_staff_year_month_unique").on(
       table.staffId,
+      table.academicYearId,
       table.yearMonth
     ),
     index("short_leave_usage_year_idx").on(table.academicYearId),
@@ -265,12 +276,10 @@ const attendancePolicyColumnRefinements = {
   id: () => attendancePolicyIdSchema,
   academicYearId: () => academicYearIdSchema,
   arrivalCutoffTime: () => timeOfDaySchema,
-  halfDaysPerFullDay: () =>
-    v.pipe(
-      v.string(),
-      // oxlint-disable-next-line require-unicode-regexp, prefer-named-capture-group
-      v.regex(/^\d+(\.5)?$/u)
-    ),
+  primaryStartPeriodNumber: () => periodNumberSchema,
+  primaryEndPeriodNumber: () => periodNumberSchema,
+  secondaryStartPeriodNumber: () => periodNumberSchema,
+  secondaryEndPeriodNumber: () => periodNumberSchema,
 };
 
 export const attendancePolicySelectSchema = createSelectSchema(
@@ -295,12 +304,6 @@ const shortLeaveUsageColumnRefinements = {
       v.string(),
       // oxlint-disable-next-line require-unicode-regexp
       v.regex(/^\d{4}-\d{2}$/)
-    ),
-  halfDaysUsed: () =>
-    v.pipe(
-      v.string(),
-      // oxlint-disable-next-line require-unicode-regexp, prefer-named-capture-group
-      v.regex(/^\d+(\.5)?$/u)
     ),
 };
 
