@@ -3,7 +3,7 @@ import { normalizeInventoryKey } from "@school-student-teacher-management/db/con
 import { inventoryCategory } from "@school-student-teacher-management/db/schema/inventory";
 import * as v from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import {
   getInventoryActor,
   insertInventoryAuditLog,
@@ -62,7 +62,8 @@ const DEFAULT_CATEGORY_COLOR = "#6366F1";
  * records a category nobody can see is worse than no audit trail, and a
  * category nobody audited is a row the change log cannot explain.
  */
-export const createCategory = requireInventoryPermission("create")
+
+export const createCategory = adminOnlyProcedure
   .input(
     v.object({
       name: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),

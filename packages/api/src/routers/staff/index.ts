@@ -31,6 +31,7 @@ import { periodsRouter } from "./periods";
 import { portTeachersFromPreviousYear } from "./port-teachers-from-previous-year";
 import { removePosition } from "./remove-position";
 import { replaceTeacherSubjects } from "./replace-teacher-subjects";
+import { restoreAcademicYear } from "./restore-academic-year";
 import { seedDefaultClasses } from "./seed-default-classes";
 import { setCurrentYear } from "./set-current-year";
 import { signupStaff } from "./signup";
@@ -52,6 +53,7 @@ export const staffRouter = {
   listAcademicYears,
   createAcademicYear,
   deleteAcademicYear,
+  restoreAcademicYear,
   setCurrentYear,
   seedLeaveEntitlements,
   listPreviousYearTeachers,

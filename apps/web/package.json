@@ -42,6 +42,7 @@
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
     "nitro": "3.0.260903-beta",
+    "qr-scanner": "^1.4.2",
     "react": "catalog:",
     "react-day-picker": "^10.0.1",
     "react-dom": "catalog:",

@@ -22,7 +22,7 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   countersOf,
@@ -137,7 +137,7 @@ const assertTagsNotAlreadyRegistered = async (
   }
 };
 
-export const stockIn = requireInventoryPermission("create")
+export const stockIn = adminOnlyProcedure
   .input(
     v.object({
       itemId: inventoryItemIdSchema,

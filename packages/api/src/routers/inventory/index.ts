@@ -1,3 +1,4 @@
+import { acknowledgeCustodyNotice } from "./acknowledge-custody-notice";
 import { approveDisposal } from "./approve-disposal";
 import { assignManager } from "./assign-manager";
 import { cancelDisposal } from "./cancel-disposal";
@@ -7,12 +8,15 @@ import { createDisposal } from "./create-disposal";
 import { createIssue } from "./create-issue";
 import { createItem } from "./create-item";
 import { deleteItem } from "./delete-item";
+import { disputeCustodyNotice } from "./dispute-custody-notice";
 import { finalizeDisposal } from "./finalize-disposal";
 import { getItem } from "./get-item";
+import { getItemForScan } from "./get-item-for-scan";
 import { listAuditLogs } from "./list-audit-logs";
 import { listBorrows } from "./list-borrows";
 import { listCategories } from "./list-categories";
 import { listCustodyHistory } from "./list-custody-history";
+import { listCustodyNotices } from "./list-custody-notices";
 import { listDisposals } from "./list-disposals";
 import { listIssues } from "./list-issues";
 import { listItems } from "./list-items";
@@ -75,6 +79,12 @@ export const inventoryRouter = {
   items: {
     list: listItems,
     get: getItem,
+    /**
+     * The teacher-reachable sibling of `get`, used by the QR scanner —
+     * see `get-item-for-scan.ts` for why it cannot simply be `get` with a
+     * wider gate.
+     */
+    getForScan: getItemForScan,
     create: createItem,
     update: updateItem,
     remove: deleteItem,
@@ -106,6 +116,18 @@ export const inventoryRouter = {
     take: takeItem,
     release: releaseCustody,
     history: listCustodyHistory,
+    /**
+     * The two-audience "something changed and it concerns you" queue —
+     * see `list-custody-notices.ts` for why it exists and what "notified"
+     * means in an app with no push channel. `acknowledge` clears a notice
+     * silently; `dispute` clears it too but names why, for an administrator
+     * to follow up on — neither reverses the custody change itself.
+     */
+    notices: {
+      list: listCustodyNotices,
+      acknowledge: acknowledgeCustodyNotice,
+      dispute: disputeCustodyNotice,
+    },
     myItems: listMyItems,
     /** The owner's view of what is out with other people. */
     lent: listLentByMe,

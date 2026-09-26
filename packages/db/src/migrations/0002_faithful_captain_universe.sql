@@ -1,0 +1,6 @@
+ALTER TABLE "inventory_custody_history" ADD COLUMN "acknowledged_at" timestamp;--> statement-breakpoint
+ALTER TABLE "inventory_custody_history" ADD COLUMN "disputed_at" timestamp;--> statement-breakpoint
+ALTER TABLE "inventory_custody_history" ADD COLUMN "dispute_note" text;--> statement-breakpoint
+CREATE INDEX "inventory_custody_history_unacknowledged_idx" ON "inventory_custody_history" USING btree ("previous_custodian_staff_id","changed_at") WHERE "inventory_custody_history"."acknowledged_at" is null;--> statement-breakpoint
+ALTER TABLE "inventory_custody_history" ADD CONSTRAINT "inventory_custody_history_dispute_note_required" CHECK ("inventory_custody_history"."disputed_at" is null or "inventory_custody_history"."dispute_note" is not null);--> statement-breakpoint
+ALTER TABLE "inventory_custody_history" ADD CONSTRAINT "inventory_custody_history_dispute_implies_ack" CHECK ("inventory_custody_history"."disputed_at" is null or "inventory_custody_history"."acknowledged_at" is not null);

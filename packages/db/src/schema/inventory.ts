@@ -42,6 +42,7 @@ import {
 } from "../constants/inventory";
 import { brand } from "./brand";
 import type { Brand } from "./brand";
+import { fileIdSchema, files } from "./files";
 import { student, studentIdSchema } from "./marking";
 import { isoDateSchema, optionalNullable, slPhoneSchema } from "./primitives";
 import { staff, staffIdSchema } from "./staff";
@@ -289,6 +290,20 @@ export const inventoryItem = pgTable(
     }),
     /** Teacher who has physically taken this item; null while it is in store. */
     custodianStaffId: text("custodian_staff_id").references(() => staff.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * A photograph of the item, optional. Nullable FK rather than a raw URL
+     * column for the same reason `teacherQualification.documentFileId` is
+     * one: `files` is the one place a stored object's name, size, MIME type
+     * and storage key are kept together, and a second `imageUrl` string
+     * column here would be a second, driver-specific way to say the same
+     * thing. `set null` rather than `restrict`: deleting the file row
+     * un-pictures the item rather than blocking the deletion or taking the
+     * item down with it — a photo is decoration, not a fact the register
+     * depends on the way `categoryId` is.
+     */
+    imageFileId: text("image_file_id").references(() => files.id, {
       onDelete: "set null",
     }),
     /** Soft delete. An item with unit rows cannot be hard-deleted (restrict). */
@@ -1041,10 +1056,49 @@ export const inventoryCustodyHistory = pgTable(
       onDelete: "set null",
     }),
     changedAt: timestamp("changed_at").defaultNow().notNull(),
+    /**
+     * Whether the row's own \u201crecipients\u201d have seen it \u2014 the previous
+     * custodian (property moved out of their hands without their own action,
+     * on a `custody_taken`/`custody_transferred` row) and the item's manager
+     * (accountable for the item regardless of who is holding it, so a
+     * custody change that is not also a manager change still concerns them).
+     * Both are read from a self-service equipment page's own \u201cnotices\u201d
+     * list \u2014 there is no push channel in this app, so \u201cnotified\u201d means
+     * \u201csurfaced the next time that person's own page reads unacknowledged
+     * rows naming them\u201d. Acknowledging is one-way and terminal; a disputed
+     * row is also acknowledged, since raising a dispute is itself the
+     * recipient's response to the notice.
+     */
+    acknowledgedAt: timestamp("acknowledged_at"),
+    /**
+     * The recipient's claim that this change did not happen as recorded \u2014
+     * \u201cI never handed this over\u201d or \u201cI was never given this\u201d. This does
+     * not undo the custody change on its own: the row this table describes
+     * already moved `inventoryItem.managerStaffId`/`custodianStaffId`, and
+     * silently reversing that from an unverified claim would let anyone
+     * disown custody by disputing it. A dispute is a flag for an
+     * administrator to look into, not a second write path onto the item.
+     */
+    disputedAt: timestamp("disputed_at"),
+    disputeNote: text("dispute_note"),
   },
   (table) => [
     index("inventory_custody_history_item_id_idx").on(table.itemId),
     index("inventory_custody_history_changed_at_idx").on(table.changedAt),
+    // The one read a recipient's own equipment page runs on every visit:
+    // "which rows name me and are not yet acknowledged". Composite rather
+    // than two single-column indexes because the query always filters both.
+    index("inventory_custody_history_unacknowledged_idx")
+      .on(table.previousCustodianStaffId, table.changedAt)
+      .where(sql`${table.acknowledgedAt} is null`),
+    check(
+      "inventory_custody_history_dispute_note_required",
+      sql`${table.disputedAt} is null or ${table.disputeNote} is not null`
+    ),
+    check(
+      "inventory_custody_history_dispute_implies_ack",
+      sql`${table.disputedAt} is null or ${table.acknowledgedAt} is not null`
+    ),
     check(
       "inventory_custody_history_change_type_check",
       sqlIn(table.changeType, CUSTODY_CHANGE_TYPES)
@@ -1264,6 +1318,7 @@ const inventoryItemColumnRefinements = {
   createdByStaffId: () => staffIdSchema,
   managerStaffId: () => staffIdSchema,
   custodianStaffId: () => staffIdSchema,
+  imageFileId: () => fileIdSchema,
   minQty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   qty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   borrowedQty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),

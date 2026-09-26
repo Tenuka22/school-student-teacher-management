@@ -55,7 +55,7 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import { object, optional, string } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import {
   calculateAvailableQuantity,
   calculateItemStatus,
@@ -201,7 +201,7 @@ const pinFreshlyClaimedUnits = async (
   }
 };
 
-export const finalizeDisposal = adminProcedure
+export const finalizeDisposal = adminOnlyProcedure
   .input(
     object({
       disposalId: inventoryDisposalIdSchema,

@@ -14,7 +14,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import { normalizeLabel } from "./inventory-calculations";
 import type { InventoryItemRow } from "./inventory-database";
 import {
@@ -81,7 +81,8 @@ const toAuditSnapshot = (row: InventoryItemRow): Record<string, unknown> => ({
  * division of labour between the two tables, and it is why this procedure
  * writes to both.
  */
-export const updateItem = requireInventoryPermission("update")
+
+export const updateItem = adminOnlyProcedure
   .input(
     v.object({
       itemId: inventoryItemIdSchema,

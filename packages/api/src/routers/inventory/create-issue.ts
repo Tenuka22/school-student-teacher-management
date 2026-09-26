@@ -49,7 +49,7 @@ import {
   string,
 } from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import {
   assertSufficientAvailableQuantity,
   assertUnitsNotPendingDisposal,
@@ -153,254 +153,252 @@ const contestedTag = (
   claimedTags: string[]
 ): string => requestedTags?.[0] ?? claimedTags[0] ?? "The selected asset";
 
-export const createIssue = requireInventoryPermission("create")
-  .input(createIssueInput)
-  .handler(
-    async ({ input, context }) =>
-      // The whole hand-over is one transaction: the item's `FOR UPDATE` lock, the
-      // counter decrement, the unit status change, the `inventory_issue_unit`
-      // rows and both ledger writes either all land or none of them do. A partial
-      // issue would leave the store's `qty` reduced with no record of where the
-      // stock went, which is the one outcome worse than refusing the request.
-      await context.db.transaction(async (tx) => {
-        const actor = await getInventoryActor(context);
-        const issueId = crypto.randomUUID();
-        const issuedAt = new Date();
+export const createIssue = adminOnlyProcedure.input(createIssueInput).handler(
+  async ({ input, context }) =>
+    // The whole hand-over is one transaction: the item's `FOR UPDATE` lock, the
+    // counter decrement, the unit status change, the `inventory_issue_unit`
+    // rows and both ledger writes either all land or none of them do. A partial
+    // issue would leave the store's `qty` reduced with no record of where the
+    // stock went, which is the one outcome worse than refusing the request.
+    await context.db.transaction(async (tx) => {
+      const actor = await getInventoryActor(context);
+      const issueId = crypto.randomUUID();
+      const issuedAt = new Date();
 
-        // FOR UPDATE. `before` and the new `qty` are both computed from this row,
-        // never from the numbers the client sent, and two clerks issuing the same
-        // item at once must not both read `qty = 3` and both take three.
-        const existing = await getLockedItem(tx, input.itemId);
-        const before = countersOf(existing);
+      // FOR UPDATE. `before` and the new `qty` are both computed from this row,
+      // never from the numbers the client sent, and two clerks issuing the same
+      // item at once must not both read `qty = 3` and both take three.
+      const existing = await getLockedItem(tx, input.itemId);
+      const before = countersOf(existing);
 
-        // Checked against the counters rather than against the unit rows, so the
-        // message names the shortfall the clerk can act on ("only 2 available to
-        // issue") instead of arriving as a failure to find tagged units.
-        assertSufficientAvailableQuantity(before, input.qty, "issue");
+      // Checked against the counters rather than against the unit rows, so the
+      // message names the shortfall the clerk can act on ("only 2 available to
+      // issue") instead of arriving as a failure to find tagged units.
+      assertSufficientAvailableQuantity(before, input.qty, "issue");
 
-        /**
-         * FIFO when no tags were named, exact-match when they were, and **nothing
-         * at all when the item is counted in bulk** — `units` is `null` in that case
-         * and the `qty` decrement below is the whole of the movement. The helper
-         * keeps the ways a claim can fail in separate messages because they mean
-         * different things to the person at the counter; none of it is
-         * re-implemented here, and the empty-list refusal lives in this file's own
-         * schema above rather than in the helper, because only an issue can answer
-         * it with "leave the list empty to issue any available units".
-         */
-        const claim = await claimLifecycleUnits(
+      /**
+       * FIFO when no tags were named, exact-match when they were, and **nothing
+       * at all when the item is counted in bulk** — `units` is `null` in that case
+       * and the `qty` decrement below is the whole of the movement. The helper
+       * keeps the ways a claim can fail in separate messages because they mean
+       * different things to the person at the counter; none of it is
+       * re-implemented here, and the empty-list refusal lives in this file's own
+       * schema above rather than in the helper, because only an issue can answer
+       * it with "leave the list empty to issue any available units".
+       */
+      const claim = await claimLifecycleUnits(
+        tx,
+        existing.id,
+        input.qty,
+        input.uniqueItemIds
+      );
+      const { units } = claim;
+
+      /**
+       * **A unit spoken for on paper by an open disposal must not leave on an
+       * issue**, or the certificate awaiting a signature would describe a device
+       * nobody can find. Skipped for a bulk line, which has no units to pin and
+       * therefore nothing a certificate could name wrongly.
+       */
+      if (units) {
+        await assertUnitsNotPendingDisposal(
           tx,
-          existing.id,
-          input.qty,
-          input.uniqueItemIds
+          units.map((unit) => unit.id)
         );
-        const { units } = claim;
+      }
 
-        /**
-         * **A unit spoken for on paper by an open disposal must not leave on an
-         * issue**, or the certificate awaiting a signature would describe a device
-         * nobody can find. Skipped for a bulk line, which has no units to pin and
-         * therefore nothing a certificate could name wrongly.
-         */
-        if (units) {
-          await assertUnitsNotPendingDisposal(
-            tx,
-            units.map((unit) => unit.id)
-          );
-        }
-
-        const [issue] = await tx
-          .insert(inventoryIssue)
-          .values({
-            id: issueId,
-            itemId: existing.id,
-            qty: input.qty,
-            receiverName: input.receiverName,
-            receiverDepartment: input.receiverDepartment ?? null,
-            // Already normalised to `+94…` by `slPhoneSchema` on the way in, which
-            // is why this is passed through rather than re-validated.
-            receiverPhone: input.receiverPhone ?? null,
-            purpose: input.purpose,
-            approvedBy: input.approvedBy ?? null,
-            expectedReturnDate: input.expectedReturnDate ?? null,
-            note: input.note ?? null,
-            // Null for a leadership account with no staff row, which is a
-            // legitimate actor by design — the ledger and the audit log both
-            // carry `actor.name`, so the trail survives the missing id.
-            issuedByStaffId: actor.staffId,
-            issuedAt,
-          })
-          .returning();
-
-        if (!issue) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR");
-        }
-
-        /**
-         * THE DEFINING LINE. `qty` is what the school *has*; `borrowedQty` is
-         * what is out on loan and expected back. An issue decrements `qty`
-         * because the stock has left the school and the books must stop
-         * claiming it, and it leaves `borrowedQty` alone because nothing here is
-         * coming back.
-         *
-         * A borrow does the exact opposite — it leaves `qty` alone and raises
-         * `borrowedQty`. Do not "fix" this line to match the borrow pattern: the
-         * two are the same shape of code and opposite meanings, and a borrow
-         * modelled as an issue would shrink the store's stock every time a
-         * teacher took a tripod for the weekend.
-         */
-        const [updated] = await tx
-          .update(inventoryItem)
-          .set({ qty: existing.qty - input.qty })
-          .where(eq(inventoryItem.id, existing.id))
-          .returning();
-
-        if (!updated) {
-          throw new ORPCError("NOT_FOUND", { message: "Item not found" });
-        }
-
-        /**
-         * The units follow the item's counter: `issued` is the terminal unit
-         * status, and it is what stops `getAvailableUnits` handing the same
-         * device to the next request even if the counters were wrong.
-         *
-         * **Skipped for a bulk line**, and that is the only difference the absence
-         * of tags makes here: the counter above has already fallen, so "the school
-         * no longer has these" is recorded in full; what there is not, and could
-         * not be, is a per-device status for stock that was never per-device.
-         */
-        if (units) {
-          await tx
-            .update(inventoryUnit)
-            .set({ status: "issued" })
-            .where(
-              inArray(
-                inventoryUnit.id,
-                units.map((unit) => unit.id)
-              )
-            );
-        }
-
-        const claimedTags = units?.map((unit) => unit.uniqueNo) ?? [];
-
-        /**
-         * ONE bulk insert, never a loop: `qty` is bounded by the available
-         * count, and a per-row insert turns a hand-over of twenty laptops into
-         * twenty round trips inside a transaction that is holding a row lock on
-         * the item the whole time.
-         *
-         * Skipped for a bulk line — `inventory_issue_unit_unit_unique` is the
-         * database's guarantee that a *device* is issued out once, ever, and a
-         * counted line has no device for it to be true of. Writing no rows is not a
-         * weaker version of the guarantee; it is the whole of the guarantee.
-         */
-        if (units) {
-          try {
-            await tx
-              .insert(inventoryIssueUnit)
-              .values(units.map((unit) => ({ issueId, unitId: unit.id })));
-          } catch (error) {
-            // The window between `getAvailableUnits` reading `status = "available"`
-            // and this insert is real, and it is exactly the race the unique
-            // constraint exists to lose safely: another transaction issued one of
-            // these devices between the two statements. Both transactions' unit
-            // updates roll back with the failed insert, so the ledger and the
-            // counters are untouched and the clerk can simply retry. The whole
-            // transaction aborts here — there is no partial issue.
-            if (
-              error instanceof Error &&
-              error.message.includes(ISSUE_UNIT_UNIQUE_CONSTRAINT)
-            ) {
-              throw new ORPCError("CONFLICT", {
-                message: `Asset ${contestedTag(input.uniqueItemIds, claimedTags)} has already been issued to somebody else. Reload the item and issue the units that are still available`,
-              });
-            }
-
-            throw error;
-          }
-        }
-
-        const after = countersOf(updated);
-
-        await insertInventoryTransaction(tx, {
-          actor,
-          action: "issued",
-          item: { id: existing.id, name: existing.name, sku: existing.sku },
-          before,
-          after,
-          // The count and the receiver, because that is the sentence a store
-          // ledger is read out loud for. `borrowedQty` is identical on both
-          // sides, which is itself the fact worth recording: an issue does not
-          // touch what is out on loan.
-          note: `Issued ${input.qty} unit(s) to ${input.receiverName}`,
-          meta: {
-            receiverName: input.receiverName,
-            purpose: input.purpose,
-            // The *normalized* tags rather than the row ids, because this is the
-            // payload an auditor reads a year later and a storekeeper searching
-            // for `proj-014` types the tag, not a uuid. Empty — never absent — for
-            // a bulk line, so a reader of this blob can tell "counted, not tagged"
-            // from "written before tags existed" without a null check.
-            uniqueUnitIds: claimedUnitTags(claim),
-            bulkItem: claim.isBulk,
-          },
-        });
-
-        await insertInventoryAuditLog(tx, {
-          actor,
-          action: "issue.create",
-          entityType: "inventory_issue",
-          entityId: issueId,
-          // `before` is null rather than a zeroed row: nothing existed here a
-          // moment ago, and inventing a placeholder would put a fiction in the
-          // audit trail — the one table whose whole job is to say what was and
-          // what is.
-          before: null,
-          // The row as written, including the `issuedAt` the caller is told about
-          // below, so the audit entry and the list row cannot disagree about when
-          // the hand-over happened.
-          after: {
-            id: issue.id,
-            itemId: issue.itemId,
-            qty: issue.qty,
-            receiverName: issue.receiverName,
-            receiverDepartment: issue.receiverDepartment,
-            receiverPhone: issue.receiverPhone,
-            purpose: issue.purpose,
-            approvedBy: issue.approvedBy,
-            expectedReturnDate: issue.expectedReturnDate,
-            note: issue.note,
-            issuedByStaffId: issue.issuedByStaffId,
-            issuedAt: iso(issue.issuedAt),
-          },
-        });
-
-        return {
-          id: issue.id,
+      const [issue] = await tx
+        .insert(inventoryIssue)
+        .values({
+          id: issueId,
           itemId: existing.id,
-          itemName: existing.name,
-          itemSku: existing.sku,
           qty: input.qty,
+          receiverName: input.receiverName,
+          receiverDepartment: input.receiverDepartment ?? null,
+          // Already normalised to `+94…` by `slPhoneSchema` on the way in, which
+          // is why this is passed through rather than re-validated.
+          receiverPhone: input.receiverPhone ?? null,
+          purpose: input.purpose,
+          approvedBy: input.approvedBy ?? null,
+          expectedReturnDate: input.expectedReturnDate ?? null,
+          note: input.note ?? null,
+          // Null for a leadership account with no staff row, which is a
+          // legitimate actor by design — the ledger and the audit log both
+          // carry `actor.name`, so the trail survives the missing id.
+          issuedByStaffId: actor.staffId,
+          issuedAt,
+        })
+        .returning();
+
+      if (!issue) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      /**
+       * THE DEFINING LINE. `qty` is what the school *has*; `borrowedQty` is
+       * what is out on loan and expected back. An issue decrements `qty`
+       * because the stock has left the school and the books must stop
+       * claiming it, and it leaves `borrowedQty` alone because nothing here is
+       * coming back.
+       *
+       * A borrow does the exact opposite — it leaves `qty` alone and raises
+       * `borrowedQty`. Do not "fix" this line to match the borrow pattern: the
+       * two are the same shape of code and opposite meanings, and a borrow
+       * modelled as an issue would shrink the store's stock every time a
+       * teacher took a tripod for the weekend.
+       */
+      const [updated] = await tx
+        .update(inventoryItem)
+        .set({ qty: existing.qty - input.qty })
+        .where(eq(inventoryItem.id, existing.id))
+        .returning();
+
+      if (!updated) {
+        throw new ORPCError("NOT_FOUND", { message: "Item not found" });
+      }
+
+      /**
+       * The units follow the item's counter: `issued` is the terminal unit
+       * status, and it is what stops `getAvailableUnits` handing the same
+       * device to the next request even if the counters were wrong.
+       *
+       * **Skipped for a bulk line**, and that is the only difference the absence
+       * of tags makes here: the counter above has already fallen, so "the school
+       * no longer has these" is recorded in full; what there is not, and could
+       * not be, is a per-device status for stock that was never per-device.
+       */
+      if (units) {
+        await tx
+          .update(inventoryUnit)
+          .set({ status: "issued" })
+          .where(
+            inArray(
+              inventoryUnit.id,
+              units.map((unit) => unit.id)
+            )
+          );
+      }
+
+      const claimedTags = units?.map((unit) => unit.uniqueNo) ?? [];
+
+      /**
+       * ONE bulk insert, never a loop: `qty` is bounded by the available
+       * count, and a per-row insert turns a hand-over of twenty laptops into
+       * twenty round trips inside a transaction that is holding a row lock on
+       * the item the whole time.
+       *
+       * Skipped for a bulk line — `inventory_issue_unit_unit_unique` is the
+       * database's guarantee that a *device* is issued out once, ever, and a
+       * counted line has no device for it to be true of. Writing no rows is not a
+       * weaker version of the guarantee; it is the whole of the guarantee.
+       */
+      if (units) {
+        try {
+          await tx
+            .insert(inventoryIssueUnit)
+            .values(units.map((unit) => ({ issueId, unitId: unit.id })));
+        } catch (error) {
+          // The window between `getAvailableUnits` reading `status = "available"`
+          // and this insert is real, and it is exactly the race the unique
+          // constraint exists to lose safely: another transaction issued one of
+          // these devices between the two statements. Both transactions' unit
+          // updates roll back with the failed insert, so the ledger and the
+          // counters are untouched and the clerk can simply retry. The whole
+          // transaction aborts here — there is no partial issue.
+          if (
+            error instanceof Error &&
+            error.message.includes(ISSUE_UNIT_UNIQUE_CONSTRAINT)
+          ) {
+            throw new ORPCError("CONFLICT", {
+              message: `Asset ${contestedTag(input.uniqueItemIds, claimedTags)} has already been issued to somebody else. Reload the item and issue the units that are still available`,
+            });
+          }
+
+          throw error;
+        }
+      }
+
+      const after = countersOf(updated);
+
+      await insertInventoryTransaction(tx, {
+        actor,
+        action: "issued",
+        item: { id: existing.id, name: existing.name, sku: existing.sku },
+        before,
+        after,
+        // The count and the receiver, because that is the sentence a store
+        // ledger is read out loud for. `borrowedQty` is identical on both
+        // sides, which is itself the fact worth recording: an issue does not
+        // touch what is out on loan.
+        note: `Issued ${input.qty} unit(s) to ${input.receiverName}`,
+        meta: {
+          receiverName: input.receiverName,
+          purpose: input.purpose,
+          // The *normalized* tags rather than the row ids, because this is the
+          // payload an auditor reads a year later and a storekeeper searching
+          // for `proj-014` types the tag, not a uuid. Empty — never absent — for
+          // a bulk line, so a reader of this blob can tell "counted, not tagged"
+          // from "written before tags existed" without a null check.
+          uniqueUnitIds: claimedUnitTags(claim),
+          bulkItem: claim.isBulk,
+        },
+      });
+
+      await insertInventoryAuditLog(tx, {
+        actor,
+        action: "issue.create",
+        entityType: "inventory_issue",
+        entityId: issueId,
+        // `before` is null rather than a zeroed row: nothing existed here a
+        // moment ago, and inventing a placeholder would put a fiction in the
+        // audit trail — the one table whose whole job is to say what was and
+        // what is.
+        before: null,
+        // The row as written, including the `issuedAt` the caller is told about
+        // below, so the audit entry and the list row cannot disagree about when
+        // the hand-over happened.
+        after: {
+          id: issue.id,
+          itemId: issue.itemId,
+          qty: issue.qty,
           receiverName: issue.receiverName,
+          receiverDepartment: issue.receiverDepartment,
+          receiverPhone: issue.receiverPhone,
+          purpose: issue.purpose,
+          approvedBy: issue.approvedBy,
+          expectedReturnDate: issue.expectedReturnDate,
+          note: issue.note,
+          issuedByStaffId: issue.issuedByStaffId,
           issuedAt: iso(issue.issuedAt),
-          // The tags as printed on the devices, because the success toast and the
-          // printed receipt both quote them and neither has a lookup step.
-          //
-          // `null` for a counted line, and the reason is the same one
-          // `createDisposal` gives: `[]` renders as a tag list the clerk filled in
-          // and could not read, and this is the printed receipt an auditor reads
-          // to find out *which* devices left the school. "No tags — this line is
-          // counted in bulk" is the true sentence; an empty table is not.
-          units:
-            units?.map((unit) => ({
-              id: unit.id,
-              uniqueNo: unit.uniqueNo,
-            })) ?? null,
-          // On hand after the hand-over, i.e. the item's new `qty` — not its
-          // `availableQty`. The two differ whenever something is out on loan, and
-          // a success message that quoted the wrong one would be read as the
-          // store having lost track of its own borrowings.
-          remainingQty: updated.qty,
-        };
-      })
-  );
+        },
+      });
+
+      return {
+        id: issue.id,
+        itemId: existing.id,
+        itemName: existing.name,
+        itemSku: existing.sku,
+        qty: input.qty,
+        receiverName: issue.receiverName,
+        issuedAt: iso(issue.issuedAt),
+        // The tags as printed on the devices, because the success toast and the
+        // printed receipt both quote them and neither has a lookup step.
+        //
+        // `null` for a counted line, and the reason is the same one
+        // `createDisposal` gives: `[]` renders as a tag list the clerk filled in
+        // and could not read, and this is the printed receipt an auditor reads
+        // to find out *which* devices left the school. "No tags — this line is
+        // counted in bulk" is the true sentence; an empty table is not.
+        units:
+          units?.map((unit) => ({
+            id: unit.id,
+            uniqueNo: unit.uniqueNo,
+          })) ?? null,
+        // On hand after the hand-over, i.e. the item's new `qty` — not its
+        // `availableQty`. The two differ whenever something is out on loan, and
+        // a success message that quoted the wrong one would be read as the
+        // store having lost track of its own borrowings.
+        remainingQty: updated.qty,
+      };
+    })
+);

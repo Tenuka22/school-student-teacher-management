@@ -78,6 +78,12 @@ export const deleteAcademicYear = adminOnlyProcedure
       throw new ORPCError("NOT_FOUND", { message: "Academic year not found" });
     }
 
+    if (existing.deletedAt) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This academic year is already deleted",
+      });
+    }
+
     if (existing.isCurrent) {
       throw new ORPCError("BAD_REQUEST", {
         message:
@@ -105,7 +111,16 @@ export const deleteAcademicYear = adminOnlyProcedure
       });
     }
 
-    await context.db.delete(academicYear).where(eq(academicYear.id, input.id));
+    // Soft delete, not `DELETE FROM` — every dependent table above is
+    // `ON DELETE CASCADE` from `academic_year`, so this emptiness check is
+    // what makes a hard delete survivable at all, and a soft delete needs it
+    // for a different reason: a year is a fact about the school's history,
+    // and hiding an empty one from the switcher is not the same claim as
+    // saying the year never happened.
+    await context.db
+      .update(academicYear)
+      .set({ deletedAt: new Date() })
+      .where(eq(academicYear.id, input.id));
 
     return { success: true };
   });

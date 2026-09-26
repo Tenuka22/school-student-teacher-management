@@ -52,7 +52,7 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import { maxLength, minLength, object, pipe, string } from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   countersOf,
@@ -88,7 +88,7 @@ const getLockedDisposal = async (db: Executor, disposalId: string) => {
 const isFinalOutcome = (status: string): boolean =>
   (DISPOSAL_FINAL_STATUSES as readonly string[]).includes(status);
 
-export const cancelDisposal = requireInventoryPermission("update")
+export const cancelDisposal = adminOnlyProcedure
   .input(
     object({
       disposalId: inventoryDisposalIdSchema,

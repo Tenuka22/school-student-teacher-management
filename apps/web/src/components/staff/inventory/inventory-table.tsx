@@ -438,10 +438,10 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
           <IconDotsVertical />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
-          <DropdownMenuLabel className="truncate">
-            {item.name}
-          </DropdownMenuLabel>
           <DropdownMenuGroup>
+            <DropdownMenuLabel className="truncate">
+              {item.name}
+            </DropdownMenuLabel>
             <DropdownMenuItem onClick={() => onRestoreItem(item)}>
               <IconArchive />
               Restore to the register
@@ -470,8 +470,10 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
         <IconDotsVertical />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel className="truncate">{item.name}</DropdownMenuLabel>
         <DropdownMenuGroup>
+          <DropdownMenuLabel className="truncate">
+            {item.name}
+          </DropdownMenuLabel>
           <DropdownMenuItem onClick={() => onViewCustody(item)}>
             <IconHistory />
             View custody history

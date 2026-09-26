@@ -5,7 +5,7 @@ import {
 import { inventoryCategory } from "@school-student-teacher-management/db/schema/inventory";
 import { inArray } from "drizzle-orm";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import {
   getInventoryActor,
   insertInventoryAuditLog,
@@ -60,7 +60,8 @@ const SEED_KEYS = DEFAULT_INVENTORY_CATEGORIES.map((entry) =>
  * describe, since the second run would report a count that does not match what
  * the first one did.
  */
-export const seedCategories = requireInventoryPermission("create").handler(
+
+export const seedCategories = adminOnlyProcedure.handler(
   async ({ context }) => {
     const actor = await getInventoryActor(context);
 

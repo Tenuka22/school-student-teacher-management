@@ -17,6 +17,7 @@
  * the departed teacher having to log in.
  */
 import { ORPCError } from "@orpc/server";
+import { itemConditionSchema } from "@school-student-teacher-management/db/constants/inventory";
 import {
   inventoryCustodyHistory,
   inventoryItem,
@@ -65,6 +66,16 @@ export const releaseCustody = requireInventoryPermission("take")
     object({
       itemId: inventoryItemIdSchema,
       note: optional(pipe(string(), minLength(1))),
+      /**
+       * What condition the item is in as it comes back, optional because
+       * most hand-backs change nothing about the item itself \u2014 only who
+       * holds it. Left unset, the item's condition is untouched; set, it
+       * overwrites `inventoryItem.condition` the same write `updateItem`
+       * makes, so a teacher handing back a cracked tripod can say so at the
+       * moment it matters rather than relying on a separate "Report a
+       * problem" action or an administrator noticing later.
+       */
+      condition: optional(itemConditionSchema),
     })
   )
   .handler(async ({ input, context }) => {
@@ -118,7 +129,10 @@ export const releaseCustody = requireInventoryPermission("take")
 
       await tx
         .update(inventoryItem)
-        .set({ custodianStaffId: null })
+        .set({
+          custodianStaffId: null,
+          ...(input.condition ? { condition: input.condition } : {}),
+        })
         .where(eq(inventoryItem.id, existing.id));
 
       // `custody_released` with a null `new_custodian_staff_id` and null
@@ -156,7 +170,16 @@ export const releaseCustody = requireInventoryPermission("take")
         before: countersOf(existing),
         after: countersOf(existing),
         note: input.note ?? null,
-        meta: { previousCustodianName, reason: "returned_to_store" },
+        meta: {
+          previousCustodianName,
+          reason: "returned_to_store",
+          ...(input.condition
+            ? {
+                conditionBefore: existing.condition,
+                conditionAfter: input.condition,
+              }
+            : {}),
+        },
       });
 
       await insertInventoryAuditLog(tx, {
@@ -167,8 +190,13 @@ export const releaseCustody = requireInventoryPermission("take")
         before: {
           custodianStaffId: existing.custodianStaffId,
           custodianName: previousCustodianName,
+          ...(input.condition ? { condition: existing.condition } : {}),
         },
-        after: { custodianStaffId: null, custodianName: null },
+        after: {
+          custodianStaffId: null,
+          custodianName: null,
+          ...(input.condition ? { condition: input.condition } : {}),
+        },
       });
 
       return {
@@ -176,6 +204,7 @@ export const releaseCustody = requireInventoryPermission("take")
         previousCustodianName,
         custodianStaffId: null,
         custodianName: null,
+        condition: input.condition ?? existing.condition,
         changeType: "custody_released" as const,
         changedAt: iso(history.changedAt),
       };

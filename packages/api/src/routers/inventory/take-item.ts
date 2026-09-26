@@ -84,6 +84,16 @@ export const takeItem = requireInventoryPermission("take")
     })
   )
   .handler(async ({ input, context }) => {
+    // Admin accounts cannot own or take items for themselves. This guard reads
+    // the session only, so it runs before the actor is resolved: an admin who
+    // may not take anything has no use for the lookup that would tell them who
+    // they are.
+    if (context.session?.user?.role === "admin") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Admin accounts cannot own or claim equipment",
+      });
+    }
+
     // Resolved before the transaction opens: the null-staff refusal below should
     // not take a row lock on an item it is about to abandon.
     const actor = await getInventoryActor(context);

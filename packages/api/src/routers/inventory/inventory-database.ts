@@ -18,6 +18,7 @@ import { ORPCError } from "@orpc/server";
 import type { InventoryAction } from "@school-student-teacher-management/db/constants/inventory";
 import { normalizeInventoryKey } from "@school-student-teacher-management/db/constants/inventory";
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryAuditLog,
   inventoryBorrowUnit,
@@ -245,12 +246,16 @@ export interface InventoryActor {
  * an authenticated account, so `InventoryActor.name` stays a `string` and no
  * caller has to null-check it.
  */
-const sessionDisplayName = (user: {
+const sessionDisplayName = (sessionUser: {
   name: string;
   username?: string | null;
   displayUsername?: string | null;
 }): string => {
-  const candidates = [user.name, user.username, user.displayUsername];
+  const candidates = [
+    sessionUser.name,
+    sessionUser.username,
+    sessionUser.displayUsername,
+  ];
   for (const candidate of candidates) {
     const trimmed = candidate?.trim();
     if (trimmed) {
@@ -497,6 +502,20 @@ export const resolveBorrowerStaff = async (
     throw new ORPCError("NOT_FOUND", { message: "Staff member not found" });
   }
 
+  // Verify that the staff member's linked user (if any) is not an admin
+  const [staffRecord] = await db
+    .select({ role: user.role })
+    .from(staff)
+    .leftJoin(user, eq(staff.userId, user.id))
+    .where(eq(staff.id, staffId))
+    .limit(1);
+
+  if (staffRecord?.role === "admin") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Cannot lend items to an admin account",
+    });
+  }
+
   return borrower;
 };
 
@@ -703,8 +722,9 @@ export const assertStaffIsAssignable = async (
   label: string
 ): Promise<{ id: string; name: string }> => {
   const [record] = await db
-    .select({ id: staff.id, name: staff.name })
+    .select({ id: staff.id, name: staff.name, role: user.role })
     .from(staff)
+    .leftJoin(user, eq(staff.userId, user.id))
     .where(
       and(
         eq(staff.id, staffId),
@@ -716,6 +736,12 @@ export const assertStaffIsAssignable = async (
   if (!record) {
     throw new ORPCError("BAD_REQUEST", {
       message: `Select an active ${label} to be in charge of this item`,
+    });
+  }
+
+  if (record.role === "admin") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Cannot assign an admin account as ${label}`,
     });
   }
 

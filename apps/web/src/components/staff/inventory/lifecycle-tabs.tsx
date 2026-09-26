@@ -69,7 +69,7 @@ import {
 } from "@school-student-teacher-management/ui/components/tabs";
 import { IconPackage, IconPackageOff } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { LoansPanel } from "@/components/staff/inventory/borrow-dialogs";
 import { DisposalsPanel } from "@/components/staff/inventory/disposal-dialogs";
@@ -105,10 +105,41 @@ const useOverdueCount = (): number => {
   return query.data?.total ?? 0;
 };
 
-export const InventoryLifecycleTabs = () => {
+/**
+ * Which of the four sub-tabs is active, and where a switch navigates — both
+ * now owned by the parent route (`inventory-page.tsx`'s `InventoryPage`,
+ * fed by real path segments like `.../inventory/loans` rather than a
+ * `?subtab=` search param), for the same reason the pane above this one made
+ * the identical change: a clerk chasing an overdue loan who bookmarks or
+ * refreshes has to land back on the sub-tab they were reading, and a real
+ * path survives that better than query state on a client-rendered page.
+ * `scrollToLedger` is the one thing that isn't a `Tabs` value at all — the
+ * ledger section sits below the tabs regardless of which one is active, so
+ * `/inventory/ledger` lands on Loans (the pane's own default) and scrolls
+ * past it to the heading below.
+ */
+export const InventoryLifecycleTabs = ({
+  activeSubtab,
+  onSubtabChange,
+  scrollToLedger,
+}: {
+  activeSubtab: LifecycleTab;
+  onSubtabChange: (next: LifecycleTab) => void;
+  scrollToLedger: boolean;
+}) => {
   const [isStockInOpen, setIsStockInOpen] = useState(false);
   const [isStockOutOpen, setIsStockOutOpen] = useState(false);
   const overdueCount = useOverdueCount();
+  const ledgerHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (scrollToLedger) {
+      ledgerHeadingRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [scrollToLedger]);
 
   return (
     <div className="space-y-6">
@@ -184,7 +215,10 @@ export const InventoryLifecycleTabs = () => {
         </p>
       </div>
 
-      <Tabs defaultValue="loans">
+      <Tabs
+        value={activeSubtab}
+        onValueChange={(next: unknown) => onSubtabChange(next as LifecycleTab)}
+      >
         <TabsList
           variant="line"
           className="border-primary/18 h-auto w-full justify-start gap-0.5 rounded-none border-b p-0"
@@ -255,6 +289,7 @@ export const InventoryLifecycleTabs = () => {
       <section aria-labelledby="ledger-heading" className="space-y-4">
         <div className="space-y-2">
           <h2
+            ref={ledgerHeadingRef}
             id="ledger-heading"
             className="font-heading text-2xl font-semibold"
           >

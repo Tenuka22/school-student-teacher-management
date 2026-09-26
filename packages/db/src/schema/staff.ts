@@ -180,6 +180,16 @@ export const academicYear = pgTable("academic_year", {
    */
   structureSubversionKey: integer("structure_subversion_key"),
   isCurrent: boolean("is_current").default(false).notNull(),
+  /**
+   * Soft delete. A year is retired rather than destroyed: every table that
+   * references `academicYearId` cascades on a hard delete, and a year old
+   * enough to have nothing attached to it (the one case `deleteAcademicYear`
+   * still requires) is still a real year the school existed in — removing
+   * the row would remove the fact that 2019 happened, not just the records
+   * inside it. `listAcademicYears` excludes a retired year unless asked for
+   * one explicitly, and `restoreAcademicYear` is the way back.
+   */
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

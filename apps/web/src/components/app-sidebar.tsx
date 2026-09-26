@@ -52,6 +52,8 @@ export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 interface NavItem {
   title: string;
   url: string;
+  hash?: string;
+  search?: Record<string, string>;
   icon?: React.ReactNode;
   isActive?: boolean;
   disabled?: boolean;
@@ -64,6 +66,63 @@ const SOON_NAV: NavItem[] = [
   { title: "Marks & Exams", url: "#", disabled: true, tag: "SOON" },
   { title: "Reports", url: "#", disabled: true, tag: "SOON" },
 ];
+
+/**
+ * A nav item's badge, or no badge at all while its read has not landed.
+ *
+ * `undefined` rather than `"0"` on purpose: a count of zero and a count nobody
+ * has fetched yet look identical on the badge, and only the second one is a lie
+ * — the queue is known to be empty, this one is not known yet. Every badge in
+ * the sidebar goes through here, so that distinction is made in one place
+ * instead of at each call site.
+ */
+const badgeCount = (count: number | undefined): string | undefined =>
+  count === undefined ? undefined : String(count);
+
+/**
+ * The administrator's self-service group, and it is empty rather than one entry.
+ *
+ * An administrator is admitted by `teacher/route.tsx` to the whole teacher
+ * workspace, so self-service links here would all open. None is offered: the
+ * business rule is that the `admin` account owns and borrows nothing, and the
+ * seeded `admin` deliberately has no `staff` row (`packages/auth/src/admin.ts`),
+ * so the pages behind them would land on a "no staff record" notice with nothing
+ * to do about it. `teacherNav` and `inventoryNav` are likewise built without a
+ * teacher-workspace link.
+ *
+ * Module scope, not per-render: it is a constant, and rebuilding it on every
+ * render hands memoized children a new array each time.
+ */
+const ADMIN_SELF_NAV: NavItem[] = [];
+
+/**
+ * The three year facts every nav link and badge below is built from, resolved
+ * once.
+ *
+ * The academic year is a path segment on every workspace link, so a bookmarked
+ * page keeps its year across a refresh. It is read from the URL so the switcher
+ * and the nav never disagree mid-navigation, and falls back to the current year
+ * when the URL carries none. `selectedYear` is that value as a number — the
+ * leave queue asks for a year, the links need a string — and `currentYearId` is
+ * what the year-scoped roster reads take, blank rather than a wrong id when
+ * there is no current year (which also disables those queries).
+ *
+ * Three names in one return rather than three expressions in the component: this
+ * is the shell's only year logic, and leaving it inline put six conditionals in
+ * the one function that has to stay readable.
+ */
+const resolveSidebarYear = (
+  activeYear: string | undefined,
+  currentYear: AcademicYear | undefined
+) => {
+  const year =
+    activeYear ?? (currentYear ? String(currentYear.year) : undefined);
+  return {
+    year,
+    selectedYear: year === undefined ? currentYear?.year : Number(year),
+    currentYearId: currentYear?.id ?? "",
+  };
+};
 
 /** The member's workspace root and label. */
 const resolveHome = (
@@ -117,6 +176,27 @@ interface SidebarGroupsProps {
   staffNav: NavItem[];
   teacherNav: NavItem[];
   /**
+   * The self-service equipment page's three sections (Owned / Borrowed /
+   * Lent Out) as their own group, rather than the single "My Equipment"
+   * line each of these audiences used to get "My Workspace"/"Leadership".
+   * All three entries share one `url` (the seat's own `equipment()` page)
+   * and differ only by `hash`, so `NavMain` scrolls to the matching
+   * section instead of navigating anywhere new.
+   */
+  inventoryNav: NavItem[];
+  /**
+   * The register and its five other views, in a group of its own rather
+   * than inside "Staff Management" — the catalog is a big enough surface
+   * on its own (register, loans, issues, write-offs, asset tags, ledger)
+   * that burying it as one line among Teachers/Periods/Attendance made five
+   * of its six views reachable only by clicking into the register first and
+   * finding the right tab. Every entry shares the register's own URL and
+   * differs only by `?tab=`/`?subtab=`, so `NavMain` highlights whichever
+   * one matches the page's current state rather than lighting up all six
+   * whenever any of them is open.
+   */
+  adminInventoryNav: NavItem[];
+  /**
    * The administrator's *own* equipment, and only that. Deliberately not
    * `teacherNav`: see the note on the array itself.
    */
@@ -139,6 +219,8 @@ const SidebarGroups = ({
   leadershipNav,
   staffNav,
   teacherNav,
+  inventoryNav,
+  adminInventoryNav,
   adminSelfNav,
   academicNav,
 }: SidebarGroupsProps) => {
@@ -147,6 +229,7 @@ const SidebarGroups = ({
       <>
         <NavMain label="Platform" items={platformNav} />
         <NavMain label="Leadership" items={leadershipNav} />
+        <NavMain label="Inventory Management" items={inventoryNav} />
       </>
     );
   }
@@ -179,6 +262,7 @@ const SidebarGroups = ({
         */}
         <NavMain label="My Workspace" items={adminSelfNav} />
         <NavMain label="Staff Management" items={staffNav} />
+        <NavMain label="Inventory" items={adminInventoryNav} />
         <NavMain label="Academic" items={academicNav} />
       </>
     );
@@ -188,6 +272,7 @@ const SidebarGroups = ({
     <>
       <NavMain label="Platform" items={platformNav} />
       <NavMain label="My Workspace" items={teacherNav} />
+      <NavMain label="Inventory Management" items={inventoryNav} />
       <NavMain label="Academic" items={SOON_NAV} />
     </>
   );
@@ -206,21 +291,23 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   // The academic year is a path segment on every workspace link, so a
   // bookmarked page keeps its year across a refresh. Read it from the URL
   // so the switcher and the nav never disagree mid-navigation.
-  const year =
-    useActiveYear() ?? (currentYear ? String(currentYear.year) : undefined);
-  const selectedYear = year === undefined ? currentYear?.year : Number(year);
+  const activeYear = useActiveYear();
+  const { year, selectedYear, currentYearId } = resolveSidebarYear(
+    activeYear,
+    currentYear
+  );
 
   // The sidebar badge and the Teachers page must count the same people, so the
   // sidebar asks for the same year roster rather than the unscoped establishment.
   const staffQuery = useQuery({
     ...orpc.staff.listStaff.queryOptions({
-      input: { academicYearId: currentYear?.id ?? "" },
+      input: { academicYearId: currentYearId },
     }),
     enabled: isAdmin && Boolean(currentYear),
   });
   const classesQuery = useQuery({
     ...orpc.staff.listClasses.queryOptions({
-      input: { academicYearId: currentYear?.id ?? "" },
+      input: { academicYearId: currentYearId },
     }),
     enabled: isAdmin && Boolean(currentYear),
   });
@@ -312,31 +399,19 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
       ? [{ title: "Teacher Requests", url: principal("teacher-requests") }]
       : []),
     { title: "Attendance", url: leadershipLinks.attendance },
-    { title: "My Equipment", url: leadershipLinks.equipment },
   ];
 
   const staffNav: NavItem[] = [
     {
       title: "Teachers",
       url: admin("staff", "teachers"),
-      count: staffQuery.data ? String(staffQuery.data.length) : undefined,
+      count: badgeCount(staffQuery.data?.length),
     },
     {
       title: "Class Assignment",
       url: admin("staff", "classes"),
-      count: classesQuery.data ? String(classesQuery.data.length) : undefined,
+      count: badgeCount(classesQuery.data?.length),
     },
-    // The school-wide equipment register is an administrator's tool: it is the
-    // store's stock list, its write-offs and its custody transfers, none of
-    // which a teacher may read. `custody.myItems` is each member of staff's own
-    // version, and it lives in *their* workspace — `teacherNav` below,
-    // `leadershipNav` above, `adminSelfNav` beside this group — rather than
-    // here, because that is the whole distinction between the two pages. No
-    // icon, because no item in this group passes one; no badge, because a count
-    // of everything in the store is not a queue — it duplicates what the
-    // register page already shows and would be a fifth request on every
-    // navigation to say nothing actionable.
-    { title: "Equipment", url: admin("staff", "inventory") },
     { title: "Period Assignment", url: admin("staff", "periods") },
     { title: "Teacher Timetable", url: admin("staff", "teacher-timetable") },
     { title: "Historical Data", url: admin("staff", "historical-data") },
@@ -344,43 +419,61 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     {
       title: "Leave Requests",
       url: admin("staff", "leaves"),
-      count: openLeavesQuery.data
-        ? String(
-            openLeavesQuery.data.requests.filter(
-              (request) => !request.finalizedAt
-            ).length
-          )
-        : undefined,
+      count: badgeCount(
+        openLeavesQuery.data?.requests.filter((request) => !request.finalizedAt)
+          .length
+      ),
     },
+  ];
+
+  /**
+   * The register and its five other views, each its own real route under the
+   * `inventory/` layout (`inventory.index.tsx`, `inventory.loans.tsx`,
+   * `inventory.issues.tsx`, `inventory.write-offs.tsx`,
+   * `inventory.asset-register.tsx`, `inventory.ledger.tsx`) rather than one
+   * URL with a `?tab=`/`?subtab=` — the same bookmarkable-path-over-query-state
+   * change the equipment pages' `equipment.in-charge.tsx` etc. made, for the
+   * identical reason.
+   */
+  const adminInventoryNav: NavItem[] = [
+    { title: "Inventory Management", url: admin("staff", "inventory") },
+    { title: "Loans", url: admin("staff", "inventory", "loans") },
+    { title: "Issues", url: admin("staff", "inventory", "issues") },
+    { title: "Write-offs", url: admin("staff", "inventory", "write-offs") },
+    {
+      title: "Asset Register",
+      url: admin("staff", "inventory", "asset-register"),
+    },
+    { title: "Ledger", url: admin("staff", "inventory", "ledger") },
   ];
 
   const teacherNav: NavItem[] = [
     { title: "My Leave", url: teacher("leave") },
     { title: "My Timetable", url: teacher("timetable") },
-    // A teacher's own list, and the only inventory read their role can reach:
-    // the two sections are their own holdings and nothing else. The register
-    // above is not linked from here, because a teacher cannot open it. The same
-    // page is also reached by leadership, in their own workspaces — see
-    // `leadershipNav` and `adminSelfNav`.
-    { title: "My Equipment", url: teacher("equipment") },
     { title: "My Profile", url: teacher("profile") },
   ];
 
   /**
-   * The administrator's self-service entry, and it is one entry rather than the
-   * whole of `teacherNav`.
+   * The self-service equipment page's own group, in place of the single
+   * "My Equipment" line `teacherNav`/`leadershipNav` used to carry.
    *
-   * The `admin` role is admitted by `teacher/route.tsx` to the entire teacher
-   * workspace, not just to the equipment page, so all four links would open. Only
-   * one is offered: "Take an item" needs a `staff` row, and the seeded `admin`
-   * account deliberately has none (`packages/auth/src/admin.ts`), so the other
-   * three would land a member of staff on a "no staff record" notice with nothing
-   * on the page to do about it. The equipment page is offered because an
-   * administrator who *has* been linked to a staff record may hold school
-   * property, and that page is the one place they could discover they do.
+   * Each entry is its own route under the seat's `equipment/` layout
+   * (`equipment.in-charge.tsx` / `equipment.in-hands.tsx` /
+   * `equipment.lent-out.tsx`, mirrored for teacher, principal and
+   * deputy-principal) rather than one URL with a scroll hash: a real path
+   * is bookmarkable, shareable and gives each section its own browser-history
+   * entry, which a hash on a client-rendered page does not reliably survive
+   * a hard refresh on. All three routes render the identical page — see
+   * `MyEquipmentSection` in `my-equipment.tsx` — and differ only in which
+   * `id` they land already scrolled to.
    */
-  const adminSelfNav: NavItem[] = [
-    { title: "My Equipment", url: teacher("equipment") },
+  const equipmentUrl = isLeader
+    ? leadershipLinks.equipment
+    : teacher("equipment");
+  const inventoryNav: NavItem[] = [
+    { title: "Owned", url: `${equipmentUrl}/in-charge` },
+    { title: "Borrowed", url: `${equipmentUrl}/in-hands` },
+    { title: "Lent Out", url: `${equipmentUrl}/lent-out` },
   ];
 
   const academicNav: NavItem[] = [
@@ -438,7 +531,9 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
           leadershipNav={leadershipNav}
           staffNav={staffNav}
           teacherNav={teacherNav}
-          adminSelfNav={adminSelfNav}
+          inventoryNav={inventoryNav}
+          adminInventoryNav={adminInventoryNav}
+          adminSelfNav={ADMIN_SELF_NAV}
           academicNav={academicNav}
         />
       </SidebarContent>

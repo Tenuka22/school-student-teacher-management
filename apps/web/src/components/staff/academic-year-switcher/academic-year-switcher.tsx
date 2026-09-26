@@ -233,10 +233,12 @@ export const AcademicYearSwitcher = ({
                 Add Academic Year
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuLabel className="text-muted-foreground px-2 py-2 text-xs leading-relaxed font-normal">
-                The administrator opens, switches and closes the school&rsquo;s
-                year.
-              </DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-muted-foreground px-2 py-2 text-xs leading-relaxed font-normal">
+                  The administrator opens, switches and closes the
+                  school&rsquo;s year.
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

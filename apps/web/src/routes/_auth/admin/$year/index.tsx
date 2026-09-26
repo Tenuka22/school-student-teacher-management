@@ -1,6 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import type { InferRouterInputs } from "@orpc/server";
+import type { AppRouter } from "@school-student-teacher-management/api/routers/index";
+import { IconPlus } from "@tabler/icons-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useRouteContext } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { formatAcademicYearRange } from "@/components/admin/admin-overview";
 import type { AdminOverview } from "@/components/admin/admin-overview";
@@ -8,7 +12,34 @@ import {
   DashboardPanels,
   ErrorPanel,
 } from "@/components/admin/admin-overview-panels";
+import type { CategoryOption } from "@/components/staff/inventory/inventory-types";
+import { InventoryItemDialogs } from "@/components/staff/inventory/item-dialogs";
+import { invalidateInventory } from "@/components/staff/inventory/shared";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
+
+type CreateItemInput =
+  InferRouterInputs<AppRouter>["inventory"]["items"]["create"];
+
+/**
+ * The edit half of `InventoryItemDialogs`, which this page never reaches.
+ *
+ * `onEditOpenChange`, `onEditSubmit` and `editActions` are required props, and
+ * the edit dialog is only ever opened through `onEditOpenChange`. This page
+ * keeps it shut (`isEditOpen={false}`, `selectedItem={null}`) and opens only
+ * the create dialog, so nothing below is reachable: an administrator creating a
+ * new line on the home page is not editing an existing one, and the register
+ * (`/admin/$year/staff/inventory`) is where that happens.
+ *
+ * Named here, with the reason, rather than inlined as four empty arrows at the
+ * call site: an empty function at a call site reads as "not wired up yet", which
+ * is exactly the impression the note above the page is trying to remove. Each
+ * returns its own argument rather than having an empty body, so the "this never
+ * runs" is stated once in the note and not repeated in every arrow.
+ */
+const ignoreEditOpenChange = (open: boolean) => open;
+const ignoreEditSubmit = () => Promise.resolve();
+const ignoreEditAction = () => false;
 
 /**
  * The administrator's home page.
@@ -20,17 +51,28 @@ import { orpc } from "@/utils/orpc";
  * administrators to distrust the whole surface. The panels themselves live in
  * `components/admin/admin-overview-panels.tsx`; this module fetches and routes.
  *
- * The two header buttons are deliberately only two, and they are not this page's
- * entry-point surface: the exhaustive one is the `Go to` grid inside
- * `DashboardPanels`, which is where a page with no obvious place in a header
- * belongs. The equipment **register** was the one page on neither — no header
- * button, no grid tile, reachable only by typing its URL — and is now the
- * `Equipment` tile in that grid. A header of a dozen links is a header nobody
- * reads, which is the fixed half of the "inert buttons" problem above.
+ * The header carries three buttons now, and the third ("+ New Item") is a
+ * deliberate exception to the other two's own rule. "Academic years" and
+ * "GO TO TEACHERS" are *navigation* — the argument for keeping the header to a
+ * pair of them is that the exhaustive navigation surface is the `Go to` grid
+ * inside `DashboardPanels`, and a header of a dozen links is a header nobody
+ * reads. "+ New Item" is not navigation: it opens the same complex,
+ * multi-fieldset item-creation dialog the equipment register uses
+ * (`InventoryItemDialogs` in `components/staff/inventory/item-dialogs.tsx`)
+ * without leaving this page, so registering a new line in the store — the
+ * single highest-frequency write on the whole admin surface — does not first
+ * require a trip to `/admin/$year/staff/inventory`. Adding it here duplicates
+ * a small, independent slice of `useInventoryPage` (the categories read, the
+ * `createItem` mutation, one boolean of dialog state) rather than the whole
+ * hook, which also runs borrow/low-stock queries and ten other mutations this
+ * page has no use for. The edit half of `InventoryItemDialogs` is always
+ * closed here (`isEditOpen={false}`, `selectedItem={null}`) — this page never
+ * edits an existing item, only ever creates a new one.
  */
 const RouteComponent = () => {
   const { year } = Route.useParams();
   const { session } = useRouteContext({ from: "/_auth" });
+  const queryClient = useQueryClient();
 
   const academicYearsQuery = useQuery(
     orpc.staff.listAcademicYears.queryOptions()
@@ -51,6 +93,52 @@ const RouteComponent = () => {
   const isLoading = academicYearsQuery.isPending || overview.isPending;
   const error =
     (overview.isError ? overview.error : academicYearsQuery.error) ?? null;
+
+  // ─── Item creation ──────────────────────────────────────────────────────
+  //
+  // The independent slice of `useInventoryPage` this page actually needs: a
+  // categories read (an item cannot be created without one, and the picker
+  // has to know what exists), the create mutation, and one boolean for the
+  // dialog. Everything else that hook carries — borrows, low-stock counts,
+  // the other nine mutations — has no reader on this page.
+
+  const [isCreateItemOpen, setIsCreateItemOpen] = useState(false);
+
+  const categoriesQuery = useQuery(
+    orpc.inventory.categories.list.queryOptions()
+  );
+  const categories: CategoryOption[] = useMemo(
+    () => categoriesQuery.data ?? [],
+    [categoriesQuery.data]
+  );
+
+  const createItemMutation = useMutation(
+    orpc.inventory.items.create.mutationOptions({
+      onSuccess: async (created) => {
+        toast.success(
+          `"${created.name}" registered as ${created.sku}${
+            created.uniqueIdCount > 0
+              ? ` with ${created.uniqueIdCount} asset tag(s)`
+              : ""
+          }`
+        );
+        setIsCreateItemOpen(false);
+        await invalidateInventory(queryClient, "item");
+      },
+      onError: (createError: unknown) => {
+        toast.error(
+          formatApiErrorMessage(createError, "Could not register this item")
+        );
+      },
+    })
+  );
+
+  const handleCreateItemSubmit = useCallback(
+    async (values: Record<string, unknown>) => {
+      await createItemMutation.mutateAsync(values as CreateItemInput);
+    },
+    [createItemMutation]
+  );
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -73,6 +161,16 @@ const RouteComponent = () => {
           >
             Academic years
           </Link>
+          <button
+            type="button"
+            className="border-primary/25 text-primary hover:border-primary flex items-center gap-1.5 border px-[18px] py-2.5 text-xs font-bold transition-colors"
+            onClick={() => {
+              setIsCreateItemOpen(true);
+            }}
+          >
+            <IconPlus className="size-4" />
+            New Item
+          </button>
           <Link
             className="bg-primary text-primary-foreground hover:bg-primary-hover px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors"
             params={{ year }}
@@ -97,6 +195,26 @@ const RouteComponent = () => {
       )}
 
       {data && <DashboardPanels data={data} year={year} />}
+
+      <InventoryItemDialogs
+        categories={categories}
+        isCreateOpen={isCreateItemOpen}
+        onCreateOpenChange={setIsCreateItemOpen}
+        isEditOpen={false}
+        onEditOpenChange={ignoreEditOpenChange}
+        selectedItem={null}
+        isCreatePending={createItemMutation.isPending}
+        isEditPending={false}
+        onCreateSubmit={handleCreateItemSubmit}
+        onEditSubmit={ignoreEditSubmit}
+        editActions={{
+          isLoading: false,
+          handleTransferCustody: ignoreEditAction,
+          handleAssignManager: ignoreEditAction,
+          handleRecordStockIn: ignoreEditAction,
+          handleWriteOffStock: ignoreEditAction,
+        }}
+      />
     </div>
   );
 };

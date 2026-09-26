@@ -25,6 +25,15 @@ export const NavMain = ({
   items: {
     title: string;
     url: string;
+    /** Scrolls to this in-page anchor after navigating to `url`, for a group
+     *  of links that all point at sections of one page rather than separate
+     *  routes (e.g. "Inventory Management"'s Owned/Borrowed/Lent Out). */
+    hash?: string;
+    /** Selects which query-param state this item lands on, for a group of
+     *  links that all point at one route's tabbed content rather than
+     *  separate pages (e.g. "Inventory"'s Loans/Issues/Write-offs, each a
+     *  `?tab=records&subtab=...` on the same admin inventory route). */
+    search?: Record<string, string>;
     icon?: React.ReactNode;
     isActive?: boolean;
     disabled?: boolean;
@@ -40,12 +49,49 @@ export const NavMain = ({
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
-  const isItemActive = (url: string) => {
+  const isItemActive = (
+    url: string,
+    hash?: string,
+    search?: Record<string, string>
+  ) => {
     if (url === "#") {
       return false;
     }
-    return currentPath === url || currentPath.startsWith(`${url}/`);
+    const pathMatches =
+      currentPath === url || currentPath.startsWith(`${url}/`);
+    if (!pathMatches) {
+      return false;
+    }
+    // Several items in a group can share one `url` and differ only by
+    // `hash` (e.g. "Inventory Management"'s Owned/Borrowed/Lent Out all
+    // point at /teacher/$year/equipment). Without comparing the hash too,
+    // all three would highlight together no matter which section is open.
+    if (hash !== undefined && routerState.location.hash !== hash) {
+      return false;
+    }
+    // Same idea for `search`: several "Inventory" links share one url and
+    // differ only by which `?tab=`/`?subtab=` they set, so every key named
+    // in `search` has to match the current location's, not merely be present.
+    if (search === undefined) {
+      return true;
+    }
+    const currentSearch = routerState.location.search as Record<
+      string,
+      unknown
+    >;
+    return Object.entries(search).every(
+      ([key, value]) => currentSearch[key] === value
+    );
   };
+
+  // A group with nothing in it (e.g. the administrator's "My Workspace",
+  // which is intentionally empty because admin can neither own nor borrow
+  // equipment) renders as a bare, actionable-looking header with no rows
+  // beneath it. That reads as broken, not as "nothing to show" — so the
+  // whole group is skipped rather than shown empty.
+  if (items.length === 0) {
+    return null;
+  }
 
   return (
     <SidebarGroup className="gap-0 px-2.5 py-0">
@@ -54,7 +100,7 @@ export const NavMain = ({
       </SidebarGroupLabel>
       <SidebarMenu className="gap-px">
         {items.map((item) => {
-          const active = isItemActive(item.url);
+          const active = isItemActive(item.url, item.hash, item.search);
           return (
             <Collapsible
               key={item.title}
@@ -76,7 +122,11 @@ export const NavMain = ({
                 onClick={() =>
                   !item.disabled &&
                   item.url !== "#" &&
-                  navigate({ to: item.url as never })
+                  navigate({
+                    to: item.url as never,
+                    hash: item.hash,
+                    search: item.search as never,
+                  })
                 }
               >
                 <span className="flex-1 text-[13px]">{item.title}</span>

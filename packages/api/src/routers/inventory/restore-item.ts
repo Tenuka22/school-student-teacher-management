@@ -21,12 +21,7 @@
  *   `qty` and `borrowedQty` are snapshotted onto the ledger row exactly as
  *   `deleteItem` snapshots them, because the ledger's two sides are the figures
  *   every other row either side of this one refers to.
- * - **The gate is `requireInventoryPermission("update")`, not `"delete"`.** This
- *   is a one-column `update`, it is what the *edit* of a record looks like
- *   elsewhere in this feature (`updateItem` moves a category, a valuation, a
- *   threshold), and reaching for `delete` would say the caller needs authority to
- *   destroy school property in order to un-destroy it. `deleteItem` keeps `delete`
- *   because it is the write that takes a row out of the register's working set.
+ * - **Admin-only management action**, per business rules — only the admin role may restore retired items.
  * - **Its own `getLockedRetiredItem`, not `getLockedItem`.** `getLockedItem`
  *   filters `isNull(deletedAt)` — it treats a retired row as non-existent by
  *   design — so reusing it would make this procedure unable to find its own
@@ -82,7 +77,7 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import type { InventoryItemRow } from "./inventory-database";
 import {
   countersOf,
@@ -125,7 +120,8 @@ const toAuditSnapshot = (row: InventoryItemRow): Record<string, unknown> => ({
  * they are told apart here, before the write, where the sentence can be aimed at
  * the person who clicked.
  */
-export const restoreItem = requireInventoryPermission("update")
+
+export const restoreItem = adminOnlyProcedure
   .input(v.object({ itemId: inventoryItemIdSchema }))
   .handler(({ input, context }) =>
     context.db.transaction(async (tx) => {

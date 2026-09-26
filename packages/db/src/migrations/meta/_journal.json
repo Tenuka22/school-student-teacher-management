@@ -8,6 +8,20 @@
       "when": 1790410564714,
       "tag": "0000_great_the_spike",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790419797764,
+      "tag": "0001_dry_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790420375460,
+      "tag": "0002_faithful_captain_universe",
+      "breakpoints": true
     }
   ]
 }

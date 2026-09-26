@@ -32,7 +32,7 @@ import {
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   assertStaffIsAssignable,
@@ -65,7 +65,7 @@ const resolveStaffName = async (
   return record?.name ?? null;
 };
 
-export const transferCustody = requireInventoryPermission("update")
+export const transferCustody = adminOnlyProcedure
   .input(
     object({
       itemId: inventoryItemIdSchema,

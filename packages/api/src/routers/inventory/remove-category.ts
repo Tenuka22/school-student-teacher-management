@@ -7,7 +7,7 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import {
   assertCategoryExists,
   getInventoryActor,
@@ -48,7 +48,8 @@ import {
  * `create-item` that landed after the probe would hit the `restrict` FK and
  * fail with the obscure error this procedure exists to avoid.
  */
-export const removeCategory = requireInventoryPermission("delete")
+
+export const removeCategory = adminOnlyProcedure
   .input(v.object({ categoryId: inventoryCategoryIdSchema }))
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);

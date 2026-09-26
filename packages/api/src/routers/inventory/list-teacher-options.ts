@@ -1,7 +1,7 @@
 import { normalizeInventoryKey } from "@school-student-teacher-management/db/constants/inventory";
 import { user } from "@school-student-teacher-management/db/schema/auth";
 import { staff } from "@school-student-teacher-management/db/schema/staff";
-import { and, asc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull, ne, or } from "drizzle-orm";
 import * as v from "valibot";
 
 import { adminProcedure } from "../../index";
@@ -178,6 +178,7 @@ export const listAssignableStaff = adminProcedure
       .where(
         and(
           activeOrUnsetEmployment,
+          or(isNull(user.id), ne(user.role, "admin")),
           term
             ? or(
                 ilike(staff.name, pattern),

@@ -20,7 +20,7 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import type { InventoryItemRow } from "./inventory-database";
 import {
   countersOf,
@@ -72,7 +72,8 @@ const IN_FLIGHT_UNIT_STATUSES = ["borrowed", "issued", "disposed"] as const;
  * either side of this one refer to, and rewriting it would make the ledger's own
  * history stop reconciling.
  */
-export const deleteItem = requireInventoryPermission("delete")
+
+export const deleteItem = adminOnlyProcedure
   .input(v.object({ itemId: inventoryItemIdSchema }))
   .handler(({ input, context }) =>
     context.db.transaction(async (tx) => {

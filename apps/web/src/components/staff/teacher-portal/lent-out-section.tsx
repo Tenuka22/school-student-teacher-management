@@ -285,7 +285,7 @@ export const LentOutSection = ({
   }
 
   return (
-    <section className="space-y-3">
+    <section id="lent-out" className="scroll-mt-20 space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-heading text-xl font-semibold">
           Lent out by me

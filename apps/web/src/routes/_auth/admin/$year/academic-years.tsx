@@ -12,7 +12,12 @@ import {
   CardContent,
   CardHeader,
 } from "@school-student-teacher-management/ui/components/card";
-import { IconCalendarPlus, IconCheck, IconTrash } from "@tabler/icons-react";
+import {
+  IconCalendarPlus,
+  IconCheck,
+  IconRestore,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -28,11 +33,20 @@ interface AcademicYear {
   startDate: string | null;
   endDate: string | null;
   isCurrent: boolean;
+  deletedAt: string | null;
 }
 
 const RouteComponent = () => {
   const queryClient = useQueryClient();
-  const yearsQuery = useQuery(orpc.staff.listAcademicYears.queryOptions());
+  // `includeDeleted: true` so this page — the one place `restoreAcademicYear`
+  // is offered — can show the deleted years too. Every other reader
+  // (the sidebar switcher, the academic-year gate) calls this with no input
+  // and never sees them, which is the whole point of the flag.
+  const yearsQuery = useQuery(
+    orpc.staff.listAcademicYears.queryOptions({
+      input: { includeDeleted: true },
+    })
+  );
   const setCurrentMutation = useMutation(
     orpc.staff.setCurrentYear.mutationOptions()
   );
@@ -42,16 +56,27 @@ const RouteComponent = () => {
   const deleteMutation = useMutation(
     orpc.staff.deleteAcademicYear.mutationOptions()
   );
+  const restoreMutation = useMutation(
+    orpc.staff.restoreAcademicYear.mutationOptions()
+  );
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AcademicYear | null>(null);
 
-  const years = useMemo(
+  const allYears = useMemo(
     () =>
       ((yearsQuery.data || []) as unknown as AcademicYear[]).toSorted(
         (a, b) => b.year - a.year
       ),
     [yearsQuery.data]
+  );
+  const years = useMemo(
+    () => allYears.filter((year) => !year.deletedAt),
+    [allYears]
+  );
+  const deletedYears = useMemo(
+    () => allYears.filter((year) => year.deletedAt),
+    [allYears]
   );
 
   const handleSwitchYear = async (id: string) => {
@@ -86,6 +111,18 @@ const RouteComponent = () => {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete year"
+      );
+    }
+  };
+
+  const handleRestoreYear = async (target: AcademicYear) => {
+    try {
+      await restoreMutation.mutateAsync({ id: target.id } as never);
+      await queryClient.invalidateQueries();
+      toast.success(`Academic year ${target.year} restored`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to restore year"
       );
     }
   };
@@ -135,7 +172,7 @@ const RouteComponent = () => {
                   }
                 >
                   {year.startDate && year.endDate
-                    ? `${year.startDate} \u2013 ${year.endDate}`
+                    ? `${year.startDate} – ${year.endDate}`
                     : "No dates set"}
                 </div>
               </div>
@@ -207,6 +244,44 @@ const RouteComponent = () => {
         </button>
       </div>
 
+      {/*
+        Deleted years, in a section of their own rather than mixed into the
+        grid above with a muted style — a year an administrator is scanning
+        for "which years are live" should not have to read a badge on every
+        card to find out. Only rendered at all once there is something to
+        show, for the same reason `NeedsAttention` on the dashboard hides its
+        own empty state rather than printing "nothing here".
+      */}
+      {deletedYears.length > 0 ? (
+        <div className="border-primary/14 bg-card space-y-3 border p-4">
+          <h2 className="font-heading text-lg font-semibold">Deleted years</h2>
+          <p className="text-muted-foreground text-sm">
+            Deleting a year here only hides it — nothing was removed, because a
+            year can only be deleted while it is already empty. Restore one to
+            bring it back into the switcher and the grid above.
+          </p>
+          <div className="flex flex-col gap-2">
+            {deletedYears.map((year) => (
+              <div
+                key={year.id}
+                className="border-primary/10 flex items-center justify-between gap-3 border-t pt-2 first:border-t-0 first:pt-0"
+              >
+                <span className="text-sm font-medium">{year.year}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={restoreMutation.isPending}
+                  onClick={() => handleRestoreYear(year)}
+                >
+                  <IconRestore className="size-4" />
+                  Restore
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <AddAcademicYearDialog
         isOpen={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
@@ -232,7 +307,9 @@ const RouteComponent = () => {
             usage, period assignments or homeroom history. Every year created
             here is seeded with leave entitlements and an attendance policy, so
             in practice a year must be emptied first. The active year cannot be
-            deleted at all; switch to another year first. This cannot be undone.
+            deleted at all; switch to another year first. This only hides the
+            year — nothing is removed, and it can be restored from the
+            &ldquo;Deleted years&rdquo; list below.
           </AlertDialogDescription>
           <div className="flex justify-end gap-4">
             <AlertDialogCancel>Cancel</AlertDialogCancel>

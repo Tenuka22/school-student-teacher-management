@@ -21,7 +21,7 @@ import { staffIdSchema } from "@school-student-teacher-management/db/schema/staf
 import { eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import { generateSku, normalizeLabel } from "./inventory-calculations";
 import type { Executor, InventoryItemRow } from "./inventory-database";
 import {
@@ -390,7 +390,8 @@ const insertUnits = async (
  * decision about the future, not a record of the past. The database permits
  * both; its only CHECK is `min_qty >= 0`.
  */
-export const createItem = requireInventoryPermission("create")
+
+export const createItem = adminOnlyProcedure
   .input(
     v.object({
       ...v.pick(inventoryItemInsertSchema, [

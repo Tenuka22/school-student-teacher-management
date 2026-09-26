@@ -36,7 +36,7 @@ import {
 import { eq } from "drizzle-orm";
 import { object, optional, string } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   countersOf,
@@ -101,7 +101,7 @@ const getLockedDisposal = async (db: Executor, disposalId: string) => {
  * **The actual separation of duties is the check in the handler below**, not this
  * procedure level, and it is also not airtight — see the comment there.
  */
-export const approveDisposal = adminProcedure
+export const approveDisposal = adminOnlyProcedure
   .input(
     object({
       disposalId: inventoryDisposalIdSchema,

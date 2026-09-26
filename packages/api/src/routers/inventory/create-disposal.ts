@@ -10,18 +10,6 @@
  * the ledger row written here records identical `before` and `after` counters to
  * say the same thing in the place an auditor looks.
  *
- * **Why the creation gate is `requireInventoryPermission("create")` and not the
- * approval gate.** The source app split this the same way (`managementProcedure`
- * to raise, `adminProcedure` to sign), and the split is the point: noticing that
- * a projector is broken and deciding that the school's books should say it is
- * not gone are different acts, and a storekeeper who could do both would be able
- * to write off the store they are accountable for. What the *gate* buys is
- * narrower than it looks — today `inventory: ["approve"]` is granted only to
- * `admin` / `principal` / `vicePrincipal`, and `requirePermission` short-circuits
- * all three, so the two gates currently admit the same people. The real
- * separation of duties is the explicit self-approval refusal in
- * `approveDisposal`, not this permission string. See that file for the gap that
- * leaves, which is stated there rather than glossed over here.
  *
  * **`assertCategoryExists` is deliberately absent**, where the source app called
  * it. Here `inventoryDisposal.itemId` is a foreign key onto `inventoryItem`
@@ -40,7 +28,7 @@ import {
 } from "@school-student-teacher-management/db/schema/inventory";
 import { array, object, optional, pick, string } from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import {
   assertSufficientAvailableQuantity,
   assertUnitsNotPendingDisposal,
@@ -53,7 +41,7 @@ import {
   iso,
 } from "./inventory-database";
 
-export const createDisposal = requireInventoryPermission("create")
+export const createDisposal = adminOnlyProcedure
   .input(
     object({
       /**

@@ -33,7 +33,7 @@ import {
 import { eq } from "drizzle-orm";
 import { minLength, nullable, object, optional, pipe, string } from "valibot";
 
-import { requireInventoryPermission } from "../../index";
+import { adminOnlyProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   assertStaffIsAssignable,
@@ -99,7 +99,7 @@ const managerAuditAction = (
   return changeType === "manager_changed" ? "manager.change" : "manager.clear";
 };
 
-export const assignManager = requireInventoryPermission("update")
+export const assignManager = adminOnlyProcedure
   .input(
     object({
       itemId: inventoryItemIdSchema,

@@ -17,7 +17,7 @@ import {
 } from "@school-student-teacher-management/ui/components/tabs";
 import { IconCategory, IconPlus, IconUserOff } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import * as v from "valibot";
@@ -53,6 +53,7 @@ import {
   StockOutDialog,
 } from "@/components/staff/inventory/stock-dialogs";
 import { formatApiErrorMessage } from "@/lib/api-error";
+import { useActiveYear, yearPath } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
 /**
@@ -1116,70 +1117,38 @@ export const useInventoryPage = () => {
 };
 
 /**
- * The two panes of the page, as tab values.
- *
- * They are a closed set rather than a free string so a hand-typed `?tab=` cannot
- * select a pane that does not exist — an unrecognised value falls back to
- * `register` rather than rendering an empty screen.
- *
- * **`ledger` was a third value here and has been removed.** `InventoryLedgerTabs`
- * was mounted twice on one screen: once under this tab, and again at the foot of the
- * Records pane under its own `<h2>Ledgers</h2>` heading (`lifecycle-tabs.tsx:210`).
- * Two mounts of the same component on one route, neither marked canonical, is a
- * screen where "where is the change log" has two right answers and a bookmark into
- * the duplicate looks like a different feature. The Records pane keeps it, because
- * that is where the sibling's own heading and introduction live and the ledger reads
- * as the tail of the movements record rather than as a peer of it.
+ * The Records pane's five sub-views — the four lifecycle tabs
+ * (`lifecycle-tabs.tsx`) plus the ledger section at their foot — as real path
+ * segments rather than `?tab=`/`?subtab=` query state. Each is its own route
+ * file (`inventory.loans.tsx`, `inventory.issues.tsx`, `inventory.write-offs.tsx`,
+ * `inventory.asset-register.tsx`, `inventory.ledger.tsx`, mirroring the
+ * dot-notation convention `teacher-timetable.$staffId.tsx` already sets in this
+ * app), so every one of these six views is bookmarkable, shareable and gets its
+ * own browser-history entry — the same reasoning the equipment pages' own
+ * `equipment.in-charge.tsx` etc. give for the identical change there.
  */
-const INVENTORY_TABS = ["register", "records"] as const;
+export type InventorySection =
+  | "register"
+  | "loans"
+  | "issues"
+  | "write-offs"
+  | "asset-register"
+  | "ledger";
 
-type InventoryTab = (typeof INVENTORY_TABS)[number];
-
-/** The one search param the page owns. `unknown`, because it comes off the URL. */
-interface InventoryRouteSearch {
-  tab?: unknown;
-}
-
-const isInventoryTab = (value: unknown): value is InventoryTab =>
-  INVENTORY_TABS.some((candidate) => candidate === value);
-
-/**
- * The active pane, held in the URL rather than in `useState`.
- *
- * A clerk who is chasing an overdue loan and bookmarks the tab, or refreshes
- * after the network dropped, has to land back on the pane they were reading.
- * Component state would not survive either. The read is `strict: false` and the
- * write is the functional `search` form, both copied from `use-my-equipment.ts`,
- * for the same two reasons: this component does not own its route file, so it
- * cannot know the route's search type statically, and the functional form is the
- * only one that cannot silently drop the other params already on the URL.
- * `replace: true` so switching panes does not fill the back button with a trail
- * of tab changes.
- */
-const useInventoryTab = () => {
-  const navigate = useNavigate();
-  const routeSearch = useSearch({ strict: false }) as InventoryRouteSearch;
-  const candidate = routeSearch.tab;
-  const tab: InventoryTab = isInventoryTab(candidate) ? candidate : "register";
-
-  const setTab = useCallback(
-    (next: unknown) => {
-      if (!isInventoryTab(next) || next === tab) {
-        return;
-      }
-
-      void navigate({
-        search: ((previous: InventoryRouteSearch) => ({
-          ...previous,
-          tab: next,
-        })) as never,
-        replace: true,
-      });
-    },
-    [navigate, tab]
-  );
-
-  return { tab, setTab };
+/** Which of `InventoryLifecycleTabs`' four `Tabs` values a section maps to. */
+const LIFECYCLE_SUBTAB_OF: Record<
+  Exclude<InventorySection, "register">,
+  "loans" | "issues" | "write-offs" | "register"
+> = {
+  loans: "loans",
+  issues: "issues",
+  "write-offs": "write-offs",
+  "asset-register": "register",
+  // The ledger section sits at the foot of the Records pane regardless of
+  // which lifecycle tab is active above it, so `/ledger` lands on Records
+  // with Loans (the pane's own default) underneath and scrolls to the
+  // ledger heading — see `scrollToLedger` on `InventoryLifecycleTabs`.
+  ledger: "loans",
 };
 
 /**
@@ -1223,16 +1192,251 @@ const useInventoryTab = () => {
  * this fix and it is not in this file: `lifecycle-tabs.tsx:110` renders its "Stock
  * movements" as an `<h1>`, and it should be an `<h2>` for the outline to be correct.
  */
-export const InventoryPage = () => {
-  const { tab, setTab } = useInventoryTab();
+/**
+ * The one object the Register pane renders from: everything `useInventoryPage`
+ * returns.
+ *
+ * Named here rather than written out as a prop list, so the pane and the hook
+ * cannot drift apart — a handler the hook stops returning is a type error at
+ * the pane instead of a silently dead button.
+ */
+type InventoryPageState = ReturnType<typeof useInventoryPage>;
+
+/**
+ * The Register pane — the catalog, its filters, its table and every dialog the
+ * table's row actions open.
+ *
+ * Split out of `InventoryPage` because it is one self-contained half of that
+ * page: it reads the hook's result and nothing else, and the page above it adds
+ * only the tab bar, the heading and the Records pane. It is a component and not
+ * a chunk of markup inlined in the parent for the same reason the two panes are
+ * two components — a 300-line function is a page and its half at once, and
+ * neither can be read without the other in the way.
+ */
+const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
+  <section
+    aria-labelledby="inventory-register-heading"
+    className="flex flex-col gap-4"
+  >
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div>
+        {/*
+          The pane's name, and an `h2` rather than the `h1` this used to be.
+          The page's own `h1` sits above the tab bar, so it survives a change
+          of pane, and the heading a screen-reader user hears on entering this
+          pane is "Register" — which is what the tab they just activated is
+          called, rather than the name of a sibling screen.
+        */}
+        <h2
+          id="inventory-register-heading"
+          className="font-heading text-2xl font-semibold"
+        >
+          Register
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Every item the school owns, who is responsible for it, and who is
+          holding it
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {/*
+          "Categories", not "Store categories". The empty-state copy below tells
+          the user to look for "Seed categories", and the button beside it used
+          to be called "Store categories" — a fourth name for the same thing,
+          and a verb phrase that reads as an action on the categories rather
+          than a way in to them. This opens the panel that seeds, renames and
+          removes them; the seed action inside it says what it does.
+        */}
+        <Button
+          variant="outline"
+          onClick={() => page.handleCategoriesOpenChange(true)}
+          data-icon="inline-start"
+        >
+          <IconCategory data-icon="inline-start" />
+          Categories
+        </Button>
+        <Button onClick={page.handleCreateItem} data-icon="inline-start">
+          <IconPlus data-icon="inline-start" />
+          Register item
+        </Button>
+      </div>
+    </div>
+
+    {/*
+      The one standing condition this screen can be in, stated as a rule rather
+      than as a failure. A store with no categories cannot have an item created
+      at all — `createItem` requires a `categoryId` behind a `restrict` foreign
+      key — so this is not decoration: it names the blocker, and it disappears
+      on its own once the categories exist rather than needing to be dismissed.
+    */}
+    {page.categories.length === 0 && !page.isCategoriesLoading ? (
+      <InventoryInlineNotice
+        tone="warning"
+        title="This store has no categories yet"
+        description="Nothing can be added to the register until at least one category exists, because every item has to belong to one. The eight starter categories are the fastest way to get there, and running it again is safe — it skips anything already there. Open Categories to use it."
+      />
+    ) : null}
+
+    <InventoryStatCards stats={page.stats} isLoading={page.isStatsLoading} />
+
+    {/*
+      The "No manager" card's way in — see the note beside the button.
+
+      It is a toggle rather than a one-shot "show me" for the same reason the
+      filter bar's "Low stock only" is a toggle: it is a *filter*, so it needs
+      an off that the user can see and press, and `aria-pressed` states that
+      without borrowing a checkbox for the state. The icon is the card's own
+      (`IconUserOff` in `shared/inventory-stats.tsx`), so the association
+      between this control and the figure above it is by picture as well as by
+      position.
+    */}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <Button
+        type="button"
+        variant={page.filters.unassignedOnly ? "default" : "outline"}
+        aria-pressed={page.filters.unassignedOnly}
+        onClick={() =>
+          page.handleUnassignedOnlyChange(!page.filters.unassignedOnly)
+        }
+        data-icon="inline-start"
+      >
+        <IconUserOff data-icon="inline-start" />
+        No manager only
+      </Button>
+      {page.filters.unassignedOnly ? (
+        <p className="text-muted-foreground text-sm">
+          {buildUnassignedScopeNote(
+            page.resultCount ?? 0,
+            page.loadedCount !== undefined &&
+              page.totalCount !== undefined &&
+              page.loadedCount < page.totalCount
+          )}
+        </p>
+      ) : null}
+    </div>
+
+    <InventoryFilterBar
+      {...page.filters}
+      onChange={page.handleFiltersChange}
+      onReset={page.handleFiltersReset}
+      categories={page.categories}
+      resultCount={page.resultCount}
+      totalCount={page.registerTotal}
+    />
+
+    <InventoryTable
+      items={page.items}
+      totalCount={page.registerTotal}
+      isLoading={page.isItemsLoading}
+      isFiltered={page.isFiltered}
+      error={page.itemsError}
+      onRetry={page.handleRetryItems}
+      onClearFilters={page.handleFiltersReset}
+      hasCategories={page.categories.length > 0}
+      isSeedPending={page.isSeedPending}
+      onSeedCategories={page.handleSeedCategories}
+      onCreateItem={page.handleCreateItem}
+      onOpenItem={page.handleOpenItem}
+      onViewCustody={page.handleOpenItem}
+      onTransferCustody={page.handleTransferCustody}
+      onAssignManager={page.handleAssignManager}
+      onTransferOwnership={page.handleTransferOwnership}
+      onReclaimCustody={page.handleReclaimCustody}
+      onTakeItem={page.handleTakeItem}
+      onReleaseCustody={page.handleReleaseCustody}
+      onEditItem={page.handleEditItem}
+      onRetireItem={page.handleRetireItem}
+      isRetirePending={page.isRetirePending}
+      onRestoreItem={page.handleRestoreItem}
+      isRestorePending={page.isRestorePending}
+    />
+
+    <InventoryItemDialogs
+      categories={page.categories}
+      selectedItem={page.selectedItem}
+      isCreateOpen={page.isCreateOpen}
+      onCreateOpenChange={page.handleCreateOpenChange}
+      isEditOpen={page.isEditOpen}
+      onEditOpenChange={page.handleEditOpenChange}
+      isCreatePending={page.isCreatePending}
+      isEditPending={page.isEditPending}
+      onCreateSubmit={page.handleCreateSubmit}
+      onEditSubmit={page.handleEditSubmit}
+      editActions={{
+        isLoading: page.isEditPending,
+        handleTransferCustody: page.handleEditTransferCustody,
+        handleAssignManager: page.handleEditAssignManager,
+        handleRecordStockIn: page.handleRecordStockIn,
+        handleWriteOffStock: page.handleWriteOffStock,
+      }}
+    />
+
+    <CustodyDialogs
+      item={page.selectedItem}
+      isTransferOpen={page.isTransferOpen}
+      onTransferOpenChange={page.handleTransferOpenChange}
+      isTransferPending={page.isTransferPending}
+      onTransferSubmit={page.handleTransferSubmit}
+      isManagerOpen={page.isManagerOpen}
+      onManagerOpenChange={page.handleManagerOpenChange}
+      isManagerPending={page.isManagerPending}
+      onManagerSubmit={page.handleManagerSubmit}
+      holdMode={page.holdMode}
+      isHoldOpen={page.isHoldOpen}
+      onHoldOpenChange={page.handleHoldOpenChange}
+      isHoldPending={page.isHoldPending}
+      onHoldSubmit={page.handleHoldSubmit}
+      isHistoryOpen={page.isHistoryOpen}
+      onHistoryOpenChange={page.handleHistoryOpenChange}
+    />
+
+    <CategoryPanel
+      open={page.isCategoriesOpen}
+      onOpenChange={page.handleCategoriesOpenChange}
+      categories={page.categories}
+      isLoading={page.isCategoriesLoading}
+      error={page.categoriesError}
+      onRetry={page.handleRetryCategories}
+      isFiltered={page.isFiltered}
+      onSeed={page.handleSeedCategories}
+      isSeedPending={page.isSeedPending}
+    />
+
+    <StockInDialog
+      open={page.isStockInOpen}
+      onOpenChange={page.handleStockInOpenChange}
+    />
+    <StockOutDialog
+      open={page.isStockOutOpen}
+      onOpenChange={page.handleStockOutOpenChange}
+    />
+  </section>
+);
+
+export const InventoryPage = ({ section }: { section: InventorySection }) => {
+  const navigate = useNavigate();
+  const year = useActiveYear();
+  const tab = section === "register" ? "register" : "records";
   const page = useInventoryPage();
 
+  const goToTab = useCallback(
+    (next: unknown) => {
+      if (next === tab) {
+        return;
+      }
+
+      void navigate({
+        to:
+          next === "register"
+            ? yearPath("/admin", year, "staff", "inventory")
+            : yearPath("/admin", year, "staff", "inventory", "loans"),
+      });
+    },
+    [navigate, tab, year]
+  );
+
   return (
-    <Tabs
-      value={tab}
-      onValueChange={(next: unknown) => setTab(next)}
-      className="gap-4"
-    >
+    <Tabs value={tab} onValueChange={goToTab} className="gap-4">
       {/*
         The page's own name, above the tab bar rather than inside the register pane.
         An `h1` inside a tab is an `h1` that disappears when the user reads a loan
@@ -1278,219 +1482,18 @@ export const InventoryPage = () => {
         it did before it was mounted inside a tab.
       */}
       <TabsContent value="register" className="text-base/relaxed">
-        <section
-          aria-labelledby="inventory-register-heading"
-          className="flex flex-col gap-4"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              {/*
-                The pane's name, and an `h2` rather than the `h1` this used to be.
-                The page's own `h1` sits above the tab bar, so it survives a change
-                of pane, and the heading a screen-reader user hears on entering this
-                pane is "Register" — which is what the tab they just activated is
-                called, rather than the name of a sibling screen.
-              */}
-              <h2
-                id="inventory-register-heading"
-                className="font-heading text-2xl font-semibold"
-              >
-                Register
-              </h2>
-              <p className="text-muted-foreground mt-1">
-                Every item the school owns, who is responsible for it, and who
-                is holding it
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {/*
-                "Categories", not "Store categories". The empty-state copy three
-                blocks below tells the user to look for "Seed categories", and the
-                button beside it used to be called "Store categories" — a fourth
-                name for the same thing, and a verb phrase that reads as an action
-                on the categories rather than a way in to them. This opens the panel
-                that seeds, renames and removes them; the seed action inside it says
-                what it does.
-              */}
-              <Button
-                variant="outline"
-                onClick={() => page.handleCategoriesOpenChange(true)}
-                data-icon="inline-start"
-              >
-                <IconCategory data-icon="inline-start" />
-                Categories
-              </Button>
-              <Button onClick={page.handleCreateItem} data-icon="inline-start">
-                <IconPlus data-icon="inline-start" />
-                Register item
-              </Button>
-            </div>
-          </div>
-
-          {/*
-            The one standing condition this screen can be in, stated as a rule rather
-            than as a failure. A store with no categories cannot have an item created
-            at all — `createItem` requires a `categoryId` behind a `restrict` foreign
-            key — so this is not decoration: it names the blocker, and it disappears
-            on its own once the categories exist rather than needing to be dismissed.
-          */}
-          {page.categories.length === 0 && !page.isCategoriesLoading ? (
-            <InventoryInlineNotice
-              tone="warning"
-              title="This store has no categories yet"
-              description="Nothing can be added to the register until at least one category exists, because every item has to belong to one. The eight starter categories are the fastest way to get there, and running it again is safe — it skips anything already there. Open Categories to use it."
-            />
-          ) : null}
-
-          <InventoryStatCards
-            stats={page.stats}
-            isLoading={page.isStatsLoading}
-          />
-
-          {/*
-            The "No manager" card's way in — see the note beside the button.
-
-            It is a toggle rather than a one-shot "show me" for the same reason the
-            filter bar's "Low stock only" is a toggle: it is a *filter*, so it needs
-            an off that the user can see and press, and `aria-pressed` states that
-            without borrowing a checkbox for the state. The icon is the card's own
-            (`IconUserOff` in `shared/inventory-stats.tsx`), so the association
-            between this control and the figure above it is by picture as well as by
-            position.
-          */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Button
-              type="button"
-              variant={page.filters.unassignedOnly ? "default" : "outline"}
-              aria-pressed={page.filters.unassignedOnly}
-              onClick={() =>
-                page.handleUnassignedOnlyChange(!page.filters.unassignedOnly)
-              }
-              data-icon="inline-start"
-            >
-              <IconUserOff data-icon="inline-start" />
-              No manager only
-            </Button>
-            {page.filters.unassignedOnly ? (
-              <p className="text-muted-foreground text-sm">
-                {buildUnassignedScopeNote(
-                  page.resultCount ?? 0,
-                  page.loadedCount !== undefined &&
-                    page.totalCount !== undefined &&
-                    page.loadedCount < page.totalCount
-                )}
-              </p>
-            ) : null}
-          </div>
-
-          <InventoryFilterBar
-            {...page.filters}
-            onChange={page.handleFiltersChange}
-            onReset={page.handleFiltersReset}
-            categories={page.categories}
-            resultCount={page.resultCount}
-            totalCount={page.registerTotal}
-          />
-
-          <InventoryTable
-            items={page.items}
-            totalCount={page.registerTotal}
-            isLoading={page.isItemsLoading}
-            isFiltered={page.isFiltered}
-            error={page.itemsError}
-            onRetry={page.handleRetryItems}
-            onClearFilters={page.handleFiltersReset}
-            hasCategories={page.categories.length > 0}
-            isSeedPending={page.isSeedPending}
-            onSeedCategories={page.handleSeedCategories}
-            onCreateItem={page.handleCreateItem}
-            onOpenItem={page.handleOpenItem}
-            onViewCustody={page.handleOpenItem}
-            onTransferCustody={page.handleTransferCustody}
-            onAssignManager={page.handleAssignManager}
-            onTransferOwnership={page.handleTransferOwnership}
-            onReclaimCustody={page.handleReclaimCustody}
-            onTakeItem={page.handleTakeItem}
-            onReleaseCustody={page.handleReleaseCustody}
-            onEditItem={page.handleEditItem}
-            onRetireItem={page.handleRetireItem}
-            isRetirePending={page.isRetirePending}
-            onRestoreItem={page.handleRestoreItem}
-            isRestorePending={page.isRestorePending}
-          />
-
-          <InventoryItemDialogs
-            categories={page.categories}
-            selectedItem={page.selectedItem}
-            isCreateOpen={page.isCreateOpen}
-            onCreateOpenChange={page.handleCreateOpenChange}
-            isEditOpen={page.isEditOpen}
-            onEditOpenChange={page.handleEditOpenChange}
-            isCreatePending={page.isCreatePending}
-            isEditPending={page.isEditPending}
-            onCreateSubmit={page.handleCreateSubmit}
-            onEditSubmit={page.handleEditSubmit}
-            editActions={{
-              isLoading: page.isEditPending,
-              handleTransferCustody: page.handleEditTransferCustody,
-              handleAssignManager: page.handleEditAssignManager,
-              handleRecordStockIn: page.handleRecordStockIn,
-              handleWriteOffStock: page.handleWriteOffStock,
-            }}
-          />
-
-          <CustodyDialogs
-            item={page.selectedItem}
-            isTransferOpen={page.isTransferOpen}
-            onTransferOpenChange={page.handleTransferOpenChange}
-            isTransferPending={page.isTransferPending}
-            onTransferSubmit={page.handleTransferSubmit}
-            isManagerOpen={page.isManagerOpen}
-            onManagerOpenChange={page.handleManagerOpenChange}
-            isManagerPending={page.isManagerPending}
-            onManagerSubmit={page.handleManagerSubmit}
-            holdMode={page.holdMode}
-            isHoldOpen={page.isHoldOpen}
-            onHoldOpenChange={page.handleHoldOpenChange}
-            isHoldPending={page.isHoldPending}
-            onHoldSubmit={page.handleHoldSubmit}
-            isHistoryOpen={page.isHistoryOpen}
-            onHistoryOpenChange={page.handleHistoryOpenChange}
-          />
-
-          <CategoryPanel
-            open={page.isCategoriesOpen}
-            onOpenChange={page.handleCategoriesOpenChange}
-            categories={page.categories}
-            isLoading={page.isCategoriesLoading}
-            error={page.categoriesError}
-            onRetry={page.handleRetryCategories}
-            isFiltered={page.isFiltered}
-            onSeed={page.handleSeedCategories}
-            isSeedPending={page.isSeedPending}
-          />
-
-          <StockInDialog
-            open={page.isStockInOpen}
-            onOpenChange={page.handleStockInOpenChange}
-          />
-          <StockOutDialog
-            open={page.isStockOutOpen}
-            onOpenChange={page.handleStockOutOpenChange}
-          />
-        </section>
+        <InventoryRegisterPane page={page} />
       </TabsContent>
 
       {/**
-       * The other pane, mounted as it is and given nothing.
-       *
-       * `InventoryLifecycleTabs` is already self-contained: own queries, own
-       * filters, own empty states, and the two ledgers at its foot. No props are
-       * passed and no state is lifted, because every one of those would be a second
-       * place that decides something it already decides. Base UI unmounts an
-       * inactive panel, so the loans, issues, write-off, asset-tag and ledger
-       * queries only run once this tab is actually opened — which is also why the
-       * register's first paint is not paying for them.
+       * The other pane. `InventoryLifecycleTabs` still owns every query,
+       * filter and empty state — the three props below are only which of its
+       * four `Tabs` values is active and where a tab switch navigates to, now
+       * that those live in the URL path rather than in the pane's own state.
+       * Base UI unmounts an inactive panel, so the loans, issues, write-off,
+       * asset-tag and ledger queries only run once this tab is actually
+       * opened — which is also why the register's first paint is not paying
+       * for them.
        *
        * `aria-label` rather than `aria-labelledby`: the pane's own heading is "Stock
        * movements" and it is rendered by `lifecycle-tabs.tsx`, one layer down and
@@ -1501,7 +1504,22 @@ export const InventoryPage = () => {
        */}
       <TabsContent value="records" className="text-base/relaxed">
         <section aria-label="Records">
-          <InventoryLifecycleTabs />
+          <InventoryLifecycleTabs
+            activeSubtab={
+              section === "register" ? "loans" : LIFECYCLE_SUBTAB_OF[section]
+            }
+            onSubtabChange={(next) => {
+              // `InventoryLifecycleTabs`' own "register" tab value (its asset
+              // register) is a different word from this page's "register" pane
+              // (the catalog), so the URL segment is spelled out in full
+              // rather than reusing the ambiguous short name.
+              const segment = next === "register" ? "asset-register" : next;
+              void navigate({
+                to: yearPath("/admin", year, "staff", "inventory", segment),
+              });
+            }}
+            scrollToLedger={section === "ledger"}
+          />
         </section>
       </TabsContent>
     </Tabs>

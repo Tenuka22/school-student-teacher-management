@@ -691,16 +691,20 @@ export const useMyEquipment = () => {
    * one for a hand-back that otherwise worked. Omitting the key is how "no note"
    * is spelled on this wire.
    */
-  const confirmRelease = useCallback(() => {
-    if (!releaseItem) {
-      return;
-    }
-    const note = releaseNote.trim();
-    releaseMutation.mutate({
-      itemId: releaseItem.id,
-      ...(note ? { note } : {}),
-    });
-  }, [releaseItem, releaseNote, releaseMutation]);
+  const confirmRelease = useCallback(
+    (condition?: string) => {
+      if (!releaseItem) {
+        return;
+      }
+      const note = releaseNote.trim();
+      releaseMutation.mutate({
+        itemId: releaseItem.id,
+        ...(note ? { note } : {}),
+        ...(condition ? { condition: condition as never } : {}),
+      });
+    },
+    [releaseItem, releaseNote, releaseMutation]
+  );
 
   const handleReleaseOpenChange = useCallback(
     (open: boolean) => {
