@@ -19,6 +19,14 @@ import { orpc } from "@/utils/orpc";
  * health check behind it — and every button on the page was inert, which taught
  * administrators to distrust the whole surface. The panels themselves live in
  * `components/admin/admin-overview-panels.tsx`; this module fetches and routes.
+ *
+ * The two header buttons are deliberately only two, and they are not this page's
+ * entry-point surface: the exhaustive one is the `Go to` grid inside
+ * `DashboardPanels`, which is where a page with no obvious place in a header
+ * belongs. The equipment **register** was the one page on neither — no header
+ * button, no grid tile, reachable only by typing its URL — and is now the
+ * `Equipment` tile in that grid. A header of a dozen links is a header nobody
+ * reads, which is the fixed half of the "inert buttons" problem above.
  */
 const RouteComponent = () => {
   const { year } = Route.useParams();

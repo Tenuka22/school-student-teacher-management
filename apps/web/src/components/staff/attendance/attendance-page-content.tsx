@@ -1,5 +1,10 @@
 "use client";
 
+import type { SessionUser } from "@school-student-teacher-management/api/context";
+import {
+  isAdminRole,
+  isLeadershipRole,
+} from "@school-student-teacher-management/auth/roles";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -34,6 +39,7 @@ import {
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import { IconSearch, IconUsersPlus } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouteContext } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -222,10 +228,90 @@ const AttendancePolicyEditor = ({
   );
 };
 
+/**
+ * The policy as leadership reads it.
+ *
+ * `attendance.getPolicy` is a `protectedProcedure` and the register around this
+ * card is `adminProcedure`, so a Principal or a Deputy is entitled to the
+ * numbers — and is not entitled to move them, which is what
+ * `adminOnlyProcedure` on `updatePolicy` says. So the same six numbers render
+ * here as text instead of as inputs: the read tier and the write tier describe
+ * one policy, and only one of them belongs to the seats outside leadership.
+ */
+const AttendancePolicySummary = ({
+  academicYear,
+  policy,
+  usage,
+}: {
+  academicYear: AcademicYear;
+  policy: AttendancePolicyValues;
+  usage: AttendancePolicyUsage | null;
+}) => {
+  const detailRows: [string, string][] = [
+    ["Arrival cut-off", policy.arrivalCutoffTime],
+    ["Short leaves / month", String(policy.shortLeavesPerMonth)],
+    [
+      "Primary range",
+      `Periods ${policy.primaryStartPeriodNumber}–${policy.primaryEndPeriodNumber}`,
+    ],
+    [
+      "Secondary range",
+      `Periods ${policy.secondaryStartPeriodNumber}–${policy.secondaryEndPeriodNumber}`,
+    ],
+  ];
+
+  return (
+    <Card size="sm" className="w-full">
+      <CardHeader className="border-b">
+        <CardTitle>Attendance policy</CardTitle>
+        <CardDescription>
+          Arrival, short leave, and half-day period rules for{" "}
+          {academicYear.year}. Read-only — the administrator sets these.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+          {detailRows.map(([label, value]) => (
+            <div
+              key={label}
+              className="flex justify-between gap-4 border-b pb-2"
+            >
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="text-right font-medium">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-muted-foreground mt-3 text-xs">
+          Half-days have no monthly allowance. Two half-days count as one full
+          leave day; a third in the same month is recorded as a half day.
+        </p>
+      </CardContent>
+      <CardFooter>
+        <p className="text-muted-foreground text-xs">
+          {usage
+            ? `Your short leaves this month: ${usage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record.`
+            : "This policy applies school-wide."}
+        </p>
+      </CardFooter>
+    </Card>
+  );
+};
+
+/**
+ * `canEdit` is the server's own division, not a UI preference.
+ *
+ * `updatePolicy` is `adminOnlyProcedure` — `requireRole("admin")`, one seat —
+ * while this card is mounted by all three admin-workspace routes, so the Deputy
+ * and the Principal were being handed the form and the Save button that
+ * `adminOnlyProcedure` refuses every time. The server is right and stays right;
+ * the gate lives here so that nobody is invited to fail.
+ */
 const AttendancePolicyCard = ({
   academicYear,
+  canEdit,
 }: {
   academicYear: AcademicYear | undefined;
+  canEdit: boolean;
 }) => {
   const queryClient = useQueryClient();
   const updateMutation = useMutation(
@@ -307,30 +393,35 @@ const AttendancePolicyCard = ({
           <Empty className="min-h-32 border-none py-2">
             <EmptyTitle>Attendance policy not configured</EmptyTitle>
             <EmptyDescription>
-              Configure the arrival cut-off, short-leave allowance, and
-              Primary/Secondary period ranges for this academic year.
+              {canEdit
+                ? "Configure the arrival cut-off, short-leave allowance, and Primary/Secondary period ranges for this academic year."
+                : "The arrival cut-off, short-leave allowance and Primary/Secondary period ranges are not set for this academic year. The administrator sets them."}
             </EmptyDescription>
-            <EmptyContent>
-              <Button
-                type="button"
-                size="sm"
-                disabled={updateMutation.isPending}
-                onClick={() =>
-                  updateMutation.mutate({ academicYearId: academicYear.id })
-                }
-              >
-                {updateMutation.isPending
-                  ? "Configuring…"
-                  : "Configure default policy"}
-              </Button>
-            </EmptyContent>
+            {/* Seeding the row is the same `updatePolicy` write as the form
+                below, so it is the administrator's button too. */}
+            {canEdit ? (
+              <EmptyContent>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={updateMutation.isPending}
+                  onClick={() =>
+                    updateMutation.mutate({ academicYearId: academicYear.id })
+                  }
+                >
+                  {updateMutation.isPending
+                    ? "Configuring…"
+                    : "Configure default policy"}
+                </Button>
+              </EmptyContent>
+            ) : null}
           </Empty>
         </CardContent>
       </Card>
     );
   }
 
-  return (
+  return canEdit ? (
     <AttendancePolicyEditor
       key={`${academicYear.id}:${policyQuery.dataUpdatedAt}`}
       academicYear={academicYear}
@@ -344,6 +435,12 @@ const AttendancePolicyCard = ({
         });
       }}
     />
+  ) : (
+    <AttendancePolicySummary
+      academicYear={academicYear}
+      policy={policyQuery.data.policy}
+      usage={policyQuery.data.usage}
+    />
   );
 };
 
@@ -356,6 +453,45 @@ const formatDateRange = (startDate: string, endDate: string) =>
 interface AttendancePageContentProps {
   academicYear: number;
 }
+
+/**
+ * The policy section, gated on the role the authed shell already resolved.
+ *
+ * Two tiers meet here, and they are not the same set.
+ *
+ * - **Read** — the card is the admin workspace's: `getPolicy` is a
+ *   `protectedProcedure` and the register around it is `adminProcedure`, so
+ *   `admin`, `principal` and `vicePrincipal` all see it. That is what
+ *   `isAdminRole` answers, and it is also the set of roles the three routes
+ *   mounting `AttendancePageContent` are guarded to.
+ * - **Write** — one seat above that. `updatePolicy` is `adminOnlyProcedure`,
+ *   i.e. `requireRole("admin")`, and `isAdminRole` on its own is the *wrong*
+ *   gate: it would hand the form to exactly the two leadership seats the
+ *   server refuses. The write tier is the admin set minus leadership, which
+ *   is the same reading `academic-year-gate.tsx` makes for `setCurrentYear`.
+ *
+ * The gate is here, in the UI, only so that a Deputy is not invited to fill in
+ * a school-wide form and be told no. `adminOnlyProcedure` stays as it is.
+ */
+const AttendancePolicySection = ({
+  academicYear,
+}: {
+  academicYear: AcademicYear | undefined;
+}) => {
+  const { session } = useRouteContext({ from: "/_auth" });
+  const role = (session?.user as SessionUser | undefined)?.role;
+
+  const canReadPolicy = isAdminRole(role);
+  const canEditPolicy = isAdminRole(role) && !isLeadershipRole(role);
+
+  if (!canReadPolicy) {
+    return null;
+  }
+
+  return (
+    <AttendancePolicyCard academicYear={academicYear} canEdit={canEditPolicy} />
+  );
+};
 
 export const AttendancePageContent = ({
   academicYear,
@@ -385,7 +521,7 @@ export const AttendancePageContent = ({
         </p>
       </div>
 
-      <AttendancePolicyCard academicYear={page.currentYear} />
+      <AttendancePolicySection academicYear={page.currentYear} />
 
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-end gap-4">

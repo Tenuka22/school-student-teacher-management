@@ -41,6 +41,36 @@
   --accent-hover: #ffd45a;
   /** Deep gold, for gold text and rules that must not shout. */
   --gold: #a8730b;
+  /**
+   * Warning **ink** — the same gold hue, darkened until it is legible as text.
+   *
+   * `--gold` was drawn for fills, rules and large marks, and it is used outside
+   * that ground: `--accent` (#ffb203) as a rule on the deep green sidebar is
+   * 7.78:1 and correct, while `--gold` on the cream page is **3.87:1** and on the
+   * `bg-accent/20` of a `Borrowed` badge — the most important state in the
+   * inventory register — is **3.45:1**. Both are below the 4.5:1 WCAG AA
+   * threshold for body text. The token is *not* changed: it is used elsewhere in
+   * the app and re-tuning it is a product decision, not a bug fix. This is a new
+   * token for the one job `--gold` cannot do.
+   *
+   * The arithmetic (WCAG 2.1 relative luminance, `(c/12.92)` below 0.04045 and
+   * `((c+0.055)/1.055)**2.4` above it, L = 0.2126R + 0.7152G + 0.0722B; ratio =
+   * `(Llight + 0.05) / (Ldark + 0.05)`):
+   *
+   * - `--background` #fdf8ec → L = 0.940736. For 4.5:1 the ink needs
+   *   L <= 0.990736/4.5 - 0.05 = **0.170188**.
+   * - `--card` #fffdf6 → L = 0.981644 (badges sit on the card, not the page).
+   * - `bg-accent/20` composites #ffb203 at 20% over the card → rgb(255,238,197),
+   *   L = 0.864403. This is the **binding** constraint: L <= 0.914403/4.5 - 0.05
+   *   = **0.153201**.
+   * - `#7f5605` → L = **0.111786**, comfortably under every ceiling.
+   *
+   * Measured: 6.12:1 on `--background`, 6.38:1 on `--card`, 5.65:1 on
+   * `bg-accent/20` over the card (5.46:1 over the page), 5.79:1 on
+   * `bg-accent/10`. Every one clears AA with margin, and the worst case still has
+   * 25% headroom.
+   */
+  --warning-ink: #7f5605;
   /** Confirmed/positive green, distinct from the brand green. */
   --success: #0b5e1a;
   --destructive: #a51919;
@@ -86,6 +116,7 @@
   --color-primary-hover: var(--primary-hover);
   --color-accent-hover: var(--accent-hover);
   --color-gold: var(--gold);
+  --color-warning-ink: var(--warning-ink);
   --color-success: var(--success);
   --color-destructive-hover: var(--destructive-hover);
   --color-sidebar-ring: var(--sidebar-ring);

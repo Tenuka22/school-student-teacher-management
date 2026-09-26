@@ -22,12 +22,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
 import { leaveStatusBadge } from "@/components/staff/leave-management/leave-status";
 import { ApplyLeaveForm } from "@/components/staff/teacher-portal/apply-leave-form";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 const formatDateRange = (start: string, end: string) =>
-  start === end ? start : `${start} â†’ ${end}`;
+  start === end ? start : `${start} → ${end}`;
 
 export const MyLeavesContent = () => {
   const queryClient = useQueryClient();
@@ -55,6 +57,22 @@ export const MyLeavesContent = () => {
   const requests = myLeavesQuery.data?.requests ?? [];
   const pendingRequests = requests.filter((r) => r.status === "pending");
 
+  /**
+   * Empty and failed are different facts about a person's leave.
+   *
+   * `requests` is `[]` for both, so the old `!isLoading && length === 0`
+   * branch told a teacher who could not reach the server that they had never
+   * applied for leave. The empty state is now `isSuccess && length === 0`, so
+   * it can only be reached by a request that succeeded, and the failure is
+   * stated in the server's own words with a retry that refetches.
+   */
+  const isListFailed = myLeavesQuery.isError;
+  const isListLoadedAndEmpty = myLeavesQuery.isSuccess && requests.length === 0;
+  const listErrorMessage = formatApiErrorMessage(
+    myLeavesQuery.error,
+    "The server did not return your leave requests."
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -78,7 +96,17 @@ export const MyLeavesContent = () => {
         </div>
       )}
 
-      {!myLeavesQuery.isLoading && requests.length === 0 && (
+      {isListFailed && (
+        <QueryErrorPanel
+          message={listErrorMessage}
+          onRetry={() => {
+            void myLeavesQuery.refetch();
+          }}
+          title="Your leave requests could not be loaded"
+        />
+      )}
+
+      {isListLoadedAndEmpty && (
         <Empty className="min-h-[40vh] border-dashed">
           <EmptyTitle>No leave requests yet</EmptyTitle>
           <EmptyDescription>
@@ -94,7 +122,7 @@ export const MyLeavesContent = () => {
         </Empty>
       )}
 
-      {!myLeavesQuery.isLoading && requests.length > 0 && (
+      {myLeavesQuery.isSuccess && requests.length > 0 && (
         <div className="space-y-3">
           {pendingRequests.length > 0 && (
             <p className="text-muted-foreground text-sm">
@@ -122,9 +150,9 @@ export const MyLeavesContent = () => {
                     <span className="text-sm font-medium">
                       {formatDateRange(request.startDate, request.endDate)}
                       {request.dayPart === "morning" &&
-                        " Â· First half (Primary)"}
+                        " · First half (Primary)"}
                       {request.dayPart === "afternoon" &&
-                        " Â· Second half (Secondary)"}
+                        " · Second half (Secondary)"}
                     </span>
                   </div>
                   {request.reason && (

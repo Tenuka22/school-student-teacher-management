@@ -121,7 +121,7 @@ Unchanged from before: download a template, edit offline, re-upload. New rows (n
 
 ## Empty States
 
-- **No classes at all for the year**: full-page `Empty` with both "Seed Classes" and "Create Class" actions.
+- **No classes at all for the year**: full-page `Empty` with both "Seed Classes" and "Create Class" actions. Reachable only when `listClasses` succeeded — a failed read shows the error panel below instead.
 - **A tab has zero classes** (e.g. Collegiate before any A/L classes are created): a smaller in-tab `Empty` with category-specific guidance — the Collegiate tab explains stream counts are always manual; Primary/ Secondary point back to Seed Classes.
 
 ## Loading States
@@ -135,6 +135,7 @@ Unchanged from before: download a template, edit offline, re-upload. New rows (n
 - Validation error: inline `FieldError` under the field
 - Mutation error: toast with the server's message
 - Seed error (e.g. no academic year selected): toast, no partial UI state change
+- Class-list fetch error: `QueryErrorPanel` replaces the tabs — "The class list could not be loaded", the server's message via `formatApiErrorMessage`, and "Try again" calling `listQuery.refetch()`. `classes` is `[]` for a failure as well as for an empty year, so the "No classes yet" seeding prompt is never rendered from a failed read.
 
 ## Business Rules
 

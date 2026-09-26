@@ -35,7 +35,7 @@ export const createAcademicYear = adminOnlyProcedure
   .input(inputSchema)
   .handler(async ({ input, context }) => {
     // Default to the most recently created academic year's structure
-    // version â€” the common case (no scheme change) needs no explicit pick.
+    // version — the common case (no scheme change) needs no explicit pick.
     const [mostRecent] = await context.db
       .select({
         structureVersionKey: academicYear.structureVersionKey,
@@ -54,7 +54,7 @@ export const createAcademicYear = adminOnlyProcedure
       });
     }
 
-    // Validates against the code registry â€” throws if the key is unknown,
+    // Validates against the code registry — throws if the key is unknown,
     // rather than silently accepting a typo'd or unshipped version.
     try {
       getStructureVersion(structureVersionKey);
@@ -92,7 +92,7 @@ export const createAcademicYear = adminOnlyProcedure
         structureVersionKey,
         structureSubversionKey: structureSubversionKey ?? null,
         // The very first academic year ever created has nothing to be
-        // "current" relative to â€” without this the whole app stays locked
+        // "current" relative to — without this the whole app stays locked
         // behind "select an academic year" forever, since nothing is ever
         // marked current. Every subsequent year is created inactive and
         // switched to explicitly.

@@ -17,6 +17,67 @@ import { TimetableGrid } from "@/components/staff/period-management/timetable-gr
 import { usePeriodsPage } from "@/components/staff/period-management/use-periods-page";
 import { orpc } from "@/utils/orpc";
 
+/**
+ * The double-booking scan, reported honestly.
+ *
+ * A count of 0 is a finding: it says the server checked and found nothing. This
+ * used to render 0 whenever the scan had not answered, because
+ * `new Set(undefined)` is an empty set — so a network blip showed an
+ * administrator a clean timetable. A failed check therefore prints no number at
+ * all, says in words that it could not be checked, and drops the
+ * `text-destructive` weight that belongs to a real finding, so nothing about it
+ * can be misread as "checked, all clear".
+ */
+const ConflictsCheck = ({
+  conflictCount,
+  message,
+  onRetry,
+  state,
+}: {
+  conflictCount: number;
+  message: string;
+  onRetry: () => void;
+  state: "pending" | "failed" | "known";
+}) => {
+  if (state === "failed") {
+    return (
+      <div
+        className="border-destructive/40 bg-card max-w-[16rem] border border-dashed px-2.5 py-2"
+        role="alert"
+      >
+        <div className="text-muted-foreground text-xs font-extrabold tracking-[0.16em]">
+          CONFLICT CHECK
+        </div>
+        <div className="text-muted-foreground mt-1 text-xs leading-snug font-semibold">
+          Could not be checked — this timetable may or may not have
+          double-bookings.
+        </div>
+        {message && (
+          <div className="text-muted-foreground/80 mt-1 text-xs">{message}</div>
+        )}
+        <button
+          type="button"
+          className="border-primary/30 text-primary hover:border-primary mt-2 border px-2 py-1 text-xs font-bold transition-colors"
+          onClick={onRetry}
+        >
+          Re-check
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="text-destructive text-xs font-extrabold tracking-[0.16em]">
+        CONFLICTS
+      </div>
+      <div className="font-heading text-destructive mt-1 text-2xl leading-none font-semibold">
+        {state === "pending" ? "—" : conflictCount}
+      </div>
+    </div>
+  );
+};
+
 const RouteComponent = () => {
   const page = usePeriodsPage();
 
@@ -141,25 +202,32 @@ const RouteComponent = () => {
               SLOTS FILLED
             </div>
             <div className="font-heading mt-1 text-2xl leading-none font-semibold">
-              {page.timetableData.length}{" "}
+              {page.timetableRead === "known" ? page.timetableData.length : "—"}{" "}
               <span className="text-muted-foreground text-sm">
                 / {page.periods.length * 5}
               </span>
             </div>
+            {page.timetableRead === "failed" && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-primary mt-1 text-xs font-bold underline disabled:opacity-50"
+                onClick={page.handleRetryTimetable}
+              >
+                This class&rsquo;s grid could not be read — try again
+              </button>
+            )}
           </div>
           <div className="bg-primary/14 h-9 w-px" />
-          <div>
-            <div className="text-destructive text-xs font-extrabold tracking-[0.16em]">
-              CONFLICTS
-            </div>
-            <div className="font-heading text-destructive mt-1 text-2xl leading-none font-semibold">
-              {
-                page.timetableData.filter((assignment) =>
-                  page.conflictingAssignmentIds.has(assignment.id)
-                ).length
-              }
-            </div>
-          </div>
+          <ConflictsCheck
+            conflictCount={
+              page.timetableData.filter((assignment) =>
+                page.conflictingAssignmentIds.has(assignment.id)
+              ).length
+            }
+            message={page.conflictsMessage}
+            onRetry={page.handleRetryConflicts}
+            state={page.conflictsState}
+          />
         </div>
       </div>
 

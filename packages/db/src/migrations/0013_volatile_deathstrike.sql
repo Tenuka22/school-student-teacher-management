@@ -1,1 +1,0 @@
-DROP TABLE "period_config" CASCADE;

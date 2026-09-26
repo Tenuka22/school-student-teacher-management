@@ -1,1 +1,0 @@
-ALTER TABLE "class_period_assignment" DROP CONSTRAINT "class_period_assignment_teacher_slot_unique";

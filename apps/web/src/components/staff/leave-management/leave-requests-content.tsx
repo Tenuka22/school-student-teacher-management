@@ -15,6 +15,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 import { LeaveRequestCard } from "./leave-request-card";
@@ -131,6 +133,24 @@ export const LeaveRequestsContent = ({ year }: { year: number }) => {
     (r) => r.status === "recommended"
   ).length;
 
+  /**
+   * What a failed queue read looks like, and what it must never look like.
+   *
+   * `requests` is `[]` whether the ledger is empty or the request failed, so
+   * the old `!isLoading && requests.length === 0` branch answered "Teachers
+   * have not applied for any leave yet" to a 500 — a sentence asserting a fact
+   * about the staff, which a failed request knows nothing about. Empty is now
+   * written as `isSuccess && length === 0`, so it is reachable only from a
+   * request that actually succeeded, and the failure below has a retry that
+   * refetches instead of re-rendering the cached error.
+   */
+  const isListFailed = requestsQuery.isError;
+  const isListLoadedAndEmpty = requestsQuery.isSuccess && requests.length === 0;
+  const listErrorMessage = formatApiErrorMessage(
+    requestsQuery.error,
+    "The server did not return the leave queue."
+  );
+
   const act = (
     id: string,
     decision: ReviewDecision,
@@ -214,7 +234,17 @@ export const LeaveRequestsContent = ({ year }: { year: number }) => {
         </div>
       )}
 
-      {!requestsQuery.isLoading && requests.length === 0 && (
+      {isListFailed && (
+        <QueryErrorPanel
+          message={listErrorMessage}
+          onRetry={() => {
+            void requestsQuery.refetch();
+          }}
+          title="The leave queue could not be loaded"
+        />
+      )}
+
+      {isListLoadedAndEmpty && (
         <Empty className="min-h-[40vh] border-dashed">
           <EmptyTitle>No leave requests</EmptyTitle>
           <EmptyDescription>
@@ -225,7 +255,7 @@ export const LeaveRequestsContent = ({ year }: { year: number }) => {
         </Empty>
       )}
 
-      {!requestsQuery.isLoading && requests.length > 0 && (
+      {requestsQuery.isSuccess && requests.length > 0 && (
         <div className="space-y-3">
           {requests.map((request) => (
             <LeaveRequestCard

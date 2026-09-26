@@ -25,13 +25,15 @@ import { IconCalendarTime, IconId } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 /**
  * A balance line, in words.
  *
  * Maternity is the only type with more than one payment status, so it is the
- * only one that needs the status in its name � and the status is read from the
+ * only one that needs the status in its name — and the status is read from the
  * shared label map so a request recorded as half pay says so, rather than
  * falling through to "Unpaid".
  */
@@ -57,6 +59,39 @@ const LeaveBalanceCard = () => {
     orpc.staff.leaves.getMyLeaveBalance.queryOptions({ input: {} })
   );
   const balances = balanceQuery.data?.balances ?? [];
+
+  /**
+   * The card used to `return null` for `balances.length === 0`, which is also
+   * what it returned while loading and after a failure — so a teacher whose
+   * balance could not be read saw no balance card and no reason. All three
+   * states now say something, and the empty one is reached only on a request
+   * that succeeded.
+   */
+  if (balanceQuery.isPending) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="mt-4 h-3 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (balanceQuery.isError) {
+    return (
+      <QueryErrorPanel
+        message={formatApiErrorMessage(
+          balanceQuery.error,
+          "The server did not return your leave balance."
+        )}
+        onRetry={() => {
+          void balanceQuery.refetch();
+        }}
+        title="Your leave balance could not be loaded"
+      />
+    );
+  }
 
   if (balances.length === 0) {
     return null;
@@ -88,8 +123,7 @@ const LeaveBalanceCard = () => {
                 <div className="mb-1 flex items-center justify-between gap-3 text-sm">
                   <span className="font-medium">{label}</span>
                   <span className="text-muted-foreground font-mono text-xs">
-                    {balance.usedDays} / {balance.maxDays} days Â·{" "}
-                    {balanceLabel}
+                    {balance.usedDays} / {balance.maxDays} days · {balanceLabel}
                   </span>
                 </div>
                 <div
@@ -119,13 +153,36 @@ export const TeacherDashboard = () => {
   const profile = myStaffQuery.data?.profile;
   const username = myStaffQuery.data?.username;
 
-  if (myStaffQuery.isLoading) {
+  if (myStaffQuery.isPending) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-40 w-full" />
       </div>
+    );
+  }
+
+  /**
+   * "No staff profile linked" is a claim about the teacher's account, and a
+   * failed request knows nothing about it — the old `!profile` branch printed
+   * that notice on a 500, sending a teacher to the office for a link that
+   * exists. Pending and failed both return above, so what remains here is a
+   * request that succeeded, and only a successful request may say the profile
+   * is missing.
+   */
+  if (myStaffQuery.isError) {
+    return (
+      <QueryErrorPanel
+        message={formatApiErrorMessage(
+          myStaffQuery.error,
+          "The server did not return your staff record."
+        )}
+        onRetry={() => {
+          void myStaffQuery.refetch();
+        }}
+        title="Your staff profile could not be loaded"
+      />
     );
   }
 
@@ -164,7 +221,7 @@ export const TeacherDashboard = () => {
           Welcome, {profile.name}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Your teacher workspace â€” profile, leave and timetable in one place.
+          Your teacher workspace — profile, leave and timetable in one place.
         </p>
       </div>
 
@@ -179,20 +236,20 @@ export const TeacherDashboard = () => {
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Badge number</dt>
                 <dd className="font-mono font-medium">
-                  {profile.teacherServiceNo ?? "â€”"}
+                  {profile.teacherServiceNo ?? "—"}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Login username</dt>
-                <dd className="font-mono font-medium">{username ?? "â€”"}</dd>
+                <dd className="font-mono font-medium">{username ?? "—"}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Email</dt>
-                <dd className="truncate">{profile.email ?? "â€”"}</dd>
+                <dd className="truncate">{profile.email ?? "—"}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Phone</dt>
-                <dd>{profile.phone ?? "â€”"}</dd>
+                <dd>{profile.phone ?? "—"}</dd>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted-foreground">Employment</dt>

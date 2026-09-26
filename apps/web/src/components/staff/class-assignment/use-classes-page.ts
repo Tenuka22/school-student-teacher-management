@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { downloadExportFile } from "@/lib/download-export";
 import { useActiveYear } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
@@ -233,11 +234,35 @@ export const useClassesPage = () => {
     [staffQuery.data]
   );
 
+  /**
+   * The failure state of the class list, and the retry that resolves it.
+   *
+   * `classes` defaults to `[]` for every reason a request can come back
+   * without rows, so the page cannot tell "this year has no classes" from "the
+   * request failed" by looking at the array. `refetch` asks the server again
+   * rather than re-rendering the cached failure.
+   */
+  const handleRetryList = useCallback(() => {
+    void listQuery.refetch();
+  }, [listQuery]);
+
+  const listErrorMessage = useMemo(
+    () =>
+      formatApiErrorMessage(
+        listQuery.error,
+        "The server did not return the class list."
+      ),
+    [listQuery.error]
+  );
+
   return {
     currentYear,
     classes,
     staffList,
     isListLoading: listQuery.isLoading,
+    isListError: listQuery.isError,
+    listErrorMessage,
+    handleRetryList,
     isCreateDialogOpen,
     setIsCreateDialogOpen,
     isEditDialogOpen,

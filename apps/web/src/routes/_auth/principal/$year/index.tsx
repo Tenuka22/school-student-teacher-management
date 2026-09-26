@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 
+import { ErrorPanel } from "@/components/admin/admin-overview-panels";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 const SHORTCUTS = [
@@ -18,6 +20,20 @@ const SHORTCUTS = [
   },
 ] as const;
 
+/**
+ * The sentence under the figure. Written as one function so the failed case
+ * cannot be reached by accident through a count of 0.
+ */
+const awaitingDecisionCaption = (count: number, isFailed: boolean): string => {
+  if (isFailed) {
+    return "This figure could not be read — the leave queue was not loaded.";
+  }
+  if (count === 1) {
+    return "1 request recommended by the Deputy Principal.";
+  }
+  return `${count} requests recommended by the Deputy Principal.`;
+};
+
 const PrincipalHome = () => {
   const { year } = Route.useParams();
 
@@ -30,6 +46,15 @@ const PrincipalHome = () => {
   );
 
   const pendingCount = awaitingFinalisation.data?.requests.length ?? 0;
+
+  /**
+   * "0 requests recommended by the Deputy Principal" is a statement about the
+   * Principal's desk, and the old `?? 0` produced it for every reason the
+   * request could come back empty — including a 500. The figure is now printed
+   * only from a response that arrived; a failure shows a dash and the error
+   * panel below, which says so and retries.
+   */
+  const isCountFailed = awaitingFinalisation.isError;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -52,18 +77,31 @@ const PrincipalHome = () => {
         </Link>
       </div>
 
+      {isCountFailed && (
+        <ErrorPanel
+          message={formatApiErrorMessage(
+            awaitingFinalisation.error,
+            "The server did not return the leave queue."
+          )}
+          onRetry={() => {
+            void awaitingFinalisation.refetch();
+          }}
+          title="The leave queue could not be loaded"
+        />
+      )}
+
       <div className="grid items-start gap-[18px] lg:grid-cols-[minmax(300px,360px)_minmax(360px,1fr)]">
         <div className="border-primary border-primary/14 bg-card border-t-2 px-[22px] py-5">
           <div className="text-primary/55 text-xs font-extrabold tracking-[0.2em]">
             AWAITING YOUR DECISION
           </div>
           <div className="font-heading text-primary mt-3 text-[52px] leading-none font-semibold">
-            {awaitingFinalisation.isPending ? "—" : pendingCount}
+            {awaitingFinalisation.isPending || isCountFailed
+              ? "—"
+              : pendingCount}
           </div>
           <div className="text-primary/60 mt-2 text-xs leading-relaxed">
-            {pendingCount === 1
-              ? "1 request recommended by the Deputy Principal."
-              : `${pendingCount} requests recommended by the Deputy Principal.`}
+            {awaitingDecisionCaption(pendingCount, isCountFailed)}
           </div>
         </div>
 

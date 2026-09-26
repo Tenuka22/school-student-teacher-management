@@ -31,6 +31,7 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
 import { ClassCard } from "@/components/staff/class-assignment/class-card";
 import {
   CLASS_CATEGORIES,
@@ -61,6 +62,12 @@ interface ClassesTabsProps {
   classes: Class[];
   staff: Staff[];
   isLoading?: boolean;
+  /** The class-list request failed. Kept separate from `isLoading` on purpose. */
+  isError: boolean;
+  /** The server's own words about the failure. */
+  errorMessage: string;
+  /** Must genuinely re-request the class list. */
+  onRetry: () => void;
   onCreateClick: () => void;
   onEditClick: (cls: Class) => void;
   onAssignTeacherClick: (cls: Class) => void;
@@ -74,6 +81,9 @@ export const ClassesTabs = ({
   classes,
   staff,
   isLoading = false,
+  isError,
+  errorMessage,
+  onRetry,
   onCreateClick,
   onEditClick,
   onAssignTeacherClick,
@@ -134,6 +144,28 @@ export const ClassesTabs = ({
           ))}
         </div>
       </Card>
+    );
+  }
+
+  /**
+   * A failed read is not an empty year.
+   *
+   * `classes` is `[]` for every reason a request can come back without rows —
+   * a 500, a dropped connection, a refused permission — so testing
+   * `classes.length === 0` alone prints "No classes yet — seed the default
+   * class structure" on a failure. That sentence asserts a fact about the
+   * College, and a failed request knows nothing; a screen that cannot tell them
+   * apart confidently misinforms whoever reads it. The error is therefore
+   * checked first, and the empty state is reachable only on a request that
+   * succeeded.
+   */
+  if (isError) {
+    return (
+      <QueryErrorPanel
+        message={errorMessage}
+        onRetry={onRetry}
+        title="The class list could not be loaded"
+      />
     );
   }
 

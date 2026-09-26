@@ -50,14 +50,14 @@ export interface LeaveRequestItem {
 export type ReviewDecision = "recommended" | "rejected" | "approved";
 
 const formatDateRange = (start: string, end: string) =>
-  start === end ? start : `${start} â†’ ${end}`;
+  start === end ? start : `${start} → ${end}`;
 
 const formatDayPart = (dayPart: LeaveRequestItem["dayPart"]) => {
   if (dayPart === "morning") {
-    return " Â· First half (Primary)";
+    return " · First half (Primary)";
   }
   if (dayPart === "afternoon") {
-    return " Â· Second half (Secondary)";
+    return " · Second half (Secondary)";
   }
   return "";
 };
@@ -84,7 +84,7 @@ const DeputyDecisionNote = ({ request }: { request: LeaveRequestItem }) => {
       {request.deputyStatus === "recommended"
         ? "recommended"
         : "not recommended"}
-      {request.deputyComment ? ` â€” ${request.deputyComment}` : ""}
+      {request.deputyComment ? ` — ${request.deputyComment}` : ""}
     </p>
   );
 };
@@ -154,7 +154,7 @@ const ReviewControls = ({
           onChange={(event) => onCommentChange(event.target.value)}
           className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
           rows={2}
-          placeholder="e.g. Approved â€” arrange cover for 6-B"
+          placeholder="e.g. Approved — arrange cover for 6-B"
         />
         <div className="mt-2 flex flex-wrap gap-2">
           {isDeputy && request.status === "pending" && (
@@ -277,7 +277,7 @@ export const LeaveRequestCard = ({
             <IconClock className="mr-1 inline size-3.5" />
             {formatDateRange(request.startDate, request.endDate)}
             {formatDayPart(request.dayPart)}
-            {request.reason ? ` â€” ${request.reason}` : ""}
+            {request.reason ? ` — ${request.reason}` : ""}
           </p>
 
           <DeputyDecisionNote request={request} />

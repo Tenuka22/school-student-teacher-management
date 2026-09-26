@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import {
   attendancePolicy,
   timeOfDaySchema,
@@ -88,9 +89,28 @@ export const updatePolicy = adminOnlyProcedure
       policy.secondaryStartPeriodNumber <= policy.primaryEndPeriodNumber;
 
     if (primaryIsInvalid || secondaryIsInvalid || rangesOverlap) {
-      throw new Error(
-        "Primary must come before Secondary and both ranges must be valid"
-      );
+      /*
+       * `ORPCError("BAD_REQUEST")`, and the reason it was a bare `Error` is worth
+       * stating because every other procedure in this repo gets it right.
+       *
+       * A plain `Error` inside an oRPC handler is not "a slightly less specific
+       * error": it is serialised as `INTERNAL_SERVER_ERROR`, which means a clerk who
+       * typed the primary range after the secondary one got a 500 — a server fault
+       * badge, a masked message, and a monitor entry for a form-validation mistake.
+       * The three conditions above are all *about what the caller sent*, so the
+       * honest code is the one that says the request was bad, and the honest status
+       * is the one the client can render as a sentence next to the form.
+       *
+       * The copy is therefore written for the person who has to fix it, and it
+       * names both halves of the rule rather than the internals: the primary block
+       * has to come before the secondary one, and the two must not overlap. "Both
+       * ranges must be valid" was the part that told an administrator nothing —
+       * validity is not something they can see from the form.
+       */
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "The primary teaching block has to start before it ends, the secondary block has to start before it ends, and the two blocks cannot overlap",
+      });
     }
 
     const [saved] = await context.db
@@ -110,7 +130,20 @@ export const updatePolicy = adminOnlyProcedure
       .returning();
 
     if (!saved) {
-      throw new Error("Attendance policy missing after save");
+      /*
+       * `INTERNAL_SERVER_ERROR`, not `BAD_REQUEST`, and stated as such because the
+       * two lines in this handler used to be indistinguishable.
+       *
+       * `.returning()` on an `INSERT … ON CONFLICT DO UPDATE` comes back empty
+       * when the write was swallowed by a rule rather than a filter, and there is
+       * no input an administrator typed that can cause it. So this one is a genuine
+       * server fault and says so — but it says it in oRPC's vocabulary rather than
+       * as a bare `Error`, so it serialises as the 500 it is instead of arriving at
+       * the client as an unlabelled string with no code to branch on.
+       */
+      throw new ORPCError("INTERNAL_SERVER_ERROR", {
+        message: "The attendance policy could not be read back after saving",
+      });
     }
 
     return {

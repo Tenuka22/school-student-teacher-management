@@ -10,7 +10,7 @@ import { adminProcedure } from "../../../index";
 /**
  * List all unassigned period slots for a class.
  * Returns (dayOfWeek, periodNumber) pairs with no assignment yet.
- * School week: Mondayâ€“Friday (1â€“5), 8 periods (1â€“8) = 40 slots max.
+ * School week: Monday–Friday (1–5), 8 periods (1–8) = 40 slots max.
  */
 export const listUnassignedSlots = adminProcedure
   .input(
@@ -38,7 +38,7 @@ export const listUnassignedSlots = adminProcedure
       assigned.map((a) => `${a.dayOfWeek}-${a.periodNumber}`)
     );
 
-    // Generate all possible slots (5 days Ã— 8 periods)
+    // Generate all possible slots (5 days × 8 periods)
     const allSlots: { dayOfWeek: number; periodNumber: number }[] = [];
     for (let day = 1; day <= 5; day += 1) {
       for (const period of CODE_DEFINED_PERIODS) {

@@ -128,7 +128,7 @@ const formatLeaveDescription = (
     return duration;
   }
   const payment = paymentStatus === "paid" ? "Paid" : "Unpaid";
-  return `${duration} Â· ${payment}`;
+  return `${duration} · ${payment}`;
 };
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -184,7 +184,7 @@ const StaffHistory = ({ rows }: { rows: HistoricalData["staff"] }) => (
             <TableRow key={row.id}>
               <TableCell className="font-medium">{row.name}</TableCell>
               <TableCell className="font-mono">
-                {row.teacherServiceNo ?? "â€”"}
+                {row.teacherServiceNo ?? "—"}
               </TableCell>
               <TableCell>
                 {row.positions.length > 0
@@ -295,13 +295,13 @@ const HomeroomHistory = ({
           {rows.map((row) => (
             <TableRow key={row.id}>
               <TableCell className="font-medium">
-                {row.className} Â· Grade {row.gradeLevel}
+                {row.className} · Grade {row.gradeLevel}
               </TableCell>
               <TableCell>
                 <StatusBadge status={row.changeType} />
               </TableCell>
-              <TableCell>{row.previousTeacherName ?? "â€”"}</TableCell>
-              <TableCell>{row.newTeacherName ?? "â€”"}</TableCell>
+              <TableCell>{row.previousTeacherName ?? "—"}</TableCell>
+              <TableCell>{row.newTeacherName ?? "—"}</TableCell>
               <TableCell>{formatDateTime(row.changedAt)}</TableCell>
             </TableRow>
           ))}
@@ -346,7 +346,7 @@ const LeaveHistory = ({ rows }: { rows: HistoricalData["leaveDecisions"] }) => (
                 </div>
               </TableCell>
               <TableCell>
-                {formatDate(row.startDate)} â€“ {formatDate(row.endDate)}
+                {formatDate(row.startDate)} – {formatDate(row.endDate)}
               </TableCell>
               <TableCell>
                 <StatusBadge status={row.deputyStatus} />
@@ -410,7 +410,7 @@ const AttendanceHistory = ({
                   : "All periods"}
               </TableCell>
               <TableCell className="max-w-80 whitespace-normal">
-                {row.reason ?? "â€”"}
+                {row.reason ?? "—"}
               </TableCell>
             </TableRow>
           ))}

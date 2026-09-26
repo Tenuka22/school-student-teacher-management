@@ -12,6 +12,13 @@ import {
   leaveEntitlement,
   leaveRequest,
 } from "@school-student-teacher-management/db/schema/leaves";
+import {
+  examType,
+  gradeScale,
+  studentAdmission,
+  studentClassAssignment,
+  studentSubjectSelection,
+} from "@school-student-teacher-management/db/schema/marking";
 import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYear,
@@ -26,9 +33,20 @@ import { adminOnlyProcedure } from "../../index";
 
 /**
  * Tables that hold actual user-created data scoped to an academic year.
- * `gradeSubjectConfig` is deliberately excluded â€” it's auto-populated from
+ * `gradeSubjectConfig` is deliberately excluded — it's auto-populated from
  * the curriculum structure version at creation time, not user data, so
  * every year would always fail the emptiness check if it were included.
+ *
+ * **Every table here is `ON DELETE CASCADE` from `academic_year`, so a table
+ * missing from this list is deleted silently.** The procedure still returns
+ * `{ success: true }` and the operator is told nothing, which is why this
+ * array is a list of every year-scoped table carrying real data rather than a
+ * summary of the interesting ones. `exam_type` and `grade_scale` were missing,
+ * and so were the three student tables. Because `subject_mark` cascades from
+ * both `student_class_assignment` and `exam_type`, deleting one year with no
+ * other dependents used to take that year's admissions, class placements,
+ * subject selections and **every mark entered in it** with it, silently. If
+ * you add a year-scoped table to the schema, add it here in the same commit.
  */
 const DEPENDENT_TABLES = [
   { table: class_, label: "classes" },
@@ -41,6 +59,11 @@ const DEPENDENT_TABLES = [
   { table: shortLeaveUsage, label: "attendance usage" },
   { table: classPeriodAssignment, label: "period assignments" },
   { table: classTeacherAssignmentHistory, label: "homeroom history" },
+  { table: examType, label: "exam types" },
+  { table: gradeScale, label: "grade scales" },
+  { table: studentAdmission, label: "student admissions" },
+  { table: studentClassAssignment, label: "student class assignments" },
+  { table: studentSubjectSelection, label: "student subject selections" },
 ] as const;
 
 export const deleteAcademicYear = adminOnlyProcedure

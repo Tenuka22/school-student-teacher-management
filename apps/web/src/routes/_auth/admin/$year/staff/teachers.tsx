@@ -43,6 +43,9 @@ const RouteComponent = () => {
       <TeachersList
         teachers={page.listQuery.data}
         isLoading={page.listQuery.isLoading}
+        isError={page.isListError}
+        errorMessage={page.listErrorMessage}
+        onRetry={page.handleRetryList}
         onCreateClick={page.handleCreateClick}
         onEditClick={page.handleEditClick}
         onViewClick={page.handleViewClick}

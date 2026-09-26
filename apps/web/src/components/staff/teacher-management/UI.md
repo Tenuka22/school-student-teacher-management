@@ -126,7 +126,7 @@ The Teacher Management feature allows administrators to create, edit, view, and 
 
 ## Empty States
 
-**No Teachers**: Shows `Empty` component with title "No teachers yet", description "Create your first teacher to get started", and a "Create Teacher" button.
+**No Teachers**: Shows `Empty` component with title "No teachers yet", description "Create the first teacher record to get started", and a "Create Teacher" button. Reachable only when `listStaff` succeeded and returned no rows — see Error States.
 
 ## Loading States
 
@@ -138,7 +138,7 @@ The Teacher Management feature allows administrators to create, edit, view, and 
 
 **Mutation Errors**: Toast shows error message from server response or default message.
 
-**List Fetch Error**: AlertDialog or inline error card displayed prominently.
+**List Fetch Error**: `QueryErrorPanel` in place of the list — "The teacher roster could not be loaded", the server's message via `formatApiErrorMessage`, and a "Try again" button that calls `listQuery.refetch()`. The empty state above is _not_ shown on a failure: a failed request knows nothing about the roster, and "No teachers yet" is a claim about the College, so the two must never share a branch.
 
 ## Form Validation
 

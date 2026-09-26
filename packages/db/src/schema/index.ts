@@ -11,6 +11,7 @@ export * from "./qualifications";
 export * from "./files";
 export * from "./primitives";
 export * from "./brand";
+export * from "./inventory";
 
 // `academics.ts` and `marking.ts` both independently define a local
 // `gradeLevelSchema` picklist (each scoped to its own module in the source

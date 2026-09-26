@@ -17,7 +17,9 @@ import { useParams } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
 import { TeacherSubjectAssignments } from "@/components/staff/teacher-management/teacher-subject-assignments";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 /**
@@ -65,12 +67,36 @@ export const MyProfileContent = () => {
     })
   );
 
-  if (myStaffQuery.isLoading) {
+  if (myStaffQuery.isPending) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-64 w-full" />
       </div>
+    );
+  }
+
+  /**
+   * "No staff profile is linked to your account" is a fact about the account,
+   * and a failed request knows nothing about it. The old `!profile` branch
+   * printed that sentence on a 500 or a refused permission, telling a teacher
+   * their account was not linked when the truth was that nobody had answered.
+   * Pending and failed both return above, so what is left here is a request
+   * that succeeded — and only a successful request may say the profile is
+   * missing.
+   */
+  if (myStaffQuery.isError) {
+    return (
+      <QueryErrorPanel
+        message={formatApiErrorMessage(
+          myStaffQuery.error,
+          "The server did not return your staff record."
+        )}
+        onRetry={() => {
+          void myStaffQuery.refetch();
+        }}
+        title="Your profile could not be loaded"
+      />
     );
   }
 

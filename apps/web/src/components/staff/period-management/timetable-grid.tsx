@@ -127,7 +127,7 @@ export const TimetableGrid = ({
                 <TableCell className="border-primary/12 border-r font-medium">
                   <div className="text-sm font-bold">{`Period ${period.periodNumber}`}</div>
                   <div className="text-muted-foreground font-mono text-xs">
-                    {period.startTime}â€“{period.endTime}
+                    {period.startTime}–{period.endTime}
                   </div>
                 </TableCell>
                 {DAYS_OF_WEEK.map((_, dayIndex: number) => {
@@ -165,7 +165,7 @@ export const TimetableGrid = ({
                             onClick={() => onEditClick(assignment)}
                             type="button"
                             aria-label={`Edit ${subjectLabel(assignment.subjectKey)} with ${assignedStaff.name}${
-                              isConflict ? " â€” double-booked" : ""
+                              isConflict ? " — double-booked" : ""
                             }`}
                           >
                             <div className="text-sm font-bold">

@@ -1,6 +1,6 @@
 # school-student-teacher-management
 
-School management system for St. Aloysius' College (Galle, Sri Lanka): staff records, timetables, attendance, leave management and a self-service teacher portal.
+School management system for St. Aloysius' College (Galle, Sri Lanka): staff records, timetables, attendance, leave management, an equipment and asset register, and a self-service teacher portal.
 
 Built with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Self, ORPC, and more.
 
@@ -23,7 +23,7 @@ Built with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-st
 - **Teacher records** — full CRUD with personal, address, emergency-contact and employment details; qualifications with file uploads and an approval flow.
 - **Two staff categories** — `teacher` and `officeStaff` (`staff.staffCategory`).
 - **Subject & class assignment** per academic year, sectional heads and department heads via `staff_position`.
-- **Timetables** — period configuration plus class/teacher slot assignment with conflict detection (no double-booked teacher, no duplicate class slot), Excel/PDF exports.
+- **Timetables** — period times are code-defined (`CODE_DEFINED_PERIODS`, eight periods, no per-year configuration table), plus class/teacher slot assignment. A class cannot be double-booked (a database unique constraint); a **teacher** can, and the overlap is found by `periods.listPeriodConflicts` rather than prevented — mark an intentional shared period with `isCombinedSession` and the scan ignores it. Excel/PDF exports.
 
 ### Leave management
 
@@ -42,10 +42,23 @@ Documented in detail in [`LEAVE_SYSTEM_DESIGN.md`](./LEAVE_SYSTEM_DESIGN.md) —
   3. Allowance exhausted → recorded as a **half day**; 2 half days = 1 leave day, so a 21-day entitlement equals 42 half days.
 - All policy numbers are rows in `attendance_policy` (per academic year) and monthly usage in `short_leave_usage` — minimum / maximum / current, append-only so history stays intact.
 
+### Equipment & the asset register
+
+Full design record in [`apps/web/src/components/staff/inventory/UI.md`](./apps/web/src/components/staff/inventory/UI.md).
+
+- **One register, three levels of access.** The school-wide register is at `/admin/{year}/staff/inventory`. It appears in the administrator's sidebar group (`staffNav`, gated on `isAdmin`) and is deliberately not surfaced to the leadership seats: their `/principal/{year}/equipment` and `/deputy-principal/{year}/equipment` pages show each seat its own holdings, and the same page is the teacher's at `/teacher/{year}/equipment`.
+- **Owner and custodian are separate facts.** The _manager_ is the person the school answers for an item; the _custodian_ is who is carrying it today. All four states are shown (including "In store · no manager"), and "no manager" is both a stat card and a filter, because unowned equipment is the one number an administrator goes and acts on.
+- **Assets are individual.** Multi-quantity items carry serialised **units** with asset tags, claimed FIFO by age; the counter-ledger view and the custody history are per item.
+- **Quantities only move through movements.** Stock in and stock out are separate procedures, never an edit of the quantity column, so every change to a count is a ledger row.
+- **Lifecycle:** issues, borrows and disposals. A disposal is approved and then finalized (with a cancel path), so an item is never written off by one keystroke.
+- **Nothing is hard-deleted.** Items are soft-deleted (`deletedAt`); the ledger, custody history and audit log keep referring to them. Seeing retired items is admin-only, because it un-hides every retired record in the school at once.
+- **Permissions** are the `inventory` resource in `packages/auth/src/permissions.ts` (`read`, `create`, `update`, `delete`, `approve`, `take`, `manageOwn`). `take` and `manageOwn` are deliberately _own-rows_ grants, and the scoping lives in the handlers: a teacher may only release what they are holding, reclaim what they own, and hand on what they own. Every movement writes an audit-log row with a denormalised actor name, so deleting a staff member does not anonymise the school's history.
+
 ### Accounts & sign-up
 
 - **The NIC is the username for staff.** Staff (teachers and office staff) sign up at `/signup` with name, NIC, email and password — the NIC (lowercased, unique index) becomes their login username. One NIC = one person = one account.
-- **Seeded accounts** are created on every server start with **fixed usernames** — `principal`, `deputy-principal` and `admin` (constants in `packages/auth/src/admin.ts`, not env). They are pure admin accounts: no NIC, no `staff` row, so they never appear in staff lists or attendance. Only their passwords and display names are configurable.
+- **Seeded accounts** are ensured on every server start — created if missing, never overwriting an existing password — with **fixed usernames** `principal`, `deputy-principal` and `admin` (constants in `packages/auth/src/admin.ts`, not env). They are pure admin accounts: no NIC, no `staff` row, so they never appear in staff lists or attendance. Only their passwords and display names are configurable.
+  - **Because they have no `staff` row, none of the three can hold equipment.** Every custody procedure keys on a `staff` record, so a seeded login is refused with _"Your account has no staff record, so equipment cannot be assigned to you"_ (`inventory.custody.take`). The Principal and Deputy can still run the register as administrators, but they cannot be the custodian or the manager of an item. Anyone who is to be handed a microscope, a projector or a laptop needs a real staff account first — self-service sign-up at `/signup` with their NIC, or one created for them under `/admin/{year}/staff/teachers`.
 - **Roles:** `principal`, `vicePrincipal` (Deputy or Assistant Principal) and `admin` all carry the same management authority, so all three reach `/admin`. Leadership is granted leave-review authority by the seeded role; a member promoted later through `assignPosition` gains it from a current-year `staff_position` row, which also promotes the role. Removing the last seat demotes back to `teacher`.
 - Teachers get a self-service portal at `/teacher/{year}` — profile, leave history and applications; admins manage everything under `/admin/{year}/staff`. The academic year is a URL path segment, so a page keeps its year across a refresh, and the sidebar adapts to the signed-in role.
 
@@ -68,7 +81,13 @@ bun install
 This project uses PostgreSQL with Drizzle ORM.
 
 1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/web/.env` file with your PostgreSQL connection details.
+2. Copy `apps/web/.env.example` to `apps/web/.env` and fill it in — it lists every key the app reads, with a comment per key:
+
+   ```bash
+   cp apps/web/.env.example apps/web/.env
+   ```
+
+   Generate the one secret rather than inventing it: `openssl rand -base64 32`. `.env` is gitignored; `.env.example` is the committed template.
 
 3. Apply the schema to your database:
 
@@ -114,15 +133,14 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 Each app owns its environment schema in `.env.schema`. Varlock generates `src/env.ts` during installation; run `bun run env:generate` after changing a schema. Commit schemas, and keep secrets in ignored env files or your deployment platform.
 
-Auth-related variables (all in `apps/web/.env.schema`):
+Auth-related variables (all in `apps/web/.env.schema`, all listed with a comment per key in `apps/web/.env.example`):
 
-- `PRINCIPAL_PASSWORD` / `PRINCIPAL_NAME` — bootstrap Principal account (username is always `principal`), re-synced on server start
-- `DEPUTY_PRINCIPAL_PASSWORD` / `DEPUTY_PRINCIPAL_NAME` — bootstrap Deputy Principal account (username is always `deputy-principal`), re-synced on server start
-- `ADMIN_PASSWORD` / `ADMIN_NAME` — bootstrap non-leadership admin account (username is always `admin`), re-synced on server start
+- `PRINCIPAL_PASSWORD` / `PRINCIPAL_NAME` — bootstrap Principal account (username is always `principal`)
+- `DEPUTY_PRINCIPAL_PASSWORD` / `DEPUTY_PRINCIPAL_NAME` — bootstrap Deputy Principal account (username is always `deputy-principal`)
+- `ADMIN_PASSWORD` / `ADMIN_NAME` — bootstrap non-leadership admin account (username is always `admin`)
+- `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` / `DATABASE_URL` / `NODE_ENV`
 
-The Principal and Deputy Principal accounts are seeded with the `principal` and `vicePrincipal` roles respectively; both are re-synced (password and role) on every server start.
-
-- `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` / `DATABASE_URL`
+**What the bootstrap does and does not do on every server start.** A missing account is created with the password above; an existing account has its name, address and role re-asserted. **An existing password is never overwritten** — a password changed in `/account` survives a restart, which is the point: re-syncing it from env would make the deployment's `.env` a permanent master key for three named accounts and would silently undo any rotation. To reset one of these passwords on purpose, either change it in `/account`, or delete the `user` row (cascading to its `account` row) and restart — the account is then re-created with the `.env` value. `banned` is not re-asserted either, so banning a seat survives a restart.
 
 Import the generated `ENV` accessor in application code. Shared database and auth packages receive configuration or initialized clients from the application. See [Varlock's monorepo guide](https://varlock.dev/guides/monorepos/).
 
@@ -166,11 +184,15 @@ school-student-teacher-management/
 | Leave & quota schema | `packages/db/src/schema/leaves.ts` |
 | Attendance & policy schema | `packages/db/src/schema/attendance.ts` |
 | Staff & academic-year schema | `packages/db/src/schema/staff.ts` |
+| Inventory & asset schema | `packages/db/src/schema/inventory.ts` |
+| Inventory labels & categories | `packages/db/src/constants/inventory.ts` |
 | Auth (NIC username, credentials) | `packages/auth/src/admin.ts` |
+| Inventory procedures (items, custody, lifecycle, ledger) | `packages/api/src/routers/inventory/` |
 | Leave procedures (apply, review chain, quotas) | `packages/api/src/routers/staff/leaves/` |
 | Attendance procedures (policy, recordArrival) | `packages/api/src/routers/staff/attendance/` |
 | Sign-up procedures | `packages/api/src/routers/staff/signup.ts` |
 | Teacher portal UI | `apps/web/src/components/staff/teacher-portal/` |
+| Inventory register UI (admin) | `apps/web/src/components/staff/inventory/` (design record in its `UI.md`) |
 | Leave review UI (admin) | `apps/web/src/components/staff/leave-management/` |
 | Sign-up pages | `apps/web/src/components/signup/` |
 | Routes | `apps/web/src/routes/` (`/signup`, `/account`, `/admin/{year}/*`, `/principal/{year}`, `/deputy-principal/{year}`, `/teacher/{year}/*`) |

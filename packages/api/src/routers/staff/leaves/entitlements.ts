@@ -26,7 +26,25 @@ import { adminOnlyProcedure, protectedProcedure } from "../../../index";
 const entitlementKey = (leaveType: string, paymentStatus: string) =>
   `${leaveType}:${paymentStatus}`;
 
-export const listLeaveEntitlements = protectedProcedure
+/**
+ * The quota table for one academic year — every leave type and payment status
+ * the College recognises, maternity tiers included.
+ *
+ * **`adminOnlyProcedure`, not `protectedProcedure`.** This returns the whole
+ * school's leave policy, not the caller's own balance: a teacher's own figures
+ * come from `getMyLeaveBalance` below, which is scoped to their `staffId` and
+ * net of what they have already taken. On `protectedProcedure` this procedure
+ * was readable by any signed-in account, including the `user` role that no
+ * screen ever issues, which handed every quota in the College — including the
+ * 84-day maternity tiers — to anyone who asked.
+ *
+ * It is `adminOnly` rather than `admin` because it is the read half of the same
+ * pair as `upsertLeaveEntitlement` and `seedLeaveEntitlements` below, which are
+ * already `adminOnly`: a quota an administrator may set but not read back is
+ * not a workable surface. Deleting it instead would leave the write half with
+ * nothing to verify against.
+ */
+export const listLeaveEntitlements = adminOnlyProcedure
   .input(
     v.object({
       academicYearId: v.optional(academicYearIdSchema),

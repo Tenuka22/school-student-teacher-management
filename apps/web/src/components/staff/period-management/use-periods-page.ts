@@ -10,6 +10,7 @@ import type {
   AcademicYear,
   PeriodClass,
 } from "@/components/staff/period-management/period-dialogs";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { downloadExportFile } from "@/lib/download-export";
 import { orpc } from "@/utils/orpc";
 
@@ -124,10 +125,46 @@ export const usePeriodsPage = () => {
     enabled: !!currentYear?.id,
   });
 
-  const conflictingAssignmentIds = useMemo(
-    () => new Set(conflictsQuery.data?.conflictingAssignmentIds),
-    [conflictsQuery.data]
-  );
+  /**
+   * The conflict scan's state, not just its ids.
+   *
+   * This used to be `new Set(conflictsQuery.data?.conflictingAssignmentIds)`,
+   * and `new Set(undefined)` is an empty set — so a network blip reached the
+   * page as a conflict count of 0 and told an administrator a timetable
+   * nobody had checked was clean. A count of 0 is a finding, so the scan now
+   * carries its own state: `known` only when the server answered.
+   */
+  const conflicts = useMemo(() => {
+    if (conflictsQuery.isError) {
+      return {
+        state: "failed" as const,
+        ids: new Set<string>(),
+        message: formatApiErrorMessage(
+          conflictsQuery.error,
+          "The server did not run the conflict scan."
+        ),
+      };
+    }
+    if (conflictsQuery.isPending) {
+      return { state: "pending" as const, ids: new Set<string>(), message: "" };
+    }
+    return {
+      state: "known" as const,
+      ids: new Set(conflictsQuery.data?.conflictingAssignmentIds),
+      message: "",
+    };
+  }, [
+    conflictsQuery.data,
+    conflictsQuery.error,
+    conflictsQuery.isError,
+    conflictsQuery.isPending,
+  ]);
+
+  const conflictingAssignmentIds = conflicts.ids;
+
+  const handleRetryConflicts = useCallback(() => {
+    void conflictsQuery.refetch();
+  }, [conflictsQuery]);
 
   const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
 
@@ -291,6 +328,32 @@ export const usePeriodsPage = () => {
     return (data || []) as PeriodAssignment[];
   }, [timetableQuery.data]);
 
+  /**
+   * The same rule as the conflict scan, for the slots-filled figure.
+   *
+   * `timetableData` is `[]` before a class is chosen, while the read is in
+   * flight, and after a failure — so its length was printed as `0 / 40` in all
+   * three cases, telling an administrator a timetable is empty when in truth
+   * nothing had been read. A count is a finding; it is printed only from a
+   * response that arrived.
+   */
+  const timetableRead = useMemo(() => {
+    if (!selectedClassId) {
+      return "unread" as const;
+    }
+    if (timetableQuery.isError) {
+      return "failed" as const;
+    }
+    if (timetableQuery.isPending) {
+      return "pending" as const;
+    }
+    return "known" as const;
+  }, [selectedClassId, timetableQuery.isError, timetableQuery.isPending]);
+
+  const handleRetryTimetable = useCallback(() => {
+    void timetableQuery.refetch();
+  }, [timetableQuery]);
+
   return {
     currentYear,
     category: categoryValue,
@@ -305,7 +368,12 @@ export const usePeriodsPage = () => {
     selectedClass,
     periods: CODE_DEFINED_PERIODS,
     timetableData,
+    timetableRead,
+    handleRetryTimetable,
     conflictingAssignmentIds,
+    conflictsState: conflicts.state,
+    conflictsMessage: conflicts.message,
+    handleRetryConflicts,
     staffMap,
     isAssignDialogOpen,
     setIsAssignDialogOpen,

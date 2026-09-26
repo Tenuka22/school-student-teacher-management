@@ -22,6 +22,24 @@ interface AcademicYear {
   isCurrent: boolean;
 }
 
+/**
+ * A control is offered only when the procedure behind it will accept the
+ * caller's role.
+ *
+ * The server gate is the authority — `adminProcedure`, `adminOnlyProcedure` and
+ * the permission checks in `packages/api/src/index.ts` are the rules, and they
+ * are not to be relaxed to make a screen convenient. The UI gate exists for a
+ * different reason: so a person is never invited to fail. A teacher who is
+ * handed "Add Academic Year" learns nothing from the red toast, and a Deputy
+ * who is handed the attendance-policy form has filled in a form the server
+ * will refuse every time.
+ *
+ * This shell renders for every signed-in account, so it is where that goes
+ * wrong most often — anything interactive added here is a control offered to
+ * all six roles unless it is explicitly withheld. Check the procedure's gate
+ * before adding one, and thread the role down rather than re-deriving it.
+ */
+
 export interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   user?: {
     name: string;
@@ -98,6 +116,11 @@ interface SidebarGroupsProps {
   leadershipNav: NavItem[];
   staffNav: NavItem[];
   teacherNav: NavItem[];
+  /**
+   * The administrator's *own* equipment, and only that. Deliberately not
+   * `teacherNav`: see the note on the array itself.
+   */
+  adminSelfNav: NavItem[];
   academicNav: NavItem[];
 }
 
@@ -116,6 +139,7 @@ const SidebarGroups = ({
   leadershipNav,
   staffNav,
   teacherNav,
+  adminSelfNav,
   academicNav,
 }: SidebarGroupsProps) => {
   if (isLeader) {
@@ -142,6 +166,18 @@ const SidebarGroups = ({
             },
           ]}
         />
+        {/*
+          The administrator's own property, in a group of its own rather than
+          inside "Staff Management" above. That group is the school — the roster,
+          the register, the whole staff's leave — and a personal page filed under
+          it reads as another thing to administer rather than as the
+          administrator's own kit, which is the one thing on the sidebar that is
+          about them rather than about anyone else. "Platform" is the other place
+          it could have gone and is wrong for the opposite reason: those are the
+          destinations every signed-in account shares, and this one is reachable
+          only by a member of staff who may happen to hold a laptop.
+        */}
+        <NavMain label="My Workspace" items={adminSelfNav} />
         <NavMain label="Staff Management" items={staffNav} />
         <NavMain label="Academic" items={academicNav} />
       </>
@@ -162,7 +198,8 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   // get their personal workspace links instead.
   // Leadership carries its own seeded role (`principal` / `vicePrincipal`)
   // and is confined to its own workspace, so `isAdmin` here means strictly
-  // the non-leadership admin account.
+  // the non-leadership admin account — which is also exactly the tier the
+  // academic-year writes sit on (`adminOnlyProcedure` is `requireRole("admin")`).
   const { isAdmin, isDeputy, isLeader, isPrincipal, currentYear } =
     useSidebarRole(user);
 
@@ -216,26 +253,66 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   ];
 
   // Leadership gets the review chain first — it is the work that defines
-  // these two roles. Their queue lives inside their own workspace, never
-  // under `/admin`, so neither can reach the other's area.
-  const leadershipQueue = isPrincipal
+  // these two roles. Every one of their links, the chain included, is built
+  // from the seat's **own** workspace helper and never from `/admin`, so
+  // neither seat can reach the other's area. `isPrincipal` is resolved once
+  // here, in the one map below, rather than repeated as a ternary per entry.
+  const leadershipLinks = isPrincipal
     ? {
         leave: principal("leaves"),
         attendance: principal("staff", "attendance"),
+        equipment: principal("equipment"),
       }
-    : { leave: deputy("leaves"), attendance: deputy("staff", "attendance") };
+    : {
+        leave: deputy("leaves"),
+        attendance: deputy("staff", "attendance"),
+        equipment: deputy("equipment"),
+      };
 
+  /**
+   * Where the equipment surfaces divide, and it divides on the *question* being
+   * asked rather than on the rank of the person asking.
+   *
+   * - **The register** — the store's stock list, its write-offs, its custody
+   *   transfers — is an administrator's tool and stays in `/admin`, deliberately.
+   *   It is the one entry in `staffNav` below.
+   * - **Self-service** — what *you* are in charge of, holding, or have lent —
+   *   is available to every member of staff, and it is a personal page rather
+   *   than a management one. So each seat reaches it **in its own workspace**:
+   *   the Principal at `principal("equipment")`, the Deputy at
+   *   `deputy("equipment")`, and the administrator at `teacher("equipment")`.
+   *
+   * **Leadership are not pointed at `/teacher/...`, and this is the point of the
+   * whole arrangement rather than a detail of it.** `teacher/route.tsx` refuses
+   * every role that is not `teacher` or `admin`, so a link there would bounce a
+   * Principal back to their own desk — and reaching across a workspace boundary
+   * to get at a page the seat's own workspace is allowed to carry is the thing
+   * this sidebar's design forbids. The two new route files
+   * (`principal/$year/equipment.tsx`, `deputy-principal/$year/equipment.tsx`)
+   * exist so that the link below is a same-workspace link.
+   *
+   * **The administrator's link crossing into `/teacher` is intentional, and is
+   * not a leak.** `admin` is the one role the teacher workspace admits
+   * (`teacher/route.tsx`: `role !== "teacher" && role !== "admin"`), so that
+   * guard already says an administrator may use the teacher's self-service pages.
+   * Pointing at them rather than minting a third copy of the same page at
+   * `/admin/$year/my-equipment` keeps one self-service surface in the app
+   * instead of three that drift. It grants nothing the account did not already
+   * hold: `custody.myItems` is scoped to the caller's own `staffId`, and
+   * `staffNav` keeps the register directly above it, where it belongs.
+   */
   const leadershipNav: NavItem[] = [
     {
       title: isPrincipal ? "Finalise Leave" : "Recommend Leave",
-      url: leadershipQueue.leave,
+      url: leadershipLinks.leave,
     },
     // Only the Principal approves staffing; the Deputy has no say here, and
     // the server rejects the call regardless.
     ...(isPrincipal
       ? [{ title: "Teacher Requests", url: principal("teacher-requests") }]
       : []),
-    { title: "Attendance", url: leadershipQueue.attendance },
+    { title: "Attendance", url: leadershipLinks.attendance },
+    { title: "My Equipment", url: leadershipLinks.equipment },
   ];
 
   const staffNav: NavItem[] = [
@@ -249,6 +326,17 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
       url: admin("staff", "classes"),
       count: classesQuery.data ? String(classesQuery.data.length) : undefined,
     },
+    // The school-wide equipment register is an administrator's tool: it is the
+    // store's stock list, its write-offs and its custody transfers, none of
+    // which a teacher may read. `custody.myItems` is each member of staff's own
+    // version, and it lives in *their* workspace — `teacherNav` below,
+    // `leadershipNav` above, `adminSelfNav` beside this group — rather than
+    // here, because that is the whole distinction between the two pages. No
+    // icon, because no item in this group passes one; no badge, because a count
+    // of everything in the store is not a queue — it duplicates what the
+    // register page already shows and would be a fifth request on every
+    // navigation to say nothing actionable.
+    { title: "Equipment", url: admin("staff", "inventory") },
     { title: "Period Assignment", url: admin("staff", "periods") },
     { title: "Teacher Timetable", url: admin("staff", "teacher-timetable") },
     { title: "Historical Data", url: admin("staff", "historical-data") },
@@ -269,7 +357,30 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   const teacherNav: NavItem[] = [
     { title: "My Leave", url: teacher("leave") },
     { title: "My Timetable", url: teacher("timetable") },
+    // A teacher's own list, and the only inventory read their role can reach:
+    // the two sections are their own holdings and nothing else. The register
+    // above is not linked from here, because a teacher cannot open it. The same
+    // page is also reached by leadership, in their own workspaces — see
+    // `leadershipNav` and `adminSelfNav`.
+    { title: "My Equipment", url: teacher("equipment") },
     { title: "My Profile", url: teacher("profile") },
+  ];
+
+  /**
+   * The administrator's self-service entry, and it is one entry rather than the
+   * whole of `teacherNav`.
+   *
+   * The `admin` role is admitted by `teacher/route.tsx` to the entire teacher
+   * workspace, not just to the equipment page, so all four links would open. Only
+   * one is offered: "Take an item" needs a `staff` row, and the seeded `admin`
+   * account deliberately has none (`packages/auth/src/admin.ts`), so the other
+   * three would land a member of staff on a "no staff record" notice with nothing
+   * on the page to do about it. The equipment page is offered because an
+   * administrator who *has* been linked to a staff record may hold school
+   * property, and that page is the one place they could discover they do.
+   */
+  const adminSelfNav: NavItem[] = [
+    { title: "My Equipment", url: teacher("equipment") },
   ];
 
   const academicNav: NavItem[] = [
@@ -300,7 +411,11 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
           <div className="text-sidebar-foreground/50 mb-2 text-xs font-extrabold tracking-[0.18em]">
             ACADEMIC YEAR
           </div>
-          <AcademicYearSwitcher />
+          {/* The switcher's "set current" and "add year" are both
+              `adminOnlyProcedure`, and this header is above the role branching
+              below, so the decision has to travel down to it. `isAdmin` is the
+              role this shell already resolved, not a second reading of it. */}
+          <AcademicYearSwitcher canManageAcademicYears={isAdmin} />
         </div>
       </SidebarHeader>
 
@@ -323,6 +438,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
           leadershipNav={leadershipNav}
           staffNav={staffNav}
           teacherNav={teacherNav}
+          adminSelfNav={adminSelfNav}
           academicNav={academicNav}
         />
       </SidebarContent>

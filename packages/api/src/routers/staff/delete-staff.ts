@@ -9,6 +9,12 @@ import {
   shortLeaveUsage,
 } from "@school-student-teacher-management/db/schema/attendance";
 import { user } from "@school-student-teacher-management/db/schema/auth";
+import {
+  inventoryBorrow,
+  inventoryCustodyHistory,
+  inventoryDisposalStatusHistory,
+  inventoryItem,
+} from "@school-student-teacher-management/db/schema/inventory";
 import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
 import { subjectMark } from "@school-student-teacher-management/db/schema/marking";
 import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
@@ -116,12 +122,66 @@ export const deleteStaff = requireStaffPermission("delete")
         .from(subjectMark)
         .where(eq(subjectMark.enteredByStaffId, input.id))
         .limit(1),
+      // ─── Inventory ───────────────────────────────────────────────────────
+      // The inventory staff pointers are all `onDelete: "set null"` on purpose,
+      // and that is not a reason to let a delete walk over them. `set null` is
+      // how the schema permits a person to leave; it is not permission for the
+      // delete to destroy the answer to "who had this, and who signed for it".
+      // `inventoryCustodyHistory` is the audit trail itself, and a hard delete
+      // would leave rows still reading `custody_taken` while naming nobody.
+      // So every inventory probe is here to refuse the delete and name the way
+      // out: hand the item to another teacher, or terminate the record.
+      //
+      // Deliberately NOT probed: `inventoryTransaction.actorStaffId` and
+      // `inventoryAuditLog.actorStaffId`. Those two denormalise the actor's name
+      // into the row precisely so the ledger and the change log stay readable
+      // after the storekeeper who wrote them has gone, which is why they are
+      // `set null` rather than `restrict`. Probing them would make both tables
+      // undeletable for every person who has ever touched stock — a school would
+      // be unable to remove its first inventory clerk — and the cure for that
+      // would be worse than the disease: hard-deleting the audit trail to keep
+      // staff deletion working. A missing actor on a ledger row is a fact about
+      // a departed person; a missing ledger row is a hole in the school's
+      // accounts. Do not "fix" this by adding the two probes back.
+      context.db
+        .select({ id: inventoryItem.id })
+        .from(inventoryItem)
+        .where(
+          or(
+            eq(inventoryItem.managerStaffId, input.id),
+            eq(inventoryItem.custodianStaffId, input.id)
+          )
+        )
+        .limit(1),
+      context.db
+        .select({ id: inventoryCustodyHistory.id })
+        .from(inventoryCustodyHistory)
+        .where(
+          or(
+            eq(inventoryCustodyHistory.previousCustodianStaffId, input.id),
+            eq(inventoryCustodyHistory.newCustodianStaffId, input.id),
+            eq(inventoryCustodyHistory.previousManagerStaffId, input.id),
+            eq(inventoryCustodyHistory.newManagerStaffId, input.id),
+            eq(inventoryCustodyHistory.changedByStaffId, input.id)
+          )
+        )
+        .limit(1),
+      context.db
+        .select({ id: inventoryBorrow.id })
+        .from(inventoryBorrow)
+        .where(eq(inventoryBorrow.borrowerStaffId, input.id))
+        .limit(1),
+      context.db
+        .select({ id: inventoryDisposalStatusHistory.id })
+        .from(inventoryDisposalStatusHistory)
+        .where(eq(inventoryDisposalStatusHistory.changedByStaffId, input.id))
+        .limit(1),
     ]);
 
     if (historyChecks.some((rows) => rows.length > 0)) {
       throw new ORPCError("CONFLICT", {
         message:
-          "Staff member has historical records or current assignments and cannot be deleted; set the employment status to terminated instead",
+          "Staff member has historical records, current assignments or inventory custody and cannot be deleted; transfer inventory custody and management to another teacher, or set the employment status to terminated instead",
       });
     }
 

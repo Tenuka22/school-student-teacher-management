@@ -1,9 +1,161 @@
 {
-  "id": "490eac7a-a3c5-4850-931c-90c8c935da99",
+  "id": "1e84f5cf-c954-4960-99a2-f488d91098f5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.class_teacher_assignment_history": {
+      "name": "class_teacher_assignment_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "class_id": {
+          "name": "class_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_teacher_id": {
+          "name": "previous_teacher_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_teacher_id": {
+          "name": "new_teacher_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "change_type": {
+          "name": "change_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "changed_at": {
+          "name": "changed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "class_teacher_history_class_idx": {
+          "name": "class_teacher_history_class_idx",
+          "columns": [
+            {
+              "expression": "class_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "class_teacher_history_year_idx": {
+          "name": "class_teacher_history_year_idx",
+          "columns": [
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "class_teacher_assignment_history_class_id_class_id_fk": {
+          "name": "class_teacher_assignment_history_class_id_class_id_fk",
+          "tableFrom": "class_teacher_assignment_history",
+          "tableTo": "class",
+          "columnsFrom": [
+            "class_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "class_teacher_assignment_history_academic_year_id_academic_year_id_fk": {
+          "name": "class_teacher_assignment_history_academic_year_id_academic_year_id_fk",
+          "tableFrom": "class_teacher_assignment_history",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "class_teacher_assignment_history_previous_teacher_id_staff_id_fk": {
+          "name": "class_teacher_assignment_history_previous_teacher_id_staff_id_fk",
+          "tableFrom": "class_teacher_assignment_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "previous_teacher_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "class_teacher_assignment_history_new_teacher_id_staff_id_fk": {
+          "name": "class_teacher_assignment_history_new_teacher_id_staff_id_fk",
+          "tableFrom": "class_teacher_assignment_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "new_teacher_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.class": {
       "name": "class",
       "schema": "",
@@ -96,8 +248,12 @@
           "name": "class_academic_year_id_academic_year_id_fk",
           "tableFrom": "class",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -105,8 +261,12 @@
           "name": "class_homeroom_teacher_id_staff_id_fk",
           "tableFrom": "class",
           "tableTo": "staff",
-          "columnsFrom": ["homeroom_teacher_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "homeroom_teacher_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -114,8 +274,12 @@
           "name": "class_sub_homeroom_teacher_id_staff_id_fk",
           "tableFrom": "class",
           "tableTo": "staff",
-          "columnsFrom": ["sub_homeroom_teacher_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "sub_homeroom_teacher_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -125,7 +289,11 @@
         "class_unique": {
           "name": "class_unique",
           "nullsNotDistinct": false,
-          "columns": ["academic_year_id", "grade_level", "name"]
+          "columns": [
+            "academic_year_id",
+            "grade_level",
+            "name"
+          ]
         }
       },
       "policies": {},
@@ -233,8 +401,12 @@
           "name": "grade_subject_config_academic_year_id_academic_year_id_fk",
           "tableFrom": "grade_subject_config",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -256,8 +428,111 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.subject_assignment": {
-      "name": "subject_assignment",
+    "public.attendance_policy": {
+      "name": "attendance_policy",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "arrival_cutoff_time": {
+          "name": "arrival_cutoff_time",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'07:30'"
+        },
+        "short_leaves_per_month": {
+          "name": "short_leaves_per_month",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2
+        },
+        "primary_start_period_number": {
+          "name": "primary_start_period_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "primary_end_period_number": {
+          "name": "primary_end_period_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 4
+        },
+        "secondary_start_period_number": {
+          "name": "secondary_start_period_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 5
+        },
+        "secondary_end_period_number": {
+          "name": "secondary_end_period_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 8
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "attendance_policy_academic_year_id_academic_year_id_fk": {
+          "name": "attendance_policy_academic_year_id_academic_year_id_fk",
+          "tableFrom": "attendance_policy",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "attendance_policy_year_unique": {
+          "name": "attendance_policy_year_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "academic_year_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.short_leave_usage": {
+      "name": "short_leave_usage",
       "schema": "",
       "columns": {
         "id": {
@@ -278,23 +553,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "subject_key": {
-          "name": "subject_key",
+        "year_month": {
+          "name": "year_month",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "grade_level": {
-          "name": "grade_level",
+        "short_leaves_used": {
+          "name": "short_leaves_used",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
-        },
-        "class_id": {
-          "name": "class_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -302,11 +572,147 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
-        "subject_assignment_staff_idx": {
-          "name": "subject_assignment_staff_idx",
+        "short_leave_usage_year_idx": {
+          "name": "short_leave_usage_year_idx",
+          "columns": [
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "short_leave_usage_staff_id_staff_id_fk": {
+          "name": "short_leave_usage_staff_id_staff_id_fk",
+          "tableFrom": "short_leave_usage",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "short_leave_usage_academic_year_id_academic_year_id_fk": {
+          "name": "short_leave_usage_academic_year_id_academic_year_id_fk",
+          "tableFrom": "short_leave_usage",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "short_leave_usage_staff_year_month_unique": {
+          "name": "short_leave_usage_staff_year_month_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "staff_id",
+            "academic_year_id",
+            "year_month"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.teacher_attendance": {
+      "name": "teacher_attendance",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "staff_id": {
+          "name": "staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "leave_request_id": {
+          "name": "leave_request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "marked_at": {
+          "name": "marked_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "teacher_attendance_staff_idx": {
+          "name": "teacher_attendance_staff_idx",
           "columns": [
             {
               "expression": "staff_id",
@@ -320,8 +726,23 @@
           "method": "btree",
           "with": {}
         },
-        "subject_assignment_year_idx": {
-          "name": "subject_assignment_year_idx",
+        "teacher_attendance_date_idx": {
+          "name": "teacher_attendance_date_idx",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "teacher_attendance_year_idx": {
+          "name": "teacher_attendance_year_idx",
           "columns": [
             {
               "expression": "academic_year_id",
@@ -334,12 +755,128 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        }
+      },
+      "foreignKeys": {
+        "teacher_attendance_staff_id_staff_id_fk": {
+          "name": "teacher_attendance_staff_id_staff_id_fk",
+          "tableFrom": "teacher_attendance",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
-        "subject_assignment_subject_idx": {
-          "name": "subject_assignment_subject_idx",
+        "teacher_attendance_academic_year_id_academic_year_id_fk": {
+          "name": "teacher_attendance_academic_year_id_academic_year_id_fk",
+          "tableFrom": "teacher_attendance",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "teacher_attendance_leave_request_id_leave_request_id_fk": {
+          "name": "teacher_attendance_leave_request_id_leave_request_id_fk",
+          "tableFrom": "teacher_attendance",
+          "tableTo": "leave_request",
+          "columnsFrom": [
+            "leave_request_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "teacher_attendance_staff_year_date_unique": {
+          "name": "teacher_attendance_staff_year_date_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "staff_id",
+            "academic_year_id",
+            "date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.teacher_period_absence": {
+      "name": "teacher_period_absence",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "teacher_attendance_id": {
+          "name": "teacher_attendance_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_number": {
+          "name": "period_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "substitute_staff_id": {
+          "name": "substitute_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "teacher_period_absence_attendance_idx": {
+          "name": "teacher_period_absence_attendance_idx",
           "columns": [
             {
-              "expression": "subject_key",
+              "expression": "teacher_attendance_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "teacher_period_absence_substitute_idx": {
+          "name": "teacher_period_absence_substitute_idx",
+          "columns": [
+            {
+              "expression": "substitute_staff_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -352,40 +889,42 @@
         }
       },
       "foreignKeys": {
-        "subject_assignment_staff_id_staff_id_fk": {
-          "name": "subject_assignment_staff_id_staff_id_fk",
-          "tableFrom": "subject_assignment",
+        "teacher_period_absence_teacher_attendance_id_teacher_attendance_id_fk": {
+          "name": "teacher_period_absence_teacher_attendance_id_teacher_attendance_id_fk",
+          "tableFrom": "teacher_period_absence",
+          "tableTo": "teacher_attendance",
+          "columnsFrom": [
+            "teacher_attendance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "teacher_period_absence_substitute_staff_id_staff_id_fk": {
+          "name": "teacher_period_absence_substitute_staff_id_staff_id_fk",
+          "tableFrom": "teacher_period_absence",
           "tableTo": "staff",
-          "columnsFrom": ["staff_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "subject_assignment_academic_year_id_academic_year_id_fk": {
-          "name": "subject_assignment_academic_year_id_academic_year_id_fk",
-          "tableFrom": "subject_assignment",
-          "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "subject_assignment_class_id_class_id_fk": {
-          "name": "subject_assignment_class_id_class_id_fk",
-          "tableFrom": "subject_assignment",
-          "tableTo": "class",
-          "columnsFrom": ["class_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
+          "columnsFrom": [
+            "substitute_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "subject_assignment_unique": {
-          "name": "subject_assignment_unique",
+        "teacher_period_absence_unique": {
+          "name": "teacher_period_absence_unique",
           "nullsNotDistinct": false,
-          "columns": ["staff_id", "academic_year_id", "subject_key", "class_id"]
+          "columns": [
+            "teacher_attendance_id",
+            "period_number"
+          ]
         }
       },
       "policies": {},
@@ -519,8 +1058,12 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -613,8 +1156,12 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -624,7 +1171,9 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": ["token"]
+          "columns": [
+            "token"
+          ]
         }
       },
       "policies": {},
@@ -662,6 +1211,18 @@
         },
         "image": {
           "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "display_username": {
+          "name": "display_username",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -714,7 +1275,16 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": ["email"]
+          "columns": [
+            "email"
+          ]
+        },
+        "user_username_unique": {
+          "name": "user_username_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "username"
+          ]
         }
       },
       "policies": {},
@@ -858,9 +1428,627 @@
           "name": "files_user_id_user_id_fk",
           "tableFrom": "files",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.class_period_assignment": {
+      "name": "class_period_assignment",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "class_id": {
+          "name": "class_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day_of_week": {
+          "name": "day_of_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_number": {
+          "name": "period_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_key": {
+          "name": "subject_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "staff_id": {
+          "name": "staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_combined_session": {
+          "name": "is_combined_session",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "class_period_assignment_year_idx": {
+          "name": "class_period_assignment_year_idx",
+          "columns": [
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "class_period_assignment_class_idx": {
+          "name": "class_period_assignment_class_idx",
+          "columns": [
+            {
+              "expression": "class_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "class_period_assignment_staff_idx": {
+          "name": "class_period_assignment_staff_idx",
+          "columns": [
+            {
+              "expression": "staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "class_period_assignment_subject_idx": {
+          "name": "class_period_assignment_subject_idx",
+          "columns": [
+            {
+              "expression": "subject_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "class_period_assignment_academic_year_id_academic_year_id_fk": {
+          "name": "class_period_assignment_academic_year_id_academic_year_id_fk",
+          "tableFrom": "class_period_assignment",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "class_period_assignment_class_id_class_id_fk": {
+          "name": "class_period_assignment_class_id_class_id_fk",
+          "tableFrom": "class_period_assignment",
+          "tableTo": "class",
+          "columnsFrom": [
+            "class_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "class_period_assignment_staff_id_staff_id_fk": {
+          "name": "class_period_assignment_staff_id_staff_id_fk",
+          "tableFrom": "class_period_assignment",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "class_period_assignment_class_slot_unique": {
+          "name": "class_period_assignment_class_slot_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "academic_year_id",
+            "class_id",
+            "day_of_week",
+            "period_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.leave_entitlement": {
+      "name": "leave_entitlement",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "leave_type": {
+          "name": "leave_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_status": {
+          "name": "payment_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'notApplicable'"
+        },
+        "max_days": {
+          "name": "max_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_days": {
+          "name": "min_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "leave_entitlement_year_idx": {
+          "name": "leave_entitlement_year_idx",
+          "columns": [
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "leave_entitlement_academic_year_id_academic_year_id_fk": {
+          "name": "leave_entitlement_academic_year_id_academic_year_id_fk",
+          "tableFrom": "leave_entitlement",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "leave_entitlement_year_type_payment_unique": {
+          "name": "leave_entitlement_year_type_payment_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "academic_year_id",
+            "leave_type",
+            "payment_status"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.leave_request": {
+      "name": "leave_request",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "staff_id": {
+          "name": "staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day_part": {
+          "name": "day_part",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'full'"
+        },
+        "payment_status": {
+          "name": "payment_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'notApplicable'"
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "deputy_status": {
+          "name": "deputy_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "deputy_staff_id": {
+          "name": "deputy_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deputy_acted_at": {
+          "name": "deputy_acted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deputy_comment": {
+          "name": "deputy_comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "final_status": {
+          "name": "final_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "principal_staff_id": {
+          "name": "principal_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "principal_acted_at": {
+          "name": "principal_acted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "principal_comment": {
+          "name": "principal_comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalized_at": {
+          "name": "finalized_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_by_staff_id": {
+          "name": "reviewed_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "review_comment": {
+          "name": "review_comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "leave_request_staff_idx": {
+          "name": "leave_request_staff_idx",
+          "columns": [
+            {
+              "expression": "staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leave_request_status_idx": {
+          "name": "leave_request_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leave_request_deputy_status_idx": {
+          "name": "leave_request_deputy_status_idx",
+          "columns": [
+            {
+              "expression": "deputy_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leave_request_final_status_idx": {
+          "name": "leave_request_final_status_idx",
+          "columns": [
+            {
+              "expression": "final_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leave_request_start_date_idx": {
+          "name": "leave_request_start_date_idx",
+          "columns": [
+            {
+              "expression": "start_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leave_request_year_idx": {
+          "name": "leave_request_year_idx",
+          "columns": [
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "leave_request_staff_id_staff_id_fk": {
+          "name": "leave_request_staff_id_staff_id_fk",
+          "tableFrom": "leave_request",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "leave_request_academic_year_id_academic_year_id_fk": {
+          "name": "leave_request_academic_year_id_academic_year_id_fk",
+          "tableFrom": "leave_request",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "leave_request_deputy_staff_id_staff_id_fk": {
+          "name": "leave_request_deputy_staff_id_staff_id_fk",
+          "tableFrom": "leave_request",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "deputy_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "leave_request_principal_staff_id_staff_id_fk": {
+          "name": "leave_request_principal_staff_id_staff_id_fk",
+          "tableFrom": "leave_request",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "principal_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "leave_request_reviewed_by_staff_id_staff_id_fk": {
+          "name": "leave_request_reviewed_by_staff_id_staff_id_fk",
+          "tableFrom": "leave_request",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "reviewed_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -978,8 +2166,12 @@
           "name": "exam_type_academic_year_id_academic_year_id_fk",
           "tableFrom": "exam_type",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -989,7 +2181,11 @@
         "exam_type_year_grade_name_unique": {
           "name": "exam_type_year_grade_name_unique",
           "nullsNotDistinct": false,
-          "columns": ["academic_year_id", "grade_level", "name"]
+          "columns": [
+            "academic_year_id",
+            "grade_level",
+            "name"
+          ]
         }
       },
       "policies": {},
@@ -1081,8 +2277,12 @@
           "name": "grade_scale_academic_year_id_academic_year_id_fk",
           "tableFrom": "grade_scale",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1092,7 +2292,11 @@
         "grade_scale_unique": {
           "name": "grade_scale_unique",
           "nullsNotDistinct": false,
-          "columns": ["academic_year_id", "subject_key", "grade"]
+          "columns": [
+            "academic_year_id",
+            "subject_key",
+            "grade"
+          ]
         }
       },
       "policies": {},
@@ -1249,7 +2453,9 @@
         "student_admission_number_unique": {
           "name": "student_admission_number_unique",
           "nullsNotDistinct": false,
-          "columns": ["admission_number"]
+          "columns": [
+            "admission_number"
+          ]
         }
       },
       "policies": {},
@@ -1362,8 +2568,12 @@
           "name": "student_admission_student_id_student_id_fk",
           "tableFrom": "student_admission",
           "tableTo": "student",
-          "columnsFrom": ["student_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1371,8 +2581,12 @@
           "name": "student_admission_academic_year_id_academic_year_id_fk",
           "tableFrom": "student_admission",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1382,7 +2596,10 @@
         "sa_student_year_unique": {
           "name": "sa_student_year_unique",
           "nullsNotDistinct": false,
-          "columns": ["student_id", "academic_year_id"]
+          "columns": [
+            "student_id",
+            "academic_year_id"
+          ]
         }
       },
       "policies": {},
@@ -1477,8 +2694,12 @@
           "name": "student_class_assignment_student_id_student_id_fk",
           "tableFrom": "student_class_assignment",
           "tableTo": "student",
-          "columnsFrom": ["student_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1486,8 +2707,12 @@
           "name": "student_class_assignment_academic_year_id_academic_year_id_fk",
           "tableFrom": "student_class_assignment",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1495,8 +2720,12 @@
           "name": "student_class_assignment_class_id_class_id_fk",
           "tableFrom": "student_class_assignment",
           "tableTo": "class",
-          "columnsFrom": ["class_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "class_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1506,7 +2735,10 @@
         "sca_student_year_unique": {
           "name": "sca_student_year_unique",
           "nullsNotDistinct": false,
-          "columns": ["student_id", "academic_year_id"]
+          "columns": [
+            "student_id",
+            "academic_year_id"
+          ]
         }
       },
       "policies": {},
@@ -1632,8 +2864,12 @@
           "name": "student_subject_selection_student_id_student_id_fk",
           "tableFrom": "student_subject_selection",
           "tableTo": "student",
-          "columnsFrom": ["student_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1641,8 +2877,12 @@
           "name": "student_subject_selection_academic_year_id_academic_year_id_fk",
           "tableFrom": "student_subject_selection",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1650,8 +2890,12 @@
           "name": "student_subject_selection_previous_selection_id_student_subject_selection_id_fk",
           "tableFrom": "student_subject_selection",
           "tableTo": "student_subject_selection",
-          "columnsFrom": ["previous_selection_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "previous_selection_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1790,8 +3034,12 @@
           "name": "subject_mark_student_class_assignment_id_student_class_assignment_id_fk",
           "tableFrom": "subject_mark",
           "tableTo": "student_class_assignment",
-          "columnsFrom": ["student_class_assignment_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "student_class_assignment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1799,8 +3047,12 @@
           "name": "subject_mark_exam_type_id_exam_type_id_fk",
           "tableFrom": "subject_mark",
           "tableTo": "exam_type",
-          "columnsFrom": ["exam_type_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "exam_type_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1808,8 +3060,12 @@
           "name": "subject_mark_entered_by_staff_id_staff_id_fk",
           "tableFrom": "subject_mark",
           "tableTo": "staff",
-          "columnsFrom": ["entered_by_staff_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "entered_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1892,7 +3148,9 @@
         "academic_year_year_unique": {
           "name": "academic_year_year_unique",
           "nullsNotDistinct": false,
-          "columns": ["year"]
+          "columns": [
+            "year"
+          ]
         }
       },
       "policies": {},
@@ -2023,6 +3281,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "staff_category": {
+          "name": "staff_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'teacher'"
+        },
         "appointment_type": {
           "name": "appointment_type",
           "type": "text",
@@ -2043,6 +3308,12 @@
         },
         "employment_status": {
           "name": "employment_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2134,15 +3405,47 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "staff_teacher_service_no_idx": {
+          "name": "staff_teacher_service_no_idx",
+          "columns": [
+            {
+              "expression": "teacher_service_no",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
+        "staff_user_id_user_id_fk": {
+          "name": "staff_user_id_user_id_fk",
+          "tableFrom": "staff",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
         "staff_portrait_file_id_files_id_fk": {
           "name": "staff_portrait_file_id_files_id_fk",
           "tableFrom": "staff",
           "tableTo": "files",
-          "columnsFrom": ["portrait_file_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "portrait_file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2150,23 +3453,38 @@
           "name": "staff_national_identity_card_file_id_files_id_fk",
           "tableFrom": "staff",
           "tableTo": "files",
-          "columnsFrom": ["national_identity_card_file_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "national_identity_card_file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "staff_email_unique": {
-          "name": "staff_email_unique",
-          "nullsNotDistinct": false,
-          "columns": ["email"]
-        },
         "staff_nic_unique": {
           "name": "staff_nic_unique",
           "nullsNotDistinct": false,
-          "columns": ["nic"]
+          "columns": [
+            "nic"
+          ]
+        },
+        "staff_teacher_service_no_unique": {
+          "name": "staff_teacher_service_no_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "teacher_service_no"
+          ]
+        },
+        "staff_user_id_unique": {
+          "name": "staff_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id"
+          ]
         }
       },
       "policies": {},
@@ -2252,8 +3570,12 @@
           "name": "staff_position_staff_id_staff_id_fk",
           "tableFrom": "staff_position",
           "tableTo": "staff",
-          "columnsFrom": ["staff_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2261,8 +3583,12 @@
           "name": "staff_position_academic_year_id_academic_year_id_fk",
           "tableFrom": "staff_position",
           "tableTo": "academic_year",
-          "columnsFrom": ["academic_year_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2277,6 +3603,109 @@
             "academic_year_id",
             "position",
             "sectional_scope"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.teacher_subject_assignment": {
+      "name": "teacher_subject_assignment",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "staff_id": {
+          "name": "staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "academic_year_id": {
+          "name": "academic_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_key": {
+          "name": "subject_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "teacher_subject_assignment_staff_year_idx": {
+          "name": "teacher_subject_assignment_staff_year_idx",
+          "columns": [
+            {
+              "expression": "staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "teacher_subject_assignment_staff_id_staff_id_fk": {
+          "name": "teacher_subject_assignment_staff_id_staff_id_fk",
+          "tableFrom": "teacher_subject_assignment",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "teacher_subject_assignment_academic_year_id_academic_year_id_fk": {
+          "name": "teacher_subject_assignment_academic_year_id_academic_year_id_fk",
+          "tableFrom": "teacher_subject_assignment",
+          "tableTo": "academic_year",
+          "columnsFrom": [
+            "academic_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "teacher_subject_assignment_unique": {
+          "name": "teacher_subject_assignment_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "staff_id",
+            "academic_year_id",
+            "subject_key"
           ]
         }
       },
@@ -2404,8 +3833,12 @@
           "name": "employment_verification_staff_id_staff_id_fk",
           "tableFrom": "employment_verification",
           "tableTo": "staff",
-          "columnsFrom": ["staff_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2413,8 +3846,12 @@
           "name": "employment_verification_file_id_files_id_fk",
           "tableFrom": "employment_verification",
           "tableTo": "files",
-          "columnsFrom": ["file_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2422,8 +3859,12 @@
           "name": "employment_verification_reviewed_by_staff_id_fk",
           "tableFrom": "employment_verification",
           "tableTo": "staff",
-          "columnsFrom": ["reviewed_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "reviewed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2507,8 +3948,12 @@
           "name": "password_rotation_history_staff_id_staff_id_fk",
           "tableFrom": "password_rotation_history",
           "tableTo": "staff",
-          "columnsFrom": ["staff_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2516,8 +3961,12 @@
           "name": "password_rotation_history_changed_by_staff_id_fk",
           "tableFrom": "password_rotation_history",
           "tableTo": "staff",
-          "columnsFrom": ["changed_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "changed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2657,8 +4106,12 @@
           "name": "teacher_qualification_staff_id_staff_id_fk",
           "tableFrom": "teacher_qualification",
           "tableTo": "staff",
-          "columnsFrom": ["staff_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2666,8 +4119,12 @@
           "name": "teacher_qualification_document_file_id_files_id_fk",
           "tableFrom": "teacher_qualification",
           "tableTo": "files",
-          "columnsFrom": ["document_file_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "document_file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2675,8 +4132,12 @@
           "name": "teacher_qualification_reviewed_by_staff_id_fk",
           "tableFrom": "teacher_qualification",
           "tableTo": "staff",
-          "columnsFrom": ["reviewed_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "reviewed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2696,6 +4157,2204 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.inventory_audit_log": {
+      "name": "inventory_audit_log",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "actor_staff_id": {
+          "name": "actor_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_name": {
+          "name": "actor_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "before": {
+          "name": "before",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "after": {
+          "name": "after",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_audit_log_entity_type_idx": {
+          "name": "inventory_audit_log_entity_type_idx",
+          "columns": [
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_audit_log_entity_idx": {
+          "name": "inventory_audit_log_entity_idx",
+          "columns": [
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_audit_log_actor_staff_idx": {
+          "name": "inventory_audit_log_actor_staff_idx",
+          "columns": [
+            {
+              "expression": "actor_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_audit_log_created_at_idx": {
+          "name": "inventory_audit_log_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_audit_log_actor_staff_id_staff_id_fk": {
+          "name": "inventory_audit_log_actor_staff_id_staff_id_fk",
+          "tableFrom": "inventory_audit_log",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "actor_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_audit_log_entity_not_blank": {
+          "name": "inventory_audit_log_entity_not_blank",
+          "value": "length(trim(\"inventory_audit_log\".\"entity_id\")) > 0"
+        },
+        "inventory_audit_log_actor_name_not_blank": {
+          "name": "inventory_audit_log_actor_name_not_blank",
+          "value": "length(trim(\"inventory_audit_log\".\"actor_name\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_borrow": {
+      "name": "inventory_borrow",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "borrower_staff_id": {
+          "name": "borrower_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "borrower_student_id": {
+          "name": "borrower_student_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expected_return_date": {
+          "name": "expected_return_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'borrowed'"
+        },
+        "borrowed_by_staff_id": {
+          "name": "borrowed_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "borrowed_at": {
+          "name": "borrowed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "returned_at": {
+          "name": "returned_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "returned_by_staff_id": {
+          "name": "returned_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "return_condition": {
+          "name": "return_condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "return_note": {
+          "name": "return_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_borrow_borrower_staff_id_idx": {
+          "name": "inventory_borrow_borrower_staff_id_idx",
+          "columns": [
+            {
+              "expression": "borrower_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_borrow_borrower_student_id_idx": {
+          "name": "inventory_borrow_borrower_student_id_idx",
+          "columns": [
+            {
+              "expression": "borrower_student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_borrow_item_id_idx": {
+          "name": "inventory_borrow_item_id_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_borrow_status_expected_return_idx": {
+          "name": "inventory_borrow_status_expected_return_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expected_return_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_borrow_item_id_inventory_item_id_fk": {
+          "name": "inventory_borrow_item_id_inventory_item_id_fk",
+          "tableFrom": "inventory_borrow",
+          "tableTo": "inventory_item",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_borrow_borrower_staff_id_staff_id_fk": {
+          "name": "inventory_borrow_borrower_staff_id_staff_id_fk",
+          "tableFrom": "inventory_borrow",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "borrower_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_borrow_borrower_student_id_student_id_fk": {
+          "name": "inventory_borrow_borrower_student_id_student_id_fk",
+          "tableFrom": "inventory_borrow",
+          "tableTo": "student",
+          "columnsFrom": [
+            "borrower_student_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_borrow_borrowed_by_staff_id_staff_id_fk": {
+          "name": "inventory_borrow_borrowed_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_borrow",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "borrowed_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_borrow_returned_by_staff_id_staff_id_fk": {
+          "name": "inventory_borrow_returned_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_borrow",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "returned_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_borrow_qty_positive": {
+          "name": "inventory_borrow_qty_positive",
+          "value": "\"inventory_borrow\".\"qty\" > 0"
+        },
+        "inventory_borrow_borrower_exclusive": {
+          "name": "inventory_borrow_borrower_exclusive",
+          "value": "(\"inventory_borrow\".\"borrower_staff_id\" is not null) <> (\"inventory_borrow\".\"borrower_student_id\" is not null)"
+        },
+        "inventory_borrow_status_check": {
+          "name": "inventory_borrow_status_check",
+          "value": "\"inventory_borrow\".\"status\" in ('borrowed', 'returned')"
+        },
+        "inventory_borrow_return_condition_check": {
+          "name": "inventory_borrow_return_condition_check",
+          "value": "(\"inventory_borrow\".\"return_condition\" is null or \"inventory_borrow\".\"return_condition\" in ('Good', 'Fair', 'Damaged', 'Under Repair'))"
+        },
+        "inventory_borrow_expected_return_date_iso": {
+          "name": "inventory_borrow_expected_return_date_iso",
+          "value": "\"inventory_borrow\".\"expected_return_date\" ~ '^\\d{4}-\\d{2}-\\d{2}$'"
+        },
+        "inventory_borrow_return_state": {
+          "name": "inventory_borrow_return_state",
+          "value": "(\n        \"inventory_borrow\".\"status\" = 'borrowed'\n        and \"inventory_borrow\".\"returned_at\" is null\n        and \"inventory_borrow\".\"returned_by_staff_id\" is null\n        and \"inventory_borrow\".\"return_condition\" is null\n        and \"inventory_borrow\".\"return_note\" is null\n      ) or (\n        \"inventory_borrow\".\"status\" = 'returned'\n        and \"inventory_borrow\".\"returned_at\" is not null\n        and \"inventory_borrow\".\"return_condition\" is not null\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_borrow_unit": {
+      "name": "inventory_borrow_unit",
+      "schema": "",
+      "columns": {
+        "borrow_id": {
+          "name": "borrow_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "released_at": {
+          "name": "released_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "inventory_borrow_unit_unit_id_idx": {
+          "name": "inventory_borrow_unit_unit_id_idx",
+          "columns": [
+            {
+              "expression": "unit_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_borrow_unit_active_unique": {
+          "name": "inventory_borrow_unit_active_unique",
+          "columns": [
+            {
+              "expression": "unit_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"inventory_borrow_unit\".\"released_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_borrow_unit_borrow_id_inventory_borrow_id_fk": {
+          "name": "inventory_borrow_unit_borrow_id_inventory_borrow_id_fk",
+          "tableFrom": "inventory_borrow_unit",
+          "tableTo": "inventory_borrow",
+          "columnsFrom": [
+            "borrow_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_borrow_unit_unit_id_inventory_unit_id_fk": {
+          "name": "inventory_borrow_unit_unit_id_inventory_unit_id_fk",
+          "tableFrom": "inventory_borrow_unit",
+          "tableTo": "inventory_unit",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "inventory_borrow_unit_pk": {
+          "name": "inventory_borrow_unit_pk",
+          "columns": [
+            "borrow_id",
+            "unit_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.inventory_category": {
+      "name": "inventory_category",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_name": {
+          "name": "normalized_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'#6366F1'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "inventory_category_normalized_name_unique": {
+          "name": "inventory_category_normalized_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "normalized_name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "inventory_category_name_not_blank": {
+          "name": "inventory_category_name_not_blank",
+          "value": "length(trim(\"inventory_category\".\"name\")) > 0"
+        },
+        "inventory_category_color_hex": {
+          "name": "inventory_category_color_hex",
+          "value": "\"inventory_category\".\"color\" ~ '^#[0-9A-Fa-f]{6}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_custody_history": {
+      "name": "inventory_custody_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_custodian_staff_id": {
+          "name": "previous_custodian_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_custodian_staff_id": {
+          "name": "new_custodian_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "previous_manager_staff_id": {
+          "name": "previous_manager_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_manager_staff_id": {
+          "name": "new_manager_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "change_type": {
+          "name": "change_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "changed_by_staff_id": {
+          "name": "changed_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "changed_at": {
+          "name": "changed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_custody_history_item_id_idx": {
+          "name": "inventory_custody_history_item_id_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_custody_history_changed_at_idx": {
+          "name": "inventory_custody_history_changed_at_idx",
+          "columns": [
+            {
+              "expression": "changed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_custody_history_item_id_inventory_item_id_fk": {
+          "name": "inventory_custody_history_item_id_inventory_item_id_fk",
+          "tableFrom": "inventory_custody_history",
+          "tableTo": "inventory_item",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_custody_history_previous_custodian_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_previous_custodian_staff_id_staff_id_fk",
+          "tableFrom": "inventory_custody_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "previous_custodian_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_custody_history_new_custodian_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_new_custodian_staff_id_staff_id_fk",
+          "tableFrom": "inventory_custody_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "new_custodian_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_custody_history_previous_manager_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_previous_manager_staff_id_staff_id_fk",
+          "tableFrom": "inventory_custody_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "previous_manager_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_custody_history_new_manager_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_new_manager_staff_id_staff_id_fk",
+          "tableFrom": "inventory_custody_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "new_manager_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_custody_history_changed_by_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_changed_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_custody_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "changed_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_custody_history_change_type_check": {
+          "name": "inventory_custody_history_change_type_check",
+          "value": "\"inventory_custody_history\".\"change_type\" in ('custody_taken', 'custody_transferred', 'custody_released', 'manager_assigned', 'manager_changed', 'manager_cleared')"
+        },
+        "inventory_custody_history_manager_columns": {
+          "name": "inventory_custody_history_manager_columns",
+          "value": "(\"inventory_custody_history\".\"change_type\" in ('custody_taken','custody_transferred','custody_released')) = (\"inventory_custody_history\".\"previous_manager_staff_id\" is null and \"inventory_custody_history\".\"new_manager_staff_id\" is null)"
+        },
+        "inventory_custody_history_reason_required": {
+          "name": "inventory_custody_history_reason_required",
+          "value": "\"inventory_custody_history\".\"change_type\" in ('custody_taken','manager_assigned') or \"inventory_custody_history\".\"reason\" is not null"
+        },
+        "inventory_custody_history_reason_check": {
+          "name": "inventory_custody_history_reason_check",
+          "value": "(\"inventory_custody_history\".\"reason\" is null or \"inventory_custody_history\".\"reason\" in ('teacher_transfer', 'staff_departure', 'damage_repair', 'class_reallocation', 'long_absence', 'returned_to_store', 'misassignment', 'other'))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_disposal": {
+      "name": "inventory_disposal",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "method": {
+          "name": "method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending_approval'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estimated_value": {
+          "name": "estimated_value",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requested_by_staff_id": {
+          "name": "requested_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "approved_by_staff_id": {
+          "name": "approved_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalized_by_staff_id": {
+          "name": "finalized_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalized_at": {
+          "name": "finalized_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_by_staff_id": {
+          "name": "cancelled_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancellation_reason": {
+          "name": "cancellation_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_disposal_item_id_idx": {
+          "name": "inventory_disposal_item_id_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_disposal_status_created_at_idx": {
+          "name": "inventory_disposal_status_created_at_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_disposal_requested_at_idx": {
+          "name": "inventory_disposal_requested_at_idx",
+          "columns": [
+            {
+              "expression": "requested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_disposal_item_id_inventory_item_id_fk": {
+          "name": "inventory_disposal_item_id_inventory_item_id_fk",
+          "tableFrom": "inventory_disposal",
+          "tableTo": "inventory_item",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_disposal_requested_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_requested_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_disposal",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "requested_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_disposal_approved_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_approved_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_disposal",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "approved_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_disposal_finalized_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_finalized_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_disposal",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "finalized_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_disposal_cancelled_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_cancelled_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_disposal",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "cancelled_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_disposal_qty_positive": {
+          "name": "inventory_disposal_qty_positive",
+          "value": "\"inventory_disposal\".\"qty\" > 0"
+        },
+        "inventory_disposal_method_check": {
+          "name": "inventory_disposal_method_check",
+          "value": "\"inventory_disposal\".\"method\" in ('Disposal', 'Recycling', 'Auction', 'Write-Off', 'Donation', 'Return to Supplier')"
+        },
+        "inventory_disposal_status_check": {
+          "name": "inventory_disposal_status_check",
+          "value": "\"inventory_disposal\".\"status\" in ('pending_approval', 'approved', 'disposed', 'recycled', 'auctioned', 'written_off', 'donated', 'returned_to_supplier', 'cancelled')"
+        },
+        "inventory_disposal_estimated_value_nonneg": {
+          "name": "inventory_disposal_estimated_value_nonneg",
+          "value": "\"inventory_disposal\".\"estimated_value\" is null or \"inventory_disposal\".\"estimated_value\" >= 0"
+        },
+        "inventory_disposal_approval_state": {
+          "name": "inventory_disposal_approval_state",
+          "value": "(\"inventory_disposal\".\"approved_by_staff_id\" is null) = (\"inventory_disposal\".\"approved_at\" is null)"
+        },
+        "inventory_disposal_finalization_state": {
+          "name": "inventory_disposal_finalization_state",
+          "value": "(\"inventory_disposal\".\"finalized_by_staff_id\" is null) = (\"inventory_disposal\".\"finalized_at\" is null)"
+        },
+        "inventory_disposal_cancellation_state": {
+          "name": "inventory_disposal_cancellation_state",
+          "value": "(\"inventory_disposal\".\"cancelled_by_staff_id\" is null) = (\"inventory_disposal\".\"cancelled_at\" is null)"
+        },
+        "inventory_disposal_status_state": {
+          "name": "inventory_disposal_status_state",
+          "value": "(\n        \"inventory_disposal\".\"status\" = 'pending_approval'\n        and \"inventory_disposal\".\"approved_by_staff_id\" is null\n        and \"inventory_disposal\".\"approved_at\" is null\n        and \"inventory_disposal\".\"finalized_by_staff_id\" is null\n        and \"inventory_disposal\".\"finalized_at\" is null\n        and \"inventory_disposal\".\"cancelled_by_staff_id\" is null\n        and \"inventory_disposal\".\"cancelled_at\" is null\n      ) or (\n        \"inventory_disposal\".\"status\" = 'approved'\n        and \"inventory_disposal\".\"approved_by_staff_id\" is not null\n        and \"inventory_disposal\".\"approved_at\" is not null\n        and \"inventory_disposal\".\"finalized_by_staff_id\" is null\n        and \"inventory_disposal\".\"finalized_at\" is null\n        and \"inventory_disposal\".\"cancelled_by_staff_id\" is null\n        and \"inventory_disposal\".\"cancelled_at\" is null\n      ) or (\n        \"inventory_disposal\".\"status\" in ('disposed', 'recycled', 'auctioned', 'written_off', 'donated', 'returned_to_supplier')\n        and \"inventory_disposal\".\"approved_by_staff_id\" is not null\n        and \"inventory_disposal\".\"approved_at\" is not null\n        and \"inventory_disposal\".\"finalized_by_staff_id\" is not null\n        and \"inventory_disposal\".\"finalized_at\" is not null\n        and \"inventory_disposal\".\"cancelled_by_staff_id\" is null\n        and \"inventory_disposal\".\"cancelled_at\" is null\n      ) or (\n        \"inventory_disposal\".\"status\" = 'cancelled'\n        and \"inventory_disposal\".\"finalized_by_staff_id\" is null\n        and \"inventory_disposal\".\"finalized_at\" is null\n        and \"inventory_disposal\".\"cancelled_by_staff_id\" is not null\n        and \"inventory_disposal\".\"cancelled_at\" is not null\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_disposal_status_history": {
+      "name": "inventory_disposal_status_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "disposal_id": {
+          "name": "disposal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_status": {
+          "name": "from_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_status": {
+          "name": "to_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "changed_by_staff_id": {
+          "name": "changed_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_disposal_status_history_disposal_id_idx": {
+          "name": "inventory_disposal_status_history_disposal_id_idx",
+          "columns": [
+            {
+              "expression": "disposal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_disposal_status_history_created_at_idx": {
+          "name": "inventory_disposal_status_history_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_disposal_status_history_disposal_id_inventory_disposal_id_fk": {
+          "name": "inventory_disposal_status_history_disposal_id_inventory_disposal_id_fk",
+          "tableFrom": "inventory_disposal_status_history",
+          "tableTo": "inventory_disposal",
+          "columnsFrom": [
+            "disposal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_disposal_status_history_changed_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_status_history_changed_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_disposal_status_history",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "changed_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_disposal_status_history_from_status_check": {
+          "name": "inventory_disposal_status_history_from_status_check",
+          "value": "(\"inventory_disposal_status_history\".\"from_status\" is null or \"inventory_disposal_status_history\".\"from_status\" in ('pending_approval', 'approved', 'disposed', 'recycled', 'auctioned', 'written_off', 'donated', 'returned_to_supplier', 'cancelled'))"
+        },
+        "inventory_disposal_status_history_to_status_check": {
+          "name": "inventory_disposal_status_history_to_status_check",
+          "value": "\"inventory_disposal_status_history\".\"to_status\" in ('pending_approval', 'approved', 'disposed', 'recycled', 'auctioned', 'written_off', 'donated', 'returned_to_supplier', 'cancelled')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_disposal_unit": {
+      "name": "inventory_disposal_unit",
+      "schema": "",
+      "columns": {
+        "disposal_id": {
+          "name": "disposal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "released_at": {
+          "name": "released_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "inventory_disposal_unit_unit_id_idx": {
+          "name": "inventory_disposal_unit_unit_id_idx",
+          "columns": [
+            {
+              "expression": "unit_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_disposal_unit_active_unique": {
+          "name": "inventory_disposal_unit_active_unique",
+          "columns": [
+            {
+              "expression": "unit_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"inventory_disposal_unit\".\"released_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_disposal_unit_disposal_id_inventory_disposal_id_fk": {
+          "name": "inventory_disposal_unit_disposal_id_inventory_disposal_id_fk",
+          "tableFrom": "inventory_disposal_unit",
+          "tableTo": "inventory_disposal",
+          "columnsFrom": [
+            "disposal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_disposal_unit_unit_id_inventory_unit_id_fk": {
+          "name": "inventory_disposal_unit_unit_id_inventory_unit_id_fk",
+          "tableFrom": "inventory_disposal_unit",
+          "tableTo": "inventory_unit",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "inventory_disposal_unit_pk": {
+          "name": "inventory_disposal_unit_pk",
+          "columns": [
+            "disposal_id",
+            "unit_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.inventory_issue": {
+      "name": "inventory_issue",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "receiver_name": {
+          "name": "receiver_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "receiver_department": {
+          "name": "receiver_department",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receiver_phone": {
+          "name": "receiver_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_return_date": {
+          "name": "expected_return_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issued_by_staff_id": {
+          "name": "issued_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_issue_item_id_idx": {
+          "name": "inventory_issue_item_id_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_issue_issued_at_idx": {
+          "name": "inventory_issue_issued_at_idx",
+          "columns": [
+            {
+              "expression": "issued_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_issue_item_id_inventory_item_id_fk": {
+          "name": "inventory_issue_item_id_inventory_item_id_fk",
+          "tableFrom": "inventory_issue",
+          "tableTo": "inventory_item",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_issue_issued_by_staff_id_staff_id_fk": {
+          "name": "inventory_issue_issued_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_issue",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "issued_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_issue_qty_positive": {
+          "name": "inventory_issue_qty_positive",
+          "value": "\"inventory_issue\".\"qty\" > 0"
+        },
+        "inventory_issue_receiver_not_blank": {
+          "name": "inventory_issue_receiver_not_blank",
+          "value": "length(trim(\"inventory_issue\".\"receiver_name\")) > 0"
+        },
+        "inventory_issue_expected_return_date_iso": {
+          "name": "inventory_issue_expected_return_date_iso",
+          "value": "(\"inventory_issue\".\"expected_return_date\" is null or \"inventory_issue\".\"expected_return_date\" ~ '^\\d{4}-\\d{2}-\\d{2}$')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_issue_unit": {
+      "name": "inventory_issue_unit",
+      "schema": "",
+      "columns": {
+        "issue_id": {
+          "name": "issue_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "inventory_issue_unit_issue_id_inventory_issue_id_fk": {
+          "name": "inventory_issue_unit_issue_id_inventory_issue_id_fk",
+          "tableFrom": "inventory_issue_unit",
+          "tableTo": "inventory_issue",
+          "columnsFrom": [
+            "issue_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_issue_unit_unit_id_inventory_unit_id_fk": {
+          "name": "inventory_issue_unit_unit_id_inventory_unit_id_fk",
+          "tableFrom": "inventory_issue_unit",
+          "tableTo": "inventory_unit",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "inventory_issue_unit_pk": {
+          "name": "inventory_issue_unit_pk",
+          "columns": [
+            "issue_id",
+            "unit_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "inventory_issue_unit_unit_unique": {
+          "name": "inventory_issue_unit_unit_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "unit_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.inventory_item": {
+      "name": "inventory_item",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "sku": {
+          "name": "sku",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "unit": {
+          "name": "unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unit'"
+        },
+        "min_qty": {
+          "name": "min_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "qty": {
+          "name": "qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "borrowed_qty": {
+          "name": "borrowed_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "borrowable": {
+          "name": "borrowable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Good'"
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "purchase_value": {
+          "name": "purchase_value",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_value": {
+          "name": "current_value",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_staff_id": {
+          "name": "created_by_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manager_staff_id": {
+          "name": "manager_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "custodian_staff_id": {
+          "name": "custodian_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_item_category_idx": {
+          "name": "inventory_item_category_idx",
+          "columns": [
+            {
+              "expression": "category_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_item_manager_staff_idx": {
+          "name": "inventory_item_manager_staff_idx",
+          "columns": [
+            {
+              "expression": "manager_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_item_custodian_staff_idx": {
+          "name": "inventory_item_custodian_staff_idx",
+          "columns": [
+            {
+              "expression": "custodian_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_item_deleted_at_idx": {
+          "name": "inventory_item_deleted_at_idx",
+          "columns": [
+            {
+              "expression": "deleted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_item_name_lower_idx": {
+          "name": "inventory_item_name_lower_idx",
+          "columns": [
+            {
+              "expression": "lower(\"name\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_item_category_id_inventory_category_id_fk": {
+          "name": "inventory_item_category_id_inventory_category_id_fk",
+          "tableFrom": "inventory_item",
+          "tableTo": "inventory_category",
+          "columnsFrom": [
+            "category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_item_created_by_staff_id_staff_id_fk": {
+          "name": "inventory_item_created_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_item",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "created_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_item_manager_staff_id_staff_id_fk": {
+          "name": "inventory_item_manager_staff_id_staff_id_fk",
+          "tableFrom": "inventory_item",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "manager_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_item_custodian_staff_id_staff_id_fk": {
+          "name": "inventory_item_custodian_staff_id_staff_id_fk",
+          "tableFrom": "inventory_item",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "custodian_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "inventory_item_sku_unique": {
+          "name": "inventory_item_sku_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "sku"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "inventory_item_name_not_blank": {
+          "name": "inventory_item_name_not_blank",
+          "value": "length(trim(\"inventory_item\".\"name\")) > 0"
+        },
+        "inventory_item_sku_format": {
+          "name": "inventory_item_sku_format",
+          "value": "\"inventory_item\".\"sku\" ~ '^INV-[0-9]{5}$'"
+        },
+        "inventory_item_sku_upper": {
+          "name": "inventory_item_sku_upper",
+          "value": "\"inventory_item\".\"sku\" = upper(\"inventory_item\".\"sku\")"
+        },
+        "inventory_item_condition_check": {
+          "name": "inventory_item_condition_check",
+          "value": "\"inventory_item\".\"condition\" in ('Good', 'Fair', 'Damaged', 'Under Repair')"
+        },
+        "inventory_item_counters_nonneg": {
+          "name": "inventory_item_counters_nonneg",
+          "value": "\"inventory_item\".\"qty\" >= 0 AND \"inventory_item\".\"borrowed_qty\" >= 0"
+        },
+        "inventory_item_counters_within_qty": {
+          "name": "inventory_item_counters_within_qty",
+          "value": "\"inventory_item\".\"borrowed_qty\" <= \"inventory_item\".\"qty\""
+        },
+        "inventory_item_min_qty": {
+          "name": "inventory_item_min_qty",
+          "value": "\"inventory_item\".\"min_qty\" >= 0"
+        },
+        "inventory_item_values_nonneg": {
+          "name": "inventory_item_values_nonneg",
+          "value": "(\"inventory_item\".\"purchase_value\" is null or \"inventory_item\".\"purchase_value\" >= 0) and (\"inventory_item\".\"current_value\" is null or \"inventory_item\".\"current_value\" >= 0)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_transaction": {
+      "name": "inventory_transaction",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "actor_staff_id": {
+          "name": "actor_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty_before": {
+          "name": "qty_before",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty_after": {
+          "name": "qty_after",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "borrowed_qty_before": {
+          "name": "borrowed_qty_before",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "borrowed_qty_after": {
+          "name": "borrowed_qty_after",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meta": {
+          "name": "meta",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_transaction_item_id_idx": {
+          "name": "inventory_transaction_item_id_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_transaction_action_created_at_idx": {
+          "name": "inventory_transaction_action_created_at_idx",
+          "columns": [
+            {
+              "expression": "action",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_transaction_created_at_idx": {
+          "name": "inventory_transaction_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_transaction_actor_staff_id_staff_id_fk": {
+          "name": "inventory_transaction_actor_staff_id_staff_id_fk",
+          "tableFrom": "inventory_transaction",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "actor_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_transaction_item_id_inventory_item_id_fk": {
+          "name": "inventory_transaction_item_id_inventory_item_id_fk",
+          "tableFrom": "inventory_transaction",
+          "tableTo": "inventory_item",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_transaction_action_check": {
+          "name": "inventory_transaction_action_check",
+          "value": "\"inventory_transaction\".\"action\" in ('created', 'edited', 'deleted', 'stock_in', 'stock_out', 'issued', 'borrowed', 'returned', 'custody_taken', 'custody_transferred', 'custody_released', 'manager_assigned', 'manager_changed', 'manager_cleared', 'disposal_requested', 'disposal_approved', 'disposal_finalized')"
+        },
+        "inventory_transaction_counters_nonneg": {
+          "name": "inventory_transaction_counters_nonneg",
+          "value": "\"inventory_transaction\".\"qty_before\" >= 0\n        and \"inventory_transaction\".\"qty_after\" >= 0\n        and \"inventory_transaction\".\"borrowed_qty_before\" >= 0\n        and \"inventory_transaction\".\"borrowed_qty_after\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_unit": {
+      "name": "inventory_unit",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unique_no": {
+          "name": "unique_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_unique_no": {
+          "name": "normalized_unique_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'available'"
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Good'"
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purchase_value": {
+          "name": "purchase_value",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_value": {
+          "name": "current_value",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "inventory_unit_item_id_idx": {
+          "name": "inventory_unit_item_id_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "inventory_unit_status_created_at_idx": {
+          "name": "inventory_unit_status_created_at_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_unit_item_id_inventory_item_id_fk": {
+          "name": "inventory_unit_item_id_inventory_item_id_fk",
+          "tableFrom": "inventory_unit",
+          "tableTo": "inventory_item",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "inventory_unit_normalized_unique_no_unique": {
+          "name": "inventory_unit_normalized_unique_no_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "normalized_unique_no"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "inventory_unit_unique_no_not_blank": {
+          "name": "inventory_unit_unique_no_not_blank",
+          "value": "length(trim(\"inventory_unit\".\"unique_no\")) > 0"
+        },
+        "inventory_unit_status_check": {
+          "name": "inventory_unit_status_check",
+          "value": "\"inventory_unit\".\"status\" in ('available', 'borrowed', 'issued', 'disposed', 'removed')"
+        },
+        "inventory_unit_condition_check": {
+          "name": "inventory_unit_condition_check",
+          "value": "\"inventory_unit\".\"condition\" in ('Good', 'Fair', 'Damaged', 'Under Repair')"
+        },
+        "inventory_unit_values_nonneg": {
+          "name": "inventory_unit_values_nonneg",
+          "value": "(\"inventory_unit\".\"purchase_value\" is null or \"inventory_unit\".\"purchase_value\" >= 0) and (\"inventory_unit\".\"current_value\" is null or \"inventory_unit\".\"current_value\" >= 0)"
+        }
+      },
       "isRLSEnabled": false
     }
   },

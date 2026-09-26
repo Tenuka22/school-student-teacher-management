@@ -168,7 +168,9 @@ Each cell contains:
 
 **No Classes**: Shows "No classes available. Create classes first in the Classes section."
 
-**No Periods Configured**: Shows "Period configuration not yet set up. Contact administrator."
+**No Periods Configured**: Shows "Period configuration not yet set up. Contact administrator." — cannot occur; the period list is code, not data.
+
+**No class selected**: The SLOTS FILLED figure shows "—", not `0`, and the grid area says "Select a section, grade and class above to view its timetable." Nothing has been read yet, so no count is printed.
 
 ## Loading States
 
@@ -182,6 +184,7 @@ Each cell contains:
 - **Conflict Error**: Red banner in sheet: "⚠ Conflict: [Details]"
 - **Mutation Error**: Toast with message
 - **Fetch Error**: Error card above grid
+- **Conflict scan failed**: the CONFLICTS tile prints no number. It shows "Could not be checked — this timetable may or may not have double-bookings", the server's message and a "Re-check" button calling `conflictsQuery.refetch()`, in muted text inside a dashed border rather than the `text-destructive` used for a real finding. A `0` means the server checked and found nothing; a failed check must never look like one.
 
 ## Form Validation
 

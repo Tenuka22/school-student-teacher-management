@@ -178,3 +178,13 @@ export const requireAssignmentPermission = (action: PermissionAction) =>
 /** Qualification management: requires qualification:create etc. */
 export const requireQualificationPermission = (action: PermissionAction) =>
   publicProcedure.use(requirePermission("qualification", action));
+
+/**
+ * `requireInventoryPermission("read")` is reachable by the `teacher` role, so
+ * any inventory read procedure built on it MUST scope its own result set to
+ * the caller — the permission alone does not. School-wide ledger reads belong
+ * on `adminProcedure`.
+ */
+/** Inventory management: requires inventory:create or inventory:read etc. */
+export const requireInventoryPermission = (action: PermissionAction) =>
+  publicProcedure.use(requirePermission("inventory", action));

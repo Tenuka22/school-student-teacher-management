@@ -8,7 +8,7 @@ import { adminProcedure } from "../../../index";
 
 /**
  * List all period assignments for a class in a given academic year.
- * Returns a timetable grid: (dayOfWeek, periodNumber) â†’ (subject, teacher).
+ * Returns a timetable grid: (dayOfWeek, periodNumber) → (subject, teacher).
  */
 export const listClassTimetable = adminProcedure
   .input(

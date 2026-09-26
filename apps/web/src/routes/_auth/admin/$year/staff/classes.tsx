@@ -34,6 +34,9 @@ const RouteComponent = () => {
         classes={page.classes}
         staff={page.staffList}
         isLoading={page.isListLoading}
+        isError={page.isListError}
+        errorMessage={page.listErrorMessage}
+        onRetry={page.handleRetryList}
         onCreateClick={page.handleCreateClick}
         onEditClick={page.handleEditClick}
         onAssignTeacherClick={page.handleAssignTeacherClick}

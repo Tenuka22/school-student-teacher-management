@@ -1,5 +1,7 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+
+import { QueryErrorPanel } from "@/components/query-error-panel";
 
 import type { AdminOverview } from "./admin-overview";
 
@@ -279,6 +281,14 @@ export const NeedsAttention = ({
 const QUICK_LINKS = [
   { label: "Add teacher", to: "/admin/$year/staff/teachers" },
   { label: "Classes", to: "/admin/$year/staff/classes" },
+  // The school-wide equipment register sits between Classes and Periods here for
+  // the same reason it does in the sidebar's `staffNav`: it is the fifth thing
+  // that makes a year work, after the roster, the classes, the timetable and the
+  // assignments. It was the one page on this site with no entry point at all —
+  // reachable only by typing `/admin/2026/staff/inventory` — which is precisely
+  // the "every button on the page was inert" failure this module's banner
+  // records, arrived at from the other direction.
+  { label: "Equipment", to: "/admin/$year/staff/inventory" },
   { label: "Periods", to: "/admin/$year/staff/periods" },
   { label: "Teacher timetable", to: "/admin/$year/staff/teacher-timetable" },
   { label: "Attendance", to: "/admin/$year/staff/attendance" },
@@ -288,54 +298,54 @@ const QUICK_LINKS = [
   { label: "Historical data", to: "/admin/$year/staff/historical-data" },
 ] as const;
 
-/** Every page, reachable in one click. Each of these navigates somewhere. */
-export const GoTo = ({ year }: { year: string }) => {
-  const navigate = useNavigate();
-
-  return (
-    <div className="border-primary/14 bg-card border px-[22px] py-5">
-      <h2 className="font-heading text-primary mb-3.5 text-[23px] font-semibold">
-        Go to
-      </h2>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2.5">
-        {QUICK_LINKS.map((action) => (
-          <button
-            key={action.to}
-            type="button"
-            className="border-primary/22 text-primary hover:border-primary hover:bg-muted border px-3.5 py-3 text-left text-[12.5px] font-bold transition-colors"
-            onClick={() => navigate({ params: { year }, to: action.to })}
-          >
-            {action.label}
-          </button>
-        ))}
-      </div>
+/**
+ * Every page, reachable in one click. Each of these navigates somewhere.
+ *
+ * A real `<Link>`, not a `<button>` calling `navigate`. These were buttons, and
+ * a button that navigates is the one entry point on a page of entry points that
+ * a keyboard user cannot open in a new tab, a screen reader cannot announce as
+ * a link, and a right-click cannot reach — which is the same class of "looks
+ * clickable, is not" problem the rest of this file exists to undo. The grid is a
+ * list of destinations, so it is made of links.
+ */
+export const GoTo = ({ year }: { year: string }) => (
+  <div className="border-primary/14 bg-card border px-[22px] py-5">
+    <h2 className="font-heading text-primary mb-3.5 text-[23px] font-semibold">
+      Go to
+    </h2>
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2.5">
+      {QUICK_LINKS.map((action) => (
+        <Link
+          key={action.to}
+          className="border-primary/22 text-primary hover:border-primary hover:bg-muted border px-3.5 py-3 text-left text-[12.5px] font-bold transition-colors"
+          params={{ year }}
+          to={action.to}
+        >
+          {action.label}
+        </Link>
+      ))}
     </div>
-  );
-};
+  </div>
+);
 
+/**
+ * The shared failed-read panel, with this page's own default title.
+ *
+ * The panel itself is shared, because a failed read must look the same wherever
+ * it happens — a second error component is how two screens start disagreeing
+ * about what a failure means. The title stays overridable because a panel that
+ * cannot say *which* read failed asks the reader to guess, and the admin
+ * overview is not the only page that needs one.
+ */
 export const ErrorPanel = ({
   message,
   onRetry,
+  title = "This year’s figures could not be loaded",
 }: {
   message: string;
   onRetry: () => void;
-}) => (
-  <div className="border-destructive/30 bg-card border px-[22px] py-4">
-    <p className="text-destructive text-sm font-bold">
-      This year&rsquo;s figures could not be loaded
-    </p>
-    <p className="text-primary/65 mt-1 text-[13px]">
-      {message} Nothing has been changed — try again.
-    </p>
-    <button
-      type="button"
-      className="text-primary border-primary/30 hover:border-primary mt-3 border px-3 py-1.5 text-xs font-bold transition-colors"
-      onClick={onRetry}
-    >
-      Try again
-    </button>
-  </div>
-);
+  title?: string;
+}) => <QueryErrorPanel message={message} onRetry={onRetry} title={title} />;
 
 export const DashboardPanels = ({
   data,

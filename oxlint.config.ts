@@ -10,7 +10,11 @@ const jsPlugins = selectJsPlugins(["react-doctor"]);
 
 export default defineConfig({
   extends: [core, react, tanstack, vitest, tanstackJsPlugins, jsPlugins],
-  ignorePatterns: [...core.ignorePatterns, "packages/ui/**"],
+  ignorePatterns: [
+    ...core.ignorePatterns,
+    "packages/ui/**",
+    "packages/db/src/migrations/meta/**",
+  ],
   jsPlugins: jsPlugins.jsPlugins,
   settings: jsPluginSettings,
 });

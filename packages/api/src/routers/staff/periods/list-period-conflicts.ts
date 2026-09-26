@@ -40,7 +40,7 @@ export const listPeriodConflicts = adminProcedure
         continue;
       }
       // If every overlapping row is explicitly marked combined, it's
-      // intentional (e.g. one teacher running several classes at once) â€”
+      // intentional (e.g. one teacher running several classes at once) —
       // not a conflict. Any unmarked row in an overlapping group is a real
       // accidental double-booking.
       const hasUnmarkedOverlap = group.some((r) => !r.isCombinedSession);

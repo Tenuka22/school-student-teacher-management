@@ -109,7 +109,7 @@ export const recordArrival = adminProcedure
 
         if (usage.shortLeavesUsed < policy.shortLeavesPerMonth) {
           status = "lateShortLeave";
-          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) â€” short leave ${usage.shortLeavesUsed + 1}/${policy.shortLeavesPerMonth} this month`;
+          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) — short leave ${usage.shortLeavesUsed + 1}/${policy.shortLeavesPerMonth} this month`;
           await tx
             .update(shortLeaveUsage)
             .set({ shortLeavesUsed: usage.shortLeavesUsed + 1 })
@@ -127,7 +127,7 @@ export const recordArrival = adminProcedure
               endPeriodNumber: policy.primaryEndPeriodNumber,
             })
           );
-          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) â€” Primary half day recorded`;
+          note = `Arrived ${input.arrivalTime} (after ${policy.arrivalCutoffTime}) — Primary half day recorded`;
         }
       }
 

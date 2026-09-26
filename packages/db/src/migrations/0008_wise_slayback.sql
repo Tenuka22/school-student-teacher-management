@@ -1,1 +1,0 @@
-ALTER TABLE "class_period_assignment" ADD COLUMN "is_combined_session" boolean DEFAULT false NOT NULL;

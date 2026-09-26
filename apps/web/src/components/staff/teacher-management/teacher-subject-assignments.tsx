@@ -163,7 +163,7 @@ const TeacherSubjectAssignmentsEditor = ({
             })
           }
         >
-          {replaceMutation.isPending ? "Savingâ€¦" : "Save subjects"}
+          {replaceMutation.isPending ? "Saving…" : "Save subjects"}
         </Button>
       </CardFooter>
     </>
@@ -226,7 +226,7 @@ export const TeacherSubjectAssignments = ({
       <Card>
         <CardHeader>
           <CardTitle>Teaching subjects</CardTitle>
-          <CardDescription>Loading subject assignmentsâ€¦</CardDescription>
+          <CardDescription>Loading subject assignments…</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <Skeleton className="h-8 w-full" />

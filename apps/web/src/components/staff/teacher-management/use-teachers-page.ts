@@ -259,12 +259,37 @@ export const useTeachersPage = (year: string) => {
       await updateMutation.mutateAsync({ id, ...data } as never);
       await listQuery.refetch();
     },
-    [listQuery, updateMutation]
+    [updateMutation, listQuery]
+  );
+
+  /**
+   * Re-read the roster, and the sentence to show when it could not be read.
+   *
+   * The error state is part of the page's state, not an accident of it: a
+   * request that failed knows nothing about the roster, and the empty state's
+   * "No teachers yet" is a claim about the College. `refetch` is the honest
+   * retry — it asks the server again rather than re-rendering the cached
+   * failure.
+   */
+  const handleRetryList = useCallback(() => {
+    void listQuery.refetch();
+  }, [listQuery]);
+
+  const listErrorMessage = useMemo(
+    () =>
+      formatApiErrorMessage(
+        listQuery.error,
+        "The server did not return the teacher roster."
+      ),
+    [listQuery.error]
   );
 
   return {
     teachers,
     listQuery,
+    isListError: listQuery.isError,
+    listErrorMessage,
+    handleRetryList,
     selectedAcademicYear,
     isCreateDialogOpen,
     handleCreateDialogOpenChange,

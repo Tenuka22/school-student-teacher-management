@@ -47,9 +47,17 @@ import {
 } from "@tabler/icons-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
+
 interface TeachersListProps {
   teachers: StaffListItem[] | undefined;
   isLoading: boolean;
+  /** The roster request failed. Kept separate from `isLoading` on purpose. */
+  isError: boolean;
+  /** The server's own words about the failure, for the error panel. */
+  errorMessage: string;
+  /** Must genuinely re-request the roster. */
+  onRetry: () => void;
   onCreateClick: () => void;
   onEditClick: (teacher: StaffListItem) => void;
   onViewClick: (teacher: StaffListItem) => void;
@@ -219,6 +227,9 @@ const TeacherRow = ({
 export const TeachersList = ({
   teachers,
   isLoading,
+  isError,
+  errorMessage,
+  onRetry,
   onCreateClick,
   onEditClick,
   onViewClick,
@@ -309,6 +320,121 @@ export const TeachersList = ({
   const hasResults = filteredTeachers.length > 0;
   const hasAnyTeachers = Boolean(teachers?.length);
 
+  /**
+   * The roster, in whichever state it is actually in.
+   *
+   * "No teachers yet — create the first teacher record to get started" is a
+   * claim about the College, and a request that 500s, times out or is refused
+   * also yields no rows. A screen that only asks "is the list empty?" prints
+   * that sentence on a failure: it cannot tell a school with no teachers from
+   * a request that learned nothing, so it confidently misinforms whoever reads
+   * it. So the failed read is answered first and in its own words, and the
+   * empty state is reachable only from a request that succeeded.
+   */
+  const renderRoster = () => {
+    if (isError) {
+      return (
+        <QueryErrorPanel
+          message={errorMessage}
+          onRetry={onRetry}
+          title="The teacher roster could not be loaded"
+        />
+      );
+    }
+
+    if (!hasAnyTeachers) {
+      return (
+        <Empty className="border-primary/22 min-h-[50vh] border border-dashed">
+          <EmptyTitle className="font-heading text-2xl">
+            No teachers yet
+          </EmptyTitle>
+          <EmptyDescription>
+            Create the first teacher record to get started
+          </EmptyDescription>
+          <EmptyContent>
+            <Button onClick={onCreateClick} className="mt-4">
+              <IconPlus data-icon="inline-start" />
+              Create Teacher
+            </Button>
+          </EmptyContent>
+        </Empty>
+      );
+    }
+
+    return (
+      <div className="border-primary/14 overflow-x-auto border">
+        <div className="border-primary/12 flex items-center gap-2 border-b p-3">
+          <IconSearch className="text-muted-foreground size-4 shrink-0" />
+          <label htmlFor="teacher-search" className="sr-only">
+            Search teachers
+          </label>
+          <Input
+            id="teacher-search"
+            placeholder="Search by name, email, phone, NIC or service number…"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
+          />
+        </div>
+        {hasResults ? (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-primary hover:bg-primary border-none">
+                <TableHead className="w-8">
+                  <Checkbox
+                    checked={
+                      filteredTeachers.length > 0 &&
+                      selectedFilteredCount === filteredTeachers.length
+                    }
+                    onCheckedChange={(checked) =>
+                      handleSelectAll(checked === true)
+                    }
+                    aria-label="Select visible teachers"
+                  />
+                </TableHead>
+                <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                  TEACHER
+                </TableHead>
+                <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                  CONTACT
+                </TableHead>
+                <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                  EMPLOYMENT
+                </TableHead>
+                <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
+                  ACCOUNT
+                </TableHead>
+                <TableHead className="text-accent h-11 w-40 text-xs font-extrabold tracking-[0.16em]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTeachers.map((teacher) => (
+                <TeacherRow
+                  key={teacher.id}
+                  teacher={teacher}
+                  isSelected={selectedIds.has(teacher.id)}
+                  onSelect={(checked) => handleSelectRow(teacher.id, checked)}
+                  onEditClick={() => onEditClick(teacher)}
+                  onViewClick={() => onViewClick(teacher)}
+                  onDeleteClick={() => onDeleteClick(teacher)}
+                  onManageTimetableClick={() => onManageTimetableClick(teacher)}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <Empty className="min-h-72 border-none">
+            <EmptyTitle>No teachers found</EmptyTitle>
+            <EmptyDescription>
+              No teacher on this year&rsquo;s roster matches that search. Clear
+              the search, or add a teacher to this year.
+            </EmptyDescription>
+          </Empty>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap justify-end gap-2">
@@ -362,95 +488,7 @@ export const TeachersList = ({
         </div>
       )}
 
-      {hasAnyTeachers ? (
-        <div className="border-primary/14 overflow-x-auto border">
-          <div className="border-primary/12 flex items-center gap-2 border-b p-3">
-            <IconSearch className="text-muted-foreground size-4 shrink-0" />
-            <label htmlFor="teacher-search" className="sr-only">
-              Search teachers
-            </label>
-            <Input
-              id="teacher-search"
-              placeholder="Search by name, email, phone, NIC or service number…"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
-            />
-          </div>
-          {hasResults ? (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-primary hover:bg-primary border-none">
-                  <TableHead className="w-8">
-                    <Checkbox
-                      checked={
-                        filteredTeachers.length > 0 &&
-                        selectedFilteredCount === filteredTeachers.length
-                      }
-                      onCheckedChange={(checked) =>
-                        handleSelectAll(checked === true)
-                      }
-                      aria-label="Select visible teachers"
-                    />
-                  </TableHead>
-                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    TEACHER
-                  </TableHead>
-                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    CONTACT
-                  </TableHead>
-                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    EMPLOYMENT
-                  </TableHead>
-                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    ACCOUNT
-                  </TableHead>
-                  <TableHead className="text-accent h-11 w-40 text-xs font-extrabold tracking-[0.16em]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTeachers.map((teacher) => (
-                  <TeacherRow
-                    key={teacher.id}
-                    teacher={teacher}
-                    isSelected={selectedIds.has(teacher.id)}
-                    onSelect={(checked) => handleSelectRow(teacher.id, checked)}
-                    onEditClick={() => onEditClick(teacher)}
-                    onViewClick={() => onViewClick(teacher)}
-                    onDeleteClick={() => onDeleteClick(teacher)}
-                    onManageTimetableClick={() =>
-                      onManageTimetableClick(teacher)
-                    }
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <Empty className="min-h-72 border-none">
-              <EmptyTitle>No teachers found</EmptyTitle>
-              <EmptyDescription>
-                No teacher on this year&rsquo;s roster matches that search.
-                Clear the search, or add a teacher to this year.
-              </EmptyDescription>
-            </Empty>
-          )}
-        </div>
-      ) : (
-        <Empty className="border-primary/22 min-h-[50vh] border border-dashed">
-          <EmptyTitle className="font-heading text-2xl">
-            No teachers yet
-          </EmptyTitle>
-          <EmptyDescription>
-            Create the first teacher record to get started
-          </EmptyDescription>
-          <EmptyContent>
-            <Button onClick={onCreateClick} className="mt-4">
-              <IconPlus data-icon="inline-start" />
-              Create Teacher
-            </Button>
-          </EmptyContent>
-        </Empty>
-      )}
+      {renderRoster()}
 
       <AlertDialog
         open={isDeleteDialogOpen}

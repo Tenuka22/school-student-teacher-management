@@ -56,7 +56,7 @@ export const getCurrentAcademicYear = createServerFn({ method: "GET" })
  */
 export const getAcademicYearByNumber = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .inputValidator(v.object({ year: v.number() }))
+  .validator(v.object({ year: v.number() }))
   .handler(async ({ data }): Promise<CurrentAcademicYear | null> => {
     const [row] = await db
       .select({

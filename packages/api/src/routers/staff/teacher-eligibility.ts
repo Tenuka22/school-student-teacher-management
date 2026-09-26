@@ -29,7 +29,22 @@ const activeOrUnsetEmployment = or(
   isNull(staff.employmentStatus)
 );
 
-const teachingStaff = and(
+/**
+ * "On the teaching roll and still employed", as a `where` fragment.
+ *
+ * **Exported because a second procedure needs it, and a third copy of this rule
+ * is a bug waiting to happen.** The rule is `staff_category = 'teacher' AND
+ * (employment_status = 'active' OR IS NULL)`, and a null status is allowed on
+ * purpose: nobody has confirmed it yet, and refusing those would lock a working
+ * teacher out of their own class because an administrator left one field blank.
+ * `listStaff` keeps a private `defaultTeachingStaff` that spells the same rule
+ * out again, and `listTeachersForAttendance` needs it too — so it lives here,
+ * once, and the callers that can import it do. Anything that needs the same rule
+ * in TypeScript rather than SQL (the marking folder's `isTeachingStaff`) still
+ * has to mirror it, because a guard that has to name *which* half of the rule
+ * failed cannot use a single opaque fragment.
+ */
+export const teachingStaff = and(
   eq(staff.staffCategory, "teacher"),
   activeOrUnsetEmployment
 );
