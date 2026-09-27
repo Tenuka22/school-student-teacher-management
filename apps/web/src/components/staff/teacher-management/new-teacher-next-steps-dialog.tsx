@@ -4,10 +4,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
-import { IconCalendarTime, IconId } from "@tabler/icons-react";
+import { IconCalendarTime, IconCopy, IconId } from "@tabler/icons-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -32,7 +33,18 @@ export const NewTeacherNextStepsDialog = ({
   onOpenChange,
   onManageTimetableClick,
 }: NewTeacherNextStepsDialogProps) => {
-  const [hasCopied, setHasCopied] = useState(false);
+  /**
+   * Whether the credentials are on the clipboard, and it resets when the dialog
+   * reopens.
+   *
+   * It used to be a plain `useState` that was only ever set to `true`, so a
+   * second teacher created in the same session opened this dialog already
+   * reading "Copied!" — a claim about a clipboard that still held the *first*
+   * teacher's password. Keying it off the teacher it belongs to is what makes
+   * the label true.
+   */
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  const hasCopied = copiedFor !== null && copiedFor === teacher?.id;
 
   const credentialsText =
     teacher && loginUsername && initialPassword
@@ -40,12 +52,29 @@ export const NewTeacherNextStepsDialog = ({
       : null;
 
   const handleCopyCredentials = async () => {
-    if (!credentialsText) {
+    if (!credentialsText || !teacher) {
       return;
     }
-    await navigator.clipboard.writeText(credentialsText);
-    setHasCopied(true);
-    toast.success("Credentials copied — share them with the teacher");
+
+    /*
+     * `navigator.clipboard` is not always there and not always allowed: a
+     * non-secure origin, a browser policy, or a permission the reader has
+     * refused. Every one of those threw out of an `async` event handler with
+     * nothing catching it, so the button silently did nothing and the label
+     * stayed "Copy Credentials" — an affordance that reliably fails and never
+     * says why. A refused copy is a message, not a shrug.
+     */
+    try {
+      await navigator.clipboard.writeText(credentialsText);
+      setCopiedFor(teacher.id);
+      toast.success("Credentials copied — share them with the teacher");
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message
+          ? `Could not copy to the clipboard: ${error.message}. Select the username and password and copy them by hand.`
+          : "Could not copy to the clipboard. Select the username and password and copy them by hand."
+      );
+    }
   };
 
   return (
@@ -60,45 +89,66 @@ export const NewTeacherNextStepsDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        {credentialsText && (
-          <div className="bg-muted space-y-2 rounded-md border p-3">
+        {credentialsText ? (
+          <div className="bg-muted flex flex-col gap-2 border p-3">
+            <p className="text-muted-foreground text-xs">
+              Shown once, immediately after the account is created. Copy them
+              now — they cannot be read back later.
+            </p>
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
-                <IconId className="size-4" />
+                <IconId className="size-4" aria-hidden="true" />
                 Username
               </span>
-              <code className="font-mono font-semibold">{loginUsername}</code>
+              <code className="font-mono font-semibold break-all">
+                {loginUsername}
+              </code>
             </div>
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">Initial password</span>
-              <code className="font-mono font-semibold">{initialPassword}</code>
+              <code className="font-mono font-semibold break-all">
+                {initialPassword}
+              </code>
             </div>
             <Button
+              type="button"
               size="sm"
               variant="outline"
               className="w-full"
               onClick={handleCopyCredentials}
             >
-              {hasCopied ? "Copied!" : "Copy Credentials"}
+              {hasCopied ? (
+                "Copied"
+              ) : (
+                <>
+                  <IconCopy data-icon="inline-start" />
+                  Copy credentials
+                </>
+              )}
             </Button>
           </div>
-        )}
+        ) : null}
 
         <div className="flex flex-col gap-2">
           <Button
+            type="button"
             variant="outline"
             className="justify-start"
             onClick={() => teacher && onManageTimetableClick(teacher)}
           >
-            <IconCalendarTime className="mr-2 size-4" />
-            Set Up Timetable
+            <IconCalendarTime data-icon="inline-start" />
+            Set up timetable
           </Button>
         </div>
-        <div className="flex justify-end">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+          >
             Done for now
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

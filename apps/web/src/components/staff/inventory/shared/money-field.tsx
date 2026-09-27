@@ -27,23 +27,6 @@ const MONEY_FORMAT_ERROR =
   "This is not a valid amount. Type digits with an optional decimal point and no comma, for example 1250.00";
 
 /**
- * The control id used when a caller supplies none.
- *
- * Kept as a literal so every existing caller — the item form, the stock dialogs, the
- * write-off — keeps exactly the DOM it had, and so a form with a single money field
- * has a readable id in the inspector rather than `:r7:`.
- *
- * **This used to be a hazard and is no longer one, which is the whole point of the
- * `id` prop below.** It was hardcoded here with no way to override it, so the write-off
- * dialog — which legitimately renders two of these against the same state, one for the
- * request and one for the certificate — put `inventory-money-field` in the document
- * twice. The second `<FieldLabel htmlFor>` then activated the *first* input, and the
- * second input had no accessible name at all. A caller that needs two must now pass
- * `id`; leaving this as the default is only safe because the override exists.
- */
-const DEFAULT_FIELD_ID = "inventory-money-field";
-
-/**
  * A money input that stays a string from the keystroke to the mutation.
  *
  * `purchaseValue` / `currentValue` are `numeric(14,2)` and reach the client as
@@ -65,8 +48,24 @@ const DEFAULT_FIELD_ID = "inventory-money-field";
  * most often, and an unassociated `FieldError` means the one message that
  * explains a rejected amount — plus the two sentences of constraint copy that
  * exist precisely so the user is not left guessing — is announced to nobody.
- * The hand-written fields in `item-dialogs.tsx` already did this; the shared
- * ones did not, which is the wrong way round.
+ *
+ * ## The control id, and why there is no default any more
+ *
+ * It used to be a literal, `inventory-money-field`, with no way to override it,
+ * and the write-off dialog — which legitimately renders two of these against the
+ * same state, one for the request and one for the certificate — put that id in
+ * the document twice. The second `<FieldLabel htmlFor>` activated the *first*
+ * input and the second input had no accessible name at all.
+ *
+ * An `id` prop was added to let a caller fix it, and then the literal was kept as
+ * the default "so every existing caller keeps exactly the DOM it had". **That is
+ * the wrong reason to keep a duplicated id in the document**, and the default is
+ * gone: the id is `useId()` unless a caller passes one, and the sub-ids
+ * (`-error`, `-description`, `-constraint`) are namespaced off whichever is in
+ * force. No caller selects on `#inventory-money-field` — it was never a hook, only
+ * an id — so nothing outside this file changes, and a form that renders two money
+ * fields without passing `id` now gets two distinct controls instead of two labels
+ * pointing at the first one.
  */
 export const MoneyField: React.FC<{
   value: string;
@@ -80,8 +79,8 @@ export const MoneyField: React.FC<{
    * The control's DOM id, and the namespace for this instance's `-error` /
    * `-description` / `-constraint` ids. **Pass this whenever a form can render
    * two of these** — the write-off dialog does, one for the request and one for
-   * the certificate, and a repeated id means the second label focuses the first
-   * field. Omit it only when a form has exactly one money field.
+   * the certificate — so a reader can tell the two apart in the DOM. Omit it when
+   * a form has exactly one money field and the generated id is fine.
    */
   id?: string;
 }> = ({
@@ -102,22 +101,18 @@ export const MoneyField: React.FC<{
   const shownError = isMalformed ? MONEY_FORMAT_ERROR : (error ?? null);
 
   /**
-   * `fieldId` is the control's id and the label's `htmlFor`. `idBase` is what the
-   * *referenced* ids are namespaced by, and it deliberately falls back to
-   * `useId` rather than to the literal when the caller passed nothing: the
-   * default `fieldId` is only safe because a two-instance form is expected to
-   * pass `id`, and namespacing the sub-ids off the literal would put
-   * `inventory-money-field-error` in the document twice in exactly the case the
-   * `id` prop exists to fix. When an `id` *is* passed the sub-ids are derived
-   * from it, so the DOM reads `writeoff-certificate-value-error` rather than
-   * `:r9:-error`.
+   * One id, and the sub-ids are namespaced off whichever of the two is in force.
+   * When a caller passes `id` the DOM reads
+   * `writeoff-certificate-value-error`, which is the readable form; otherwise it
+   * reads off the generated one, and the important property is the same either
+   * way: **two instances never share an id**, which is the defect the literal
+   * default existed to paper over.
    */
   const generatedId = useId();
-  const fieldId = id ?? DEFAULT_FIELD_ID;
-  const idBase = id ?? generatedId;
-  const errorId = `${idBase}-error`;
-  const descriptionId = `${idBase}-description`;
-  const constraintId = `${idBase}-constraint`;
+  const fieldId = id ?? generatedId;
+  const errorId = `${fieldId}-error`;
+  const descriptionId = `${fieldId}-description`;
+  const constraintId = `${fieldId}-constraint`;
 
   /**
    * Only the descriptions that are actually rendered are referenced — an
@@ -135,9 +130,8 @@ export const MoneyField: React.FC<{
 
   return (
     <Field data-invalid={Boolean(shownError)}>
-      <FieldLabel htmlFor={fieldId}>
+      <FieldLabel htmlFor={fieldId} required={required}>
         {label}
-        {required ? " *" : ""}
       </FieldLabel>
       <Input
         id={fieldId}

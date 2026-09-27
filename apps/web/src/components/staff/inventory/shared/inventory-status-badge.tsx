@@ -27,32 +27,42 @@ import type { InventoryItemStatus } from "@/components/staff/inventory/inventory
  */
 /* oxlint-disable react-doctor/only-export-components -- label helper lives with the badges it names */
 
+type BadgeVariant = React.ComponentProps<typeof Badge>["variant"];
+
 /**
- * The five treatments this file draws on, named for what they *mean* rather
- * than for the colours they happen to use.
+ * The treatments this file draws on, named for what they *mean* rather than for
+ * the colours they happen to use.
  *
- * They are declared once because the same five appear three times below — once
- * for the item status, once for the condition, once for the unit status — and
- * three copies of `border-destructive/40 bg-destructive/5 text-destructive` is
- * three chances for a later edit to make the register say two different things
- * with the same word.
+ * **Three of the four are `Badge`'s own purpose-built variants, and that is the
+ * point of this rewrite.** Each of them used to be a hand-rolled class string that
+ * happened to reproduce a variant `packages/ui/src/components/badge.tsx` already
+ * ships:
  *
- * `DESTRUCTIVE_STRONG` and `DESTRUCTIVE_SOFT` are the pair that carries the
- * out-of-stock / damaged distinction: same hue, deliberately different emphasis.
+ * | meaning | was | is |
+ * | --- | --- | --- |
+ * | nothing on hand | `"bg-destructive/10 text-destructive"` | `variant="destructive"` |
+ * | out with a borrower | `"border-accent/50 bg-accent/20 text-warning-ink"` | `variant="warning"` |
+ * | in and usable | `"border-success/30 bg-success/10 text-success"` | `variant="success"` |
+ * | present, something wrong with it | `"border-destructive/40 bg-destructive/5 text-destructive"` | `variant="outline"` + that fill |
  *
- * `WARNING` uses `text-warning-ink` and **not** `text-gold`. The border stays on
- * `accent/50` and the fill stays on `accent/20` — both are surfaces, both are fine
- * — but the ink does not: `--gold` on this badge's own `bg-accent/20` is 3.45:1,
- * and `Borrowed` is the single most important state in the register. `--warning-ink`
- * is the same hue at a lightness that clears 4.5:1 there (5.65:1); the arithmetic is
- * in `packages/ui/src/styles/globals.css`. `--gold` itself is untouched, because it
- * is used elsewhere in the app and re-tuning it is a product decision.
+ * The hand-rolled copies had to be kept in step by hand, and three of the four
+ * had already drifted from the primitive — which is exactly the failure the
+ * variants exist to prevent. `warning` is the one that matters: it is the
+ * register's `Borrowed` state, the single most important badge in the product,
+ * and `--gold` on its own `bg-accent/20` is 3.45:1 and **fails** AA body text.
+ * `variant="warning"` is `border-accent/50 bg-accent/20 text-warning-ink` at
+ * 5.65:1 on that same fill, so taking the variant rather than retyping the class
+ * is what guarantees the ratio survives the next edit to the primitive. The
+ * arithmetic is in `packages/ui/src/styles/globals.css`.
+ *
+ * `DESTRUCTIVE_SOFT` is the one string that stays, and it stays for a real
+ * reason: there is no *soft* destructive variant, and the out-of-stock /
+ * damaged distinction is load-bearing (see `ITEM_STATUS_TREATMENTS`). It rides
+ * `variant="outline"` rather than `variant="destructive"` so it is a different
+ * fill and not a `bg-destructive/*` fight with the variant's own.
  */
-const DESTRUCTIVE_STRONG = "bg-destructive/10 text-destructive";
 const DESTRUCTIVE_SOFT =
   "border-destructive/40 bg-destructive/5 text-destructive";
-const WARNING = "border-accent/50 bg-accent/20 text-warning-ink";
-const POSITIVE = "border-success/30 bg-success/10 text-success";
 const NEUTRAL_TREATMENT = "border-border text-muted-foreground";
 
 /**
@@ -74,10 +84,11 @@ const NEUTRAL_TREATMENT = "border-border text-muted-foreground";
  * unfamiliar status as readable words beats an empty-looking register. Degrade in the
  * *renderer*, guard in the *filter* — that ordering is deliberate.
  *
- * **Colour is never the only channel.** Every badge carries its status as text,
- * and `out_of_stock` and `damaged` differ in *emphasis* and *icon* as well as
- * hue, because they are different kinds of fact and a reader who cannot tell
- * them apart has been told the wrong thing about the store:
+ * **Colour is never the only channel, and neither is the icon.** Every badge
+ * carries its status as **text** — the word is in the element, not in a `title`
+ * and not in a class — and `out_of_stock` and `damaged` differ in *emphasis* and
+ * *icon* as well as hue, because they are different kinds of fact and a reader
+ * who cannot tell them apart has been told the wrong thing about the store:
  *
  * - `out_of_stock` is a **count**: nothing is on hand, whatever else is true.
  * - `damaged` is a **condition**: the stock exists, and something is wrong with
@@ -86,34 +97,38 @@ const NEUTRAL_TREATMENT = "border-border text-muted-foreground";
  *
  * Rendering both as the same red badge would make "we have none" and "we have
  * some, cracked" look like one state, and those two send a storekeeper to two
- * completely different places.
+ * completely different places. The icons are `aria-hidden` on purpose: they are
+ * the third channel for a *sighted* reader, and leaving them exposed would put an
+ * unnamed graphic in the accessibility tree beside a word that already says it.
  */
 const ITEM_STATUS_TREATMENTS: Record<
   string,
   {
     label: string;
-    className: string;
+    variant: BadgeVariant;
+    className?: string;
     Icon: React.ComponentType<{ className?: string }>;
   }
 > = {
   out_of_stock: {
     label: "Out of stock",
-    className: DESTRUCTIVE_STRONG,
+    variant: "destructive",
     Icon: IconPackageOff,
   },
   borrowed: {
     label: "Borrowed",
-    className: WARNING,
+    variant: "warning",
     Icon: IconUserCheck,
   },
   damaged: {
     label: "Damaged",
+    variant: "outline",
     className: DESTRUCTIVE_SOFT,
     Icon: IconTool,
   },
   available: {
     label: "Available",
-    className: POSITIVE,
+    variant: "success",
     Icon: IconCircleCheck,
   },
 };
@@ -135,6 +150,7 @@ export const ItemStatusBadge: React.FC<{ status: InventoryItemStatus }> = ({
 }) => {
   const treatment = ITEM_STATUS_TREATMENTS[status] ?? {
     label: itemStatusLabel(status),
+    variant: "outline" as const,
     className: NEUTRAL_TREATMENT,
     Icon: IconPackage,
   };
@@ -142,18 +158,21 @@ export const ItemStatusBadge: React.FC<{ status: InventoryItemStatus }> = ({
   const { Icon } = treatment;
 
   return (
-    <Badge variant="outline" className={treatment.className}>
-      <Icon />
+    <Badge variant={treatment.variant} className={treatment.className}>
+      <Icon aria-hidden="true" />
       {treatment.label}
     </Badge>
   );
 };
 
 /** The four condition treatments, keyed by the stored value the column holds. */
-const CONDITION_TREATMENTS: Record<string, string> = {
-  Damaged: DESTRUCTIVE_SOFT,
-  "Under Repair": WARNING,
-  Good: POSITIVE,
+const CONDITION_TREATMENTS: Record<
+  string,
+  { variant: BadgeVariant; className?: string }
+> = {
+  Damaged: { variant: "outline", className: DESTRUCTIVE_SOFT },
+  "Under Repair": { variant: "warning" },
+  Good: { variant: "success" },
 };
 
 /**
@@ -164,47 +183,71 @@ const CONDITION_TREATMENTS: Record<string, string> = {
  *
  * `Under Repair` is a distinct state rather than a flavour of `Damaged`,
  * because a repaired device comes back into service and a broken one does not,
- * and a register that collapsed them would hide items that are coming back. A
- * condition this file has not seen falls back to the neutral treatment and the
- * server's own label, so a fifth value degrades rather than disappearing.
+ * and a register that collapsed them would hide items that are coming back. It is
+ * the same `warning` variant as the `Borrowed` badge — gold ink on an amber fill
+ * at 5.65:1 — which is the point: one warning hue, one legibility floor, and the
+ * two states are told apart by their **words**, which is the only channel that
+ * carries both. A condition this file has not seen falls back to the neutral
+ * treatment and the server's own label, so a fifth value degrades rather than
+ * disappearing.
+ *
+ * `Fair` is deliberately neutral, and that is a claim rather than an omission:
+ * fair is the ordinary middle of a school's stock, not a warning, and painting
+ * it amber would put seven amber badges on a register whose actual warning count
+ * is one figure.
  */
 export const ConditionBadge: React.FC<{ condition: string }> = ({
   condition,
-}) => (
-  <Badge
-    variant="outline"
-    className={CONDITION_TREATMENTS[condition] ?? NEUTRAL_TREATMENT}
-  >
-    {itemConditionLabel(condition)}
-  </Badge>
-);
+}) => {
+  const treatment = CONDITION_TREATMENTS[condition] ?? {
+    variant: "outline" as const,
+    className: NEUTRAL_TREATMENT,
+  };
+
+  return (
+    <Badge variant={treatment.variant} className={treatment.className}>
+      {itemConditionLabel(condition)}
+    </Badge>
+  );
+};
 
 /** The five unit-status treatments, keyed by the stored value the column holds. */
-const UNIT_STATUS_TREATMENTS: Record<string, string> = {
-  available: POSITIVE,
-  borrowed: WARNING,
-  issued: DESTRUCTIVE_SOFT,
-  disposed: DESTRUCTIVE_SOFT,
+const UNIT_STATUS_TREATMENTS: Record<
+  string,
+  { variant: BadgeVariant; className?: string }
+> = {
+  available: { variant: "success" },
+  borrowed: { variant: "warning" },
+  issued: { variant: "outline", className: DESTRUCTIVE_SOFT },
+  disposed: { variant: "destructive" },
 };
 
 /**
  * One tagged unit's status, from `unitStatusLabel`.
  *
- * `issued` and `disposed` share the destructive treatment on purpose: from the
- * store's point of view they are the same answer — the school does not have it
- * any more — while `removed` is deliberately absent from the map and falls
- * through to neutral, because a removed unit was taken off the books as a detail
- * edit rather than written off, and painting it the same red would say the
- * school lost something it did not.
+ * `issued` and `disposed` are *both* destructive in substance — from the store's
+ * point of view they are the same answer, the school does not have it any more —
+ * but they are not the same *kind* of answer, so they are given the two
+ * destructive treatments this file has: `disposed` is the strong one, because the
+ * unit was written off and there is no path back; `issued` is the soft one, because
+ * the device left the school but is on a certificate naming who took it and can
+ * be produced. `removed` is deliberately absent from the map and falls through to
+ * neutral, because a removed unit was taken off the books as a detail edit rather
+ * than written off, and painting it the same red would say the school lost
+ * something it did not.
  */
-export const UnitStatusBadge: React.FC<{ status: string }> = ({ status }) => (
-  <Badge
-    variant="outline"
-    className={UNIT_STATUS_TREATMENTS[status] ?? NEUTRAL_TREATMENT}
-  >
-    {unitStatusLabel(status)}
-  </Badge>
-);
+export const UnitStatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const treatment = UNIT_STATUS_TREATMENTS[status] ?? {
+    variant: "outline" as const,
+    className: NEUTRAL_TREATMENT,
+  };
+
+  return (
+    <Badge variant={treatment.variant} className={treatment.className}>
+      {unitStatusLabel(status)}
+    </Badge>
+  );
+};
 
 /** The manager half: who is in charge of the item. Present or absent — never a gap. */
 const ManagerChip: React.FC<{ name: string }> = ({ name }) => (
@@ -212,7 +255,7 @@ const ManagerChip: React.FC<{ name: string }> = ({ name }) => (
     variant="outline"
     className="border-primary/30 bg-primary/10 text-primary max-w-full"
   >
-    <IconUserCheck />
+    <IconUserCheck aria-hidden="true" />
     <span className="truncate">Manager · {name}</span>
   </Badge>
 );
@@ -220,7 +263,7 @@ const ManagerChip: React.FC<{ name: string }> = ({ name }) => (
 /** The custodian half: who is physically holding it. Filled, because it is the fact being tracked. */
 const CustodianChip: React.FC<{ name: string }> = ({ name }) => (
   <Badge className="max-w-full">
-    <IconPackage />
+    <IconPackage aria-hidden="true" />
     <span className="truncate">Held by · {name}</span>
   </Badge>
 );
@@ -271,7 +314,7 @@ const GapChip: React.FC<{ text: string; detail: string }> = ({
     className="text-muted-foreground max-w-full border-dashed"
     title={detail}
   >
-    <IconBuildingWarehouse />
+    <IconBuildingWarehouse aria-hidden="true" />
     <span className="truncate">{text}</span>
     <span className="sr-only">. {detail}</span>
   </Badge>
@@ -340,7 +383,10 @@ export const CustodyBadge: React.FC<{
         text="In store · no manager"
         detail="This item has no manager and no custodian: it is in the store with nobody accountable for it. Assign a manager from the item's custody panel — that is a recorded change with a reason, not an edit to the item row."
       />
-      <IconUserX className="text-muted-foreground size-3.5 shrink-0" />
+      <IconUserX
+        aria-hidden="true"
+        className="text-muted-foreground size-3.5 shrink-0"
+      />
     </span>
   );
 };

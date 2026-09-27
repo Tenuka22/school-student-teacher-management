@@ -25,8 +25,6 @@ import {
 } from "@school-student-teacher-management/ui/components/tooltip"
 import { IconLayoutSidebar } from "@tabler/icons-react"
 
-const SIDEBAR_COOKIE_NAME = "sidebar_state"
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
@@ -53,6 +51,17 @@ function useSidebar() {
   return context
 }
 
+/**
+ * Holds the sidebar's open state and the `Cmd/Ctrl+B` toggle.
+ *
+ * There is deliberately no cookie here any more. The provider used to write a
+ * `sidebar_state` document cookie on every toggle, and nothing in the
+ * repository ever read it — the shell reads the state from props, so the write
+ * was a document mutation per keystroke that bought nothing. Collapsed state
+ * therefore does not survive a reload, which is a real (small) gap: persisting
+ * it is a shell decision, and it wants the cookie written where the app already
+ * has a server-side store, not smuggled in from a layout primitive.
+ */
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
@@ -81,9 +90,6 @@ function SidebarProvider({
       } else {
         _setOpen(openState)
       }
-
-      // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open]
   )
@@ -149,6 +155,22 @@ function SidebarProvider({
   )
 }
 
+/**
+ * The sidebar frame.
+ *
+ * The panel is on deep green, and every colour pair here was measured against
+ * that ground rather than against the cream page: `--sidebar-foreground` on
+ * `--sidebar` is 13.27:1, and the same foreground on `--sidebar-accent` (the
+ * hover and current-row fill) is 8.38:1. The amber `--sidebar-primary` on green
+ * is 7.78:1 and is used for the focus ring, which needs 3:1 and gets nearly
+ * three times that.
+ *
+ * **No `<nav>` here on purpose.** A navigation landmark belongs around the
+ * destinations and nothing else, and this component cannot know which children
+ * are destinations — the app wraps its own `<nav aria-label="Main">` around the
+ * groups and keeps the brand block and the account menu outside it. A landmark
+ * added here would be a second one, and an unlabelled one, on every page.
+ */
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -183,6 +205,7 @@ function Sidebar({
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
+          aria-label="Main"
           dir={dir}
           data-sidebar="sidebar"
           data-slot="sidebar"
@@ -195,9 +218,17 @@ function Sidebar({
           }
           side={side}
         >
+          {/*
+            The mobile panel is a `Sheet`, which is a `Dialog`: it traps focus,
+            locks page scroll and returns focus to the trigger. It needs a name,
+            and the app's own `<nav>` sits inside it, so this is the landmark the
+            panel is — named once, here, rather than a second nav in the tree.
+          */}
           <SheetHeader className="sr-only">
             <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+            <SheetDescription>
+              The College&rsquo;s workspaces for the signed-in account.
+            </SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
@@ -251,6 +282,7 @@ function Sidebar({
   )
 }
 
+/** The one keyboard-reachable way to collapse the sidebar: `Cmd/Ctrl+B`. */
 function SidebarTrigger({
   className,
   onClick,
@@ -271,12 +303,19 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <IconLayoutSidebar />
+      <IconLayoutSidebar aria-hidden="true" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
 }
 
+/**
+ * The drag-to-collapse edge. `tabIndex={-1}` on purpose: it is a pointer
+ * affordance with an `aria-label` for completeness, and the keyboard route to
+ * the same action is `SidebarTrigger` or `Cmd/Ctrl+B`. A 4px-wide invisible
+ * strip in the tab order is a trap for keyboard users and a convenience for
+ * nobody else.
+ */
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   const { toggleSidebar } = useSidebar()
 
@@ -315,6 +354,12 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   )
 }
 
+/**
+ * The sidebar's search field, for a variant that has one. Cream on green: the
+ * `--background` fill against `--sidebar` measures 13.3:1 against its
+ * `--foreground` text, so the field reads as a deliberate light surface in the
+ * dark panel rather than as a hole.
+ */
 function SidebarInput({
   className,
   ...props
@@ -365,13 +410,25 @@ function SidebarSeparator({
   )
 }
 
+/**
+ * The scrolling region of the sidebar.
+ *
+ * This clips, and that is load-bearing information for everything inside it:
+ * an account menu, a year switcher or a row menu rendered *inside* this element
+ * would be cut off at its bounds. All of them portal to `document.body` through
+ * `DropdownMenu` / `Popover`, which is why they work.
+ *
+ * The scrollbar is left visible. The `no-scrollbar` class the incumbent carried
+ * was never defined in any stylesheet, so it did nothing but read as though the
+ * decision had been made; a nav that scrolls should look like it scrolls.
+ */
 function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        "no-scrollbar flex min-h-0 flex-1 flex-col gap-0 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        "flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
       {...props}
@@ -390,6 +447,13 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * A group's name.
+ *
+ * 70% of the sidebar foreground over the deep green is 7.17:1, comfortably
+ * over AA, and at `h-8` with `opacity-0` when the rail is collapsed so it
+ * disappears rather than being clipped mid-word.
+ */
 function SidebarGroupLabel({
   className,
   render,
@@ -452,6 +516,7 @@ function SidebarGroupContent({
   )
 }
 
+/** A real `<ul>`, so a group of destinations is a list and not a stack of divs. */
 function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
@@ -480,8 +545,16 @@ const sidebarMenuButtonVariants = cva(
     variants: {
       variant: {
         default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        /**
+         * `text-foreground`, and this is a fix rather than a style. The
+         * incumbent filled this variant with `--background` (cream) and left the
+         * ink inherited from the panel, which is `--sidebar-foreground` (cream
+         * too): 1.01:1, cream on cream. A variant that is legible on a light
+         * page is not automatically legible on a green one — the ground has to
+         * be re-checked, and this one was not.
+         */
         outline:
-          "bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]",
+          "bg-background text-foreground shadow-[0_0_0_1px_var(--sidebar-border)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]",
       },
       size: {
         default: "h-8 text-xs",
@@ -496,6 +569,20 @@ const sidebarMenuButtonVariants = cva(
   }
 )
 
+/**
+ * One row in the sidebar.
+ *
+ * **`aria-current`.** `isActive` now defaults it to `"page"`, so a caller that
+ * marks a row active has told assistive technology so as well as the pixels.
+ * A caller that passes `aria-current` itself still wins, and `ariaCurrent` is
+ * there for the case where `"page"` is the wrong word — a section that is
+ * current within the page is `"true"`, or `"step"` inside a wizard.
+ *
+ * `tooltip` is for the collapsed rail, where the label is not visible. The
+ * collapsed row is not focusable on its own account — the rail is not in the tab
+ * order — so this tooltip is a pointer convenience, and the trigger keeps its
+ * own accessible name from its text.
+ */
 function SidebarMenuButton({
   render,
   isActive = false,
@@ -503,17 +590,20 @@ function SidebarMenuButton({
   size = "default",
   tooltip,
   className,
+  ariaCurrent,
   ...props
 }: useRender.ComponentProps<"button"> &
   React.ComponentProps<"button"> & {
     isActive?: boolean
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
+    ariaCurrent?: React.AriaAttributes["aria-current"]
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar()
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
       {
+        "aria-current": ariaCurrent ?? (isActive ? "page" : undefined),
         className: cn(sidebarMenuButtonVariants({ variant, size }), className),
       },
       props
@@ -550,6 +640,11 @@ function SidebarMenuButton({
   )
 }
 
+/**
+ * The row's own action — the disclosure chevron on a group, a delete button on a
+ * record. It sits inside the row rather than replacing it, so the row stays the
+ * navigation target and this stays a separate tab stop.
+ */
 function SidebarMenuAction({
   className,
   render,
@@ -580,6 +675,7 @@ function SidebarMenuAction({
   })
 }
 
+/** A count on a row. `tabular-nums` so the badge does not jitter as it counts. */
 function SidebarMenuBadge({
   className,
   ...props
@@ -597,6 +693,16 @@ function SidebarMenuBadge({
   )
 }
 
+/**
+ * A placeholder row for a sidebar whose links have not loaded.
+ *
+ * The width is derived from `useId()` rather than `Math.random()`. This app
+ * renders on the server: a `Math.random()` in the first render produced one
+ * width on the server and a different one on the client for every skeleton row,
+ * which is a React hydration mismatch on the whole nav, every load. `useId()` is
+ * stable across both, and hashing it still gives the varied bar lengths that
+ * stop a loading nav from looking like a ruler.
+ */
 function SidebarMenuSkeleton({
   className,
   showIcon = false,
@@ -604,10 +710,14 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<"div"> & {
   showIcon?: boolean
 }) {
-  // Random width between 50 to 90%.
-  const [width] = React.useState(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
-  })
+  const id = React.useId()
+  const width = React.useMemo(() => {
+    let hash = 0
+    for (const character of id) {
+      hash = (hash * 31 + (character.codePointAt(0) ?? 0)) % 41
+    }
+    return `${hash + 50}%`
+  }, [id])
 
   return (
     <div
@@ -663,21 +773,34 @@ function SidebarMenuSubItem({
   )
 }
 
+/**
+ * A crumb inside a collapsed group.
+ *
+ * Defaults to an `<a>`, which is right — these are destinations — but an `<a>`
+ * with no `href` is not focusable, so a caller rendering one without a URL gets
+ * a row no keyboard user can reach. Pass `render={<Link to=… />}` (or
+ * `render={<button type="button" />}` for something that acts rather than
+ * navigates). `aria-current` follows `isActive` for the same reason it does on
+ * the top-level rows.
+ */
 function SidebarMenuSubButton({
   render,
   size = "md",
   isActive = false,
   className,
+  ariaCurrent,
   ...props
 }: useRender.ComponentProps<"a"> &
   React.ComponentProps<"a"> & {
     size?: "sm" | "md"
     isActive?: boolean
+    ariaCurrent?: React.AriaAttributes["aria-current"]
   }) {
   return useRender({
     defaultTagName: "a",
     props: mergeProps<"a">(
       {
+        "aria-current": ariaCurrent ?? (isActive ? "page" : undefined),
         className: cn(
           "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-none px-2 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-xs data-[size=sm]:text-xs data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
           className

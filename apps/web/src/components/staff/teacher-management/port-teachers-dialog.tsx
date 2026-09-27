@@ -4,26 +4,34 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
 import {
   Empty,
   EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
   EmptyTitle,
 } from "@school-student-teacher-management/ui/components/empty";
+import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import {
   Table,
   TableBody,
+  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
+import { IconCalendarTime } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 interface PortTeachersDialogProps {
@@ -31,6 +39,8 @@ interface PortTeachersDialogProps {
   onOpenChange: (open: boolean) => void;
   academicYearId: string | undefined;
 }
+
+const plural = (count: number) => (count === 1 ? "" : "s");
 
 export const PortTeachersDialog = ({
   isOpen,
@@ -73,8 +83,20 @@ export const PortTeachersDialog = ({
     });
   };
 
+  const selectedCount = teachers.length - excluded.size;
+
+  /**
+   * Port, and then say what actually happened.
+   *
+   * The toast used to be one unconditional success: "Ported 0 teacher(s) to this
+   * year (7 already assigned)" is a green toast over a run that moved nothing,
+   * and it is the *expected* outcome the second time an administrator opens this
+   * dialog for a year they have already ported into. So a run that ported nobody
+   * says so in its own words and names the reason; a run that ported some says
+   * how many, and how many were skipped and why.
+   */
   const handlePort = async () => {
-    if (!academicYearId) {
+    if (!academicYearId || selectedCount === 0) {
       return;
     }
     try {
@@ -82,57 +104,126 @@ export const PortTeachersDialog = ({
         toAcademicYearId: academicYearId,
         excludeStaffIds: [...excluded],
       } as never)) as { ported: number; skipped: number };
+
       await queryClient.invalidateQueries();
-      toast.success(
-        `Ported ${result.ported} teacher(s) to this year (${result.skipped} already assigned)`
-      );
+
+      if (result.ported === 0) {
+        toast.info(
+          `Nothing was imported — all ${result.skipped} of the selected teacher${plural(result.skipped)} already hold a position in this year.`
+        );
+      } else {
+        toast.success(
+          `Imported ${result.ported} teacher${plural(result.ported)} into this year. ${result.skipped} already held a position here.`
+        );
+      }
+
       onOpenChange(false);
       setExcluded(new Set());
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to port teachers"
-      );
+      toast.error(formatApiErrorMessage(error, "Failed to port teachers"));
     }
   };
+
+  const { isLoading, isError } = previousTeachersQuery;
+  const hasPreviousYear = Boolean(data?.previousAcademicYearId);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Import Teachers from Previous Year</DialogTitle>
+          <DialogTitle>Import teachers from the previous year</DialogTitle>
           <DialogDescription>
             {data?.previousYear
               ? `Every teacher below held a position in ${data.previousYear}. Uncheck anyone not returning this year, then import the rest.`
               : "Loads the teachers who held a position in the year immediately before this one."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {!data?.previousAcademicYearId &&
-            !previousTeachersQuery.isLoading && (
-              <Empty className="min-h-[30vh] border-none">
+
+        {/*
+          `aria-busy` on the body, and the two states that were missing.
+
+          This dialog had exactly one branch for "no data": `data` is undefined
+          while the request is in flight *and* when it has failed, and both fell
+          into "No previous academic year" — a confident claim that the College
+          has no earlier year, printed by a request that had learned nothing. A
+          slow school LAN and a dropped connection both produced that sentence.
+          There is now a loading shape, a named failure with a retry, and the
+          empty state is reachable only from a request that succeeded and found
+          no earlier year.
+        */}
+        <div className="flex-1 overflow-y-auto px-6 py-4" aria-busy={isLoading}>
+          {isLoading ? (
+            <>
+              <span className="sr-only">
+                Loading the previous year&rsquo;s teachers…
+              </span>
+              <div aria-hidden="true" className="flex flex-col gap-3">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            </>
+          ) : null}
+
+          {isError ? (
+            <QueryErrorPanel
+              message={formatApiErrorMessage(
+                previousTeachersQuery.error,
+                "The server did not return the previous year's teachers."
+              )}
+              onRetry={() => {
+                void previousTeachersQuery.refetch();
+              }}
+              title="The previous year's teachers could not be loaded"
+            />
+          ) : null}
+
+          {!isLoading && !isError && !hasPreviousYear ? (
+            <Empty className="min-h-[30vh] border-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <IconCalendarTime aria-hidden="true" />
+                </EmptyMedia>
                 <EmptyTitle>No previous academic year</EmptyTitle>
                 <EmptyDescription>
-                  There&apos;s no earlier academic year to import teachers from.
+                  There&rsquo;s no earlier academic year to import teachers
+                  from.
                 </EmptyDescription>
-              </Empty>
-            )}
-
-          {!!data?.previousAcademicYearId && teachers.length === 0 && (
-            <Empty className="min-h-[30vh] border-none">
-              <EmptyTitle>No teachers found</EmptyTitle>
-              <EmptyDescription>
-                No one held a position in {data.previousYear}.
-              </EmptyDescription>
+              </EmptyHeader>
             </Empty>
-          )}
+          ) : null}
 
-          {teachers.length > 0 && (
+          {!isLoading &&
+          !isError &&
+          hasPreviousYear &&
+          teachers.length === 0 ? (
+            <Empty className="min-h-[30vh] border-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <IconCalendarTime aria-hidden="true" />
+                </EmptyMedia>
+                <EmptyTitle>No teachers found</EmptyTitle>
+                <EmptyDescription>
+                  No one held a position in {data?.previousYear}.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : null}
+
+          {teachers.length > 0 ? (
             <Table>
+              <TableCaption className="sr-only">
+                Teachers who held a position in {data?.previousYear}, and
+                whether they will be imported into this year
+              </TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">Import</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Positions</TableHead>
+                  <TableHead scope="col" className="w-12">
+                    Import
+                  </TableHead>
+                  <TableHead scope="col">Name</TableHead>
+                  <TableHead scope="col">Positions held last year</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -142,8 +233,9 @@ export const PortTeachersDialog = ({
                       <Checkbox
                         checked={!excluded.has(teacher.id)}
                         onCheckedChange={(checked) =>
-                          toggleExcluded(teacher.id, checked as boolean)
+                          toggleExcluded(teacher.id, checked === true)
                         }
+                        aria-label={`Import ${teacher.name} into this year`}
                       />
                     </TableCell>
                     <TableCell className="font-medium">
@@ -156,9 +248,10 @@ export const PortTeachersDialog = ({
                 ))}
               </TableBody>
             </Table>
-          )}
+          ) : null}
         </div>
-        <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
+
+        <DialogFooter className="shrink-0 gap-2 border-t px-6 py-4">
           <Button
             type="button"
             variant="outline"
@@ -167,15 +260,22 @@ export const PortTeachersDialog = ({
           >
             Cancel
           </Button>
+          {/*
+            Disabled on an empty selection, not merely on an empty list. Every
+            box could be unchecked, which left a live "Import 0 Teacher(s)"
+            button — a control whose only possible outcome was a toast saying
+            nothing had been imported.
+          */}
           <Button
             onClick={handlePort}
-            disabled={portMutation.isPending || teachers.length === 0}
+            disabled={portMutation.isPending || selectedCount === 0}
+            className="min-w-48"
           >
             {portMutation.isPending
-              ? "Importing..."
-              : `Import ${teachers.length - excluded.size} Teacher(s)`}
+              ? "Importing…"
+              : `Import ${selectedCount} teacher${plural(selectedCount)}`}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

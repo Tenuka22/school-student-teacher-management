@@ -1,8 +1,6 @@
 "use client";
 
-import {
-  Button,
-} from "@school-student-teacher-management/ui/components/button";
+import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Sheet,
   SheetContent,
@@ -14,11 +12,10 @@ import {
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import { IconSeedling } from "@tabler/icons-react";
 
+import { QueryErrorPanel } from "@/components/query-error-panel";
 import type { CategoryOption } from "@/components/staff/inventory/inventory-types";
-import {
-  InventoryEmptyState,
-  InventoryErrorState,
-} from "@/components/staff/inventory/shared";
+import { InventoryEmptyState } from "@/components/staff/inventory/shared";
+import { formatApiErrorMessage } from "@/lib/api-error";
 
 /**
  * The seeder's label, in one place, because there were two.
@@ -97,6 +94,13 @@ interface CategoryPanelBodyProps {
  * action it offers is the seeder, which exists precisely to close that gap — and,
  * now that categories are a closed set, the seeder is the *only* way a fresh
  * install ever gets one.
+ *
+ * The failure state is `QueryErrorPanel` and not `InventoryErrorState`, and the
+ * reason is the subject. That component's fallback sentence is "Could not load the
+ * inventory register" — which is this panel's *sibling* read, not this one. A
+ * storekeeper whose category read failed was told the register had failed to load,
+ * on a screen showing a perfectly good register. `QueryErrorPanel` takes the
+ * subject as a prop, so the panel names the thing that actually failed.
  */
 const CategoryPanelBody = ({
   categories,
@@ -107,15 +111,36 @@ const CategoryPanelBody = ({
   isSeedPending,
 }: CategoryPanelBodyProps) => {
   if (error) {
-    return <InventoryErrorState error={error} onRetry={onRetry} />;
+    return (
+      <QueryErrorPanel
+        message={formatApiErrorMessage(
+          error,
+          "The store's categories could not be read"
+        )}
+        onRetry={onRetry}
+        title="The store's categories could not be loaded"
+        note="No categories are listed. The items in the register are unaffected — this is only the category list, and it can be retried."
+      />
+    );
   }
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-2" aria-hidden="true">
-        {[0, 1, 2, 3].map((row) => (
-          <Skeleton key={row} className="h-8 w-full" />
-        ))}
+      /*
+       * A skeleton that reserves the list's own row rhythm, and a region that says
+       * so. The bars are `aria-hidden` and the region is not: `aria-busy` on a
+       * region with no text is a flag nothing can read, so the sentence is here,
+       * visually hidden, to be announced.
+       */
+      <div className="flex flex-col gap-2" aria-busy="true" aria-live="polite">
+        <span className="sr-only">Loading the store&rsquo;s categories…</span>
+        <div className="flex flex-col gap-2" aria-hidden="true">
+          {[0, 1, 2, 3].map((row) => (
+            // Static placeholder rows, never reordered.
+            // oxlint-disable-next-line react/no-array-index-key -- static placeholder rows, never reordered
+            <Skeleton key={`category-skeleton-${row}`} className="h-8 w-full" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -192,8 +217,9 @@ export const CategoryPanel = ({
           Store categories
         </SheetTitle>
         <SheetDescription>
-          The school&rsquo;s fixed taxonomy. Every item belongs to exactly one of
-          these, and the register&rsquo;s category filter reads this same list.
+          The school&rsquo;s fixed taxonomy. Every item belongs to exactly one
+          of these, and the register&rsquo;s category filter reads this same
+          list.
         </SheetDescription>
       </SheetHeader>
 

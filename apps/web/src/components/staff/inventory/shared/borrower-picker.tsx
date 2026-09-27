@@ -50,18 +50,28 @@
  *    beside each student, resolved the way `resolveBorrowerStudentBatch` resolves
  *    it**, and the row below the name fills itself in.
  *
- * **The staff list carries no caveat, because there is nothing left to say about
- * it.** It used to: `orpc.inventory.options.assignableStaff` was
- * `adminProcedure` and filtered `staffCategory = "teacher"`, so the bursar and
- * the lab attendants were missing from a list the write path would have accepted
- * — and this field said so, in those words, below the control. **The server
- * dropped the category filter, and the caveat went with it:** the list now holds
- * every member of staff whose employment is `active` or unset, which is the
- * identical predicate `assertStaffIsAssignable` enforces on the write, so the
- * office that lent the projector and the person who carried it out are both in
- * it and the note would have been a lie. The gap is not papered over: what the
- * list does not carry is *stated*, and it hides no row, greys out none, and
- * prints no dash for a class it simply cannot see.
+ * 2. **The staff list carries no badge number.** It used to: the procedure joined
+ *    `staff` and projected `serviceNo` — `staff.teacherServiceNo`, the number a
+ *    colleague reads out across a corridor — and this file printed it under every
+ *    staff name. **The commit that moved inventory identity from `staff` rows to
+ *    `user` login rows took that join with it**, and the procedure now selects
+ *    `id` and `name` off `user` and returns. The category caveat this paragraph
+ *    used to carry is genuinely gone (the list is no longer filtered by
+ *    `staffCategory`, so the bursar and the lab attendants *are* in it, which is
+ *    what `assertStaffIsAssignable` accepts), but a **new** one arrived in its
+ *    place and is stated under the control: with only a name to go on, a name
+ *    several people share is a name this field cannot resolve by itself, and the
+ *    row says how many share it.
+ *
+ *    The predicate is now "not banned, and not an `admin` account", so the
+ *    `principal` and `vicePrincipal` seats — which have `user` rows, unlike the
+ *    three leadership accounts that were described as staff-row-less before this
+ *    migration — are in the list. That is the same set `assertStaffIsAssignable`
+ *    accepts, which is the property that matters.
+ *
+ *    Neither gap is papered over. What a list does not carry is *stated*; no row
+ *    is hidden, none is greyed out, and nothing prints a dash for a fact the query
+ *    cannot see.
  */
 
 /*
@@ -96,12 +106,17 @@ import {
   FieldLegend,
   FieldSet,
 } from "@school-student-teacher-management/ui/components/field";
-import { IconBackpack, IconBriefcase } from "@tabler/icons-react";
+import {
+  IconBackpack,
+  IconBriefcase,
+  IconFilterOff,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import type * as React from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import * as v from "valibot";
 
+import { PickerListStatus } from "@/components/staff/inventory/shared/teacher-combobox";
 import { orpc } from "@/utils/orpc";
 
 const DEBOUNCE_MS = 250;
@@ -138,9 +153,18 @@ export interface BorrowerChoice {
   id: string;
   name: string;
   /**
-   * The badge number for staff (`staff.teacherServiceNo`), the admission number
-   * for a student. Nullable for staff and never null for a student, because
-   * `teacher_service_no` is nullable and `admission_number` is `notNull unique`.
+   * The badge number for a **resolved** staff borrower
+   * (`staff.teacherServiceNo`), the admission number for a student. Nullable for
+   * staff and never null for a student, because `teacher_service_no` is nullable
+   * and `admission_number` is `notNull unique`.
+   *
+   * **`null` here means two different things and the two must not be confused.**
+   * A `null` that arrived with a loan row off `listBorrows` means *this person's
+   * staff record carries no badge number* — a real fact about a real record, and
+   * `borrowerReferenceLine` says so in words. A `null` this field sets itself,
+   * off `options.assignableStaff`, means *this list has no badge-number column
+   * to read*: nothing was looked up, so nothing may be claimed. The staff branch
+   * of the row renderer therefore does not call `borrowerReferenceLine` at all.
    */
   reference: string | null;
 }
@@ -157,16 +181,36 @@ const MODES: readonly { value: BorrowerType; label: string }[] = [
 
 /**
  * The mode-specific sentence the field states about itself, where one is left to
- * say. See the header: only the student roll carries a caveat now, and an absent
- * entry is rendered as no sentence at all rather than as a filler.
+ * say.
+ *
+ * **Both modes have one now, and the staff one is about a field the response does
+ * not carry.** `orpc.inventory.options.assignableStaff` is a list of login
+ * accounts off the `user` table and it projects `id` and `name` — nothing else.
+ * It used to also project `staff.teacherServiceNo`, the badge number, and this
+ * component printed it under every staff name; when the inventory columns moved
+ * to user ids the badge number came off the projection with them, and the row
+ * below a name is now the only place this field can say which of two people it
+ * is.
+ *
+ * So the staff note states the real limit rather than papering over it: the list
+ * carries a name and nothing else, so a name that several people share is a name
+ * this field cannot resolve on its own, and the count of how many is the honest
+ * amount of help. `nameCollisions` in `teacher-combobox.tsx` counts it, and the
+ * per-row line is built from the same helper so the note and the rows cannot
+ * disagree.
+ *
+ * The student note is the pre-existing one and is still true: `marking.listStudents`
+ * returns the whole roll with no search, no limit and no `className`.
  */
-const MODE_NOTE: Partial<Record<BorrowerType, string>> = {
+const MODE_NOTE: Record<BorrowerType, string> = {
+  staff:
+    "The staff list carries a name and nothing else — no badge number — so where several members of staff share a name, the row says how many. The count beside each name is over this page of the list, not the whole staff roll.",
   student:
     "The roll carries each student's name and admission number, and no class — so a student's class appears on the loan row once the loan is saved, not here.",
 };
 
 const MODE_PLACEHOLDER: Record<BorrowerType, string> = {
-  staff: "Search by name or service number...",
+  staff: "Search by name...",
   student: "Search by name or admission number...",
 };
 
@@ -175,19 +219,31 @@ const MODE_EMPTY: Record<BorrowerType, string> = {
   student: "No student on the roll matches that",
 };
 
+/** What each list is *of*, so a failure names the read rather than the symptom. */
+const MODE_SUBJECT: Record<BorrowerType, string> = {
+  staff: "the list of staff who may borrow school property",
+  student: "the student roll",
+};
+
 const MODE_WORD: Record<BorrowerType, string> = {
   staff: "Member of staff",
   student: "Student",
 };
 
 /**
- * The caveat this mode still has, or nothing at all.
+ * The caveat this mode still has.
  *
- * Its own component so the *absence* of a caveat costs the field no branch: the
- * staff mode has no sentence left to state, and rendering an empty
- * `FieldDescription` would put a blank paragraph under a control and hand the
- * screen reader a description of nothing. Passing `undefined` renders no element
- * and the `aria-describedby` wiring omits the id with it.
+ * Its own component so the *absence* of a caveat costs the field no branch: no
+ * element is rendered and the `aria-describedby` wiring omits the id with it,
+ * because a `aria-describedby` pointing at an element that is not in the document
+ * announces nothing and makes the wiring look as though it is describing the
+ * control when it is not.
+ *
+ * **Both modes render one now.** The student note is the pre-existing gap (no
+ * `className` on the roll). The staff note is new and is about the *opposite*
+ * kind of gap: the list carries a name and no badge number, so where several
+ * people share a name this field cannot resolve it alone, and the row says how
+ * many share it.
  */
 const BorrowerModeNote: React.FC<{ id: string; note?: string }> = ({
   id,
@@ -297,11 +353,19 @@ export const describeBorrowerChoice = (person: {
  * roll arrives whole and always contains the selection. The copy says what is
  * true — the id is real, the name is not loaded — rather than inventing a name
  * the way a placeholder object usually does.
+ *
+ * The row is left pickable. Disabling the control's own *value* would make the one
+ * row representing the selection unreachable by keyboard (a disabled selected item
+ * is skipped by arrow-key navigation), and picking it is a harmless no-op: the
+ * stand-in carries the same `type` and `id`, and `borrowerInputFrom` reads only
+ * those two.
  */
+const STAND_IN_NAME = "Chosen — not on this page of names";
+
 const unlistedStaff = (value: BorrowerChoice): BorrowerChoice => ({
   type: "staff",
   id: value.id,
-  name: "Chosen — not on this page of names",
+  name: STAND_IN_NAME,
   reference: value.reference,
 });
 
@@ -367,7 +431,11 @@ const BorrowerModeToggle: React.FC<{
           }}
           data-icon="inline-start"
         >
-          <Icon data-icon="inline-start" />
+          <Icon
+            aria-hidden="true"
+            className="mt-0.5 size-3.5 shrink-0"
+            data-icon="inline-start"
+          />
           {mode.label}
         </Button>
       );
@@ -375,25 +443,53 @@ const BorrowerModeToggle: React.FC<{
   </FieldSet>
 );
 
-/** One row in the open list: the name, then the reference in that kind's words. */
-const BorrowerOptionRow: React.FC<{ option: BorrowerChoice }> = ({
-  option,
-}) => (
+/** One row in the open list: the name, then whatever else this list knows. */
+const BorrowerOptionRow: React.FC<{
+  option: BorrowerChoice;
+  note?: string;
+}> = ({ option, note }) => (
   <div className="flex min-w-0 flex-col">
     <span className="truncate font-medium">{option.name}</span>
-    <span className="text-muted-foreground truncate text-xs">
-      {borrowerReferenceLine(option)}
-    </span>
+    {/*
+        A student's second line is the admission number, which
+        `marking.listStudents` does carry. **A staff member's is not, and there is
+        no sentence to print for it**: `borrowerReferenceLine`'s "No service
+        number on record" claims a record was looked at and found empty, and
+        nothing here has looked at one — this field asks a list that has no such
+        column. So the staff row says the thing that is actually true and useful
+        instead, which is the collision count, and says nothing at all when the
+        name is unique.
+      */}
+    {note ? (
+      <span className="text-muted-foreground truncate text-xs">{note}</span>
+    ) : null}
   </div>
 );
+
+/** The second line for a row, from what this list is actually able to say. */
+const borrowerRowNote = (
+  option: BorrowerChoice,
+  shared: number
+): string | undefined => {
+  if (option.type === "student") {
+    return borrowerReferenceLine(option);
+  }
+
+  return shared > 1
+    ? `${shared} people on this list share this name`
+    : undefined;
+};
 
 /**
  * The chosen party, re-readable after selection: the kind of person in words, the
  * name, and the reference number.
  *
- * A name alone is not enough to confirm a loan at a counter — "R. Perera" is not a
- * disambiguator in a school with three of them, and the whole reason the reference
- * is on this field is that the clerk is about to write it on a register.
+ * A name alone is not enough to confirm a loan at a counter — "R. Perera" is not
+ * a disambiguator in a school with three of them, and the whole reason the
+ * reference is on this field is that the clerk is about to write it on a
+ * register. **A staff selection has no reference to print**, because the list it
+ * was chosen from does not carry one; the field's own note says so, rather than
+ * this summary inventing a badge number or an empty line where one would be.
  */
 const BorrowerSelectionSummary: React.FC<{ value: BorrowerChoice }> = ({
   value,
@@ -403,13 +499,15 @@ const BorrowerSelectionSummary: React.FC<{ value: BorrowerChoice }> = ({
   return (
     <div className="border-border bg-muted/40 flex flex-wrap items-center gap-x-2 gap-y-1 border px-3 py-2 text-sm">
       <Badge variant="outline">
-        <Icon />
+        <Icon aria-hidden="true" />
         {MODE_WORD[value.type]}
       </Badge>
       <span className="font-medium">{value.name}</span>
-      <span className="text-muted-foreground font-mono text-xs">
-        {borrowerReferenceLine(value)}
-      </span>
+      {value.type === "student" ? (
+        <span className="text-muted-foreground font-mono text-xs">
+          {borrowerReferenceLine(value)}
+        </span>
+      ) : null}
     </div>
   );
 };
@@ -417,6 +515,9 @@ const BorrowerSelectionSummary: React.FC<{ value: BorrowerChoice }> = ({
 interface BorrowerOptions {
   options: BorrowerChoice[];
   isLoading: boolean;
+  isFetching: boolean;
+  error: unknown;
+  refetch: () => void;
 }
 
 /**
@@ -441,19 +542,18 @@ const useDebouncedValue = (raw: string): string => {
  * Staff options, from `orpc.inventory.options.assignableStaff`.
  *
  * **`adminProcedure`**, inputs `{ search?: string, limit?: 1..200 }`, returning
- * `{ id, name, staffCategory, employmentStatus, serviceNo, currentRole }`. It
- * matches `name` **and** `teacher_service_no` server-side with its wildcards
- * escaped, so the search box behaves the same in both modes — which is why this
- * branch sends the term to the server while the student branch below filters
- * locally.
+ * `{ id, name }`. It is a list of **login accounts** read off the `user` table,
+ * and the two fields it returns are the two fields this component can print. It
+ * used to return `staffCategory`, `employmentStatus`, `serviceNo` and the login
+ * `currentRole` off a `staff` join; those went with the move of the inventory
+ * columns to user ids, so the search box matches `user.name` alone and there is
+ * no badge number to show. `MODE_NOTE` says so under the control.
  *
- * **Every member of staff whose employment is `active` or unset is in it**, with
- * no `staffCategory` restriction, so the bursar, the office clerk and the lab
- * attendant are as selectable as the teaching staff — and the list carries the
- * same predicate `assertStaffIsAssignable` enforces, so a name offered here is a
- * name the write will accept. The three seeded leadership accounts are the
- * exception, and they are absent by construction rather than by filter: they are
- * users with no staff row at all.
+ * **Every account that is not banned and is not an `admin` is in it**, and it
+ * holds the identical predicate to `assertStaffIsAssignable` on the write path, so
+ * a name offered here is a name the write will accept. The `principal` and
+ * `vicePrincipal` accounts *are* in it, because the filter is `role !== "admin"`
+ * on the `user` table and those two have user rows.
  *
  * Gate note: the picker is only ever mounted behind `listBorrows`, which is
  * itself `adminProcedure`, so this is the same audience the Loans tab already
@@ -478,12 +578,26 @@ const useStaffBorrowerOptions = (
         type: "staff" as const,
         id: row.id,
         name: row.name,
-        reference: row.serviceNo,
+        /**
+         * `null`, and it means *this list has no badge number* rather than *this
+         * person has none*. `teacherServiceNo` lives on `staff` and this
+         * procedure does not join it, so there was never anything to read here —
+         * the honest state is the one that stops a row claiming to have checked.
+         */
+        reference: null,
       })),
     [query.data]
   );
 
-  return { options, isLoading: query.isLoading };
+  return {
+    options,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 };
 
 /**
@@ -533,6 +647,11 @@ const useStudentBorrowerOptions = (
   return {
     options,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: () => {
+      void query.refetch();
+    },
     // Both counts, so the list can say *how* it is truncating rather than only
     // that it is: a cap with no number is how a clerk concludes a child is not on
     // the register.
@@ -573,6 +692,123 @@ const optionsWithSelection = (
  * switching modes neither refetches the mode being left nor leaves a staff list
  * in memory while a student is being named.
  */
+/**
+ * Names more than one loaded person answers to, counted per mode.
+ *
+ * Its own hook because the loop is the only interesting thing in it, and inlining
+ * it put `BorrowerPickerField` two branches over the complexity ceiling — which
+ * is the wrong reason for a field's body to be hard to read.
+ *
+ * Staff identities and student identities are separate id spaces, so a student
+ * named "Nimali Perera" and a member of staff named "Nimali Perera" are not a
+ * collision. The count is taken over the **active mode's** list for that reason,
+ * and only the staff branch acts on it: a student row has an admission number to
+ * disambiguate with, and a staff row has nothing but the name.
+ */
+/**
+ * A lookup for "how many of these share this name", built over one list.
+ *
+ * Returns the *function* rather than the map, so a caller reads
+ * `sharedNameCount(option.name)` and never has to remember to supply the `.get`
+ * and the `?? 0` — and the two together are the only two ways to get a count
+ * wrong, because one of them yields `undefined` and the string "undefined people
+ * on this list share this name".
+ */
+const useNameCollisions = (
+  options: readonly BorrowerChoice[]
+): ((name: string) => number) =>
+  useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const option of options) {
+      const key = option.name.trim().toLowerCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    return (name: string) => counts.get(name.trim().toLowerCase()) ?? 0;
+  }, [options]);
+
+/**
+ * The list, and the sentence that says the list was cut short.
+ *
+ * `truncated` is passed rather than derived, because only the student branch can
+ * truncate — the staff list is paged by the server and the *server* is the thing
+ * that would have to say so — and a component that re-derived it would have to be
+ * told the mode as well.
+ */
+const BorrowerListBody: React.FC<{
+  items: readonly BorrowerChoice[];
+  sharedNameCount: (name: string) => number;
+  truncated: boolean;
+  shownCount: number;
+  matchCount: number;
+}> = ({ items, sharedNameCount, truncated, shownCount, matchCount }) => (
+  <>
+    <ComboboxList>
+      {items.map((option) => (
+        <ComboboxItem key={`${option.type}-${option.id}`} value={option}>
+          <BorrowerOptionRow
+            option={option}
+            note={borrowerRowNote(option, sharedNameCount(option.name))}
+          />
+        </ComboboxItem>
+      ))}
+    </ComboboxList>
+    {/*
+      A roll of nine hundred is not a list, so the cap is stated. The alternative
+      — silently offering the first fifty with no count — is how a clerk concludes
+      a child is not on the register.
+    */}
+    {truncated ? (
+      <p className="text-muted-foreground border-t px-3 py-2 text-xs">
+        {`Showing the first ${shownCount} of ${matchCount} matches — keep typing to narrow it`}
+      </p>
+    ) : null}
+  </>
+);
+
+/**
+ * The four ids this field needs and the one list built out of them.
+ *
+ * Its own hook so the field's body is about the field. It earns its place twice
+ * over: the derivation is identical in shape to the other three pickers in this
+ * folder, and **it is the only place the bug it fixes could have been made
+ * quietly.** `describedBy` used to be built with the note's *text* where the
+ * note's *id* belonged — `aria-describedby` takes a list of ids, so every word of
+ * that sentence was looked up as an element id, found to be nothing, and
+ * announced as an empty description. The one sentence explaining what this list
+ * cannot tell a clerk reached nobody, and the attribute was long enough to look
+ * like working wiring in the inspector.
+ *
+ * Only the ids of elements that are actually rendered are returned in
+ * `describedBy`, so the list never names something that is not in the document.
+ */
+const useFieldWiring = ({
+  error,
+  description,
+  note,
+}: {
+  error: string | undefined;
+  description: string | undefined;
+  note: string | undefined;
+}) => {
+  const base = useId();
+
+  return {
+    inputId: base,
+    errorId: `${base}-error`,
+    descriptionId: `${base}-description`,
+    noteId: `${base}-note`,
+    describedBy: [
+      error && `${base}-error`,
+      description && `${base}-description`,
+      note && `${base}-note`,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  };
+};
+
 export const BorrowerPickerField: React.FC<{
   value: BorrowerChoice | null;
   onChange: (choice: BorrowerChoice | null) => void;
@@ -596,11 +832,6 @@ export const BorrowerPickerField: React.FC<{
   const [mode, setMode] = useState<BorrowerType>("staff");
   const [query, setQuery] = useState("");
 
-  const inputId = useId();
-  const errorId = `${inputId}-error`;
-  const descriptionId = `${inputId}-description`;
-  const noteId = `${inputId}-note`;
-
   /**
    * The mode the *label* states, which is the value's mode whenever a value is
    * set. Deriving it rather than trusting `mode` means a value set from outside
@@ -609,23 +840,17 @@ export const BorrowerPickerField: React.FC<{
    */
   const type = value?.type ?? mode;
 
-  /**
-   * This mode's caveat, where it still has one. `noteId` is therefore derived
-   * rather than unconditional: an `aria-describedby` pointing at an element that
-   * was not rendered announces nothing and makes the wiring look as though it is
-   * describing the control when it is not.
-   */
+  /** What this list does not carry, in this mode's words. See `MODE_NOTE`. */
   const note = MODE_NOTE[type];
-  const describedBy = [error && errorId, description && descriptionId, note]
-    .filter(Boolean)
-    .join(" ");
+
+  const { inputId, errorId, descriptionId, noteId, describedBy } =
+    useFieldWiring({ error, description, note });
 
   const debouncedQuery = useDebouncedValue(query);
 
   const staff = useStaffBorrowerOptions(type === "staff", debouncedQuery);
   const student = useStudentBorrowerOptions(type === "student", debouncedQuery);
 
-  const isLoading = type === "staff" ? staff.isLoading : student.isLoading;
   const isTruncated = type === "student" && student.truncated;
 
   const items = useMemo(
@@ -641,6 +866,22 @@ export const BorrowerPickerField: React.FC<{
     () => items.find((option) => option.id === value?.id) ?? null,
     [items, value]
   );
+
+  /**
+   * How many of the people on the current list share a given name. `teacher-
+   * combobox.tsx` holds the same counting for `AssignableStaffOption`; the two
+   * are separate because the shapes are separate, and the normalization — trim,
+   * lower-case — is written the same in both, which is the part that has to agree.
+   */
+  const sharedNameCount = useNameCollisions(
+    type === "staff" ? staff.options : student.options
+  );
+
+  const active = type === "staff" ? staff : student;
+
+  const handleRetry = useCallback(() => {
+    active.refetch();
+  }, [active]);
 
   /**
    * Switching mode **clears the selection**, and that is a correctness step rather
@@ -668,8 +909,8 @@ export const BorrowerPickerField: React.FC<{
        * is legible without touching it, and a screen reader announces it as part
        * of the control's name rather than as a stray badge below it.
        */}
-      <FieldLabel htmlFor={inputId}>
-        {`${label} — ${MODE_WORD[type].toLowerCase()}${required ? " *" : ""}`}
+      <FieldLabel htmlFor={inputId} required={required}>
+        {`${label} — ${MODE_WORD[type].toLowerCase()}`}
       </FieldLabel>
 
       <BorrowerModeToggle
@@ -700,32 +941,61 @@ export const BorrowerPickerField: React.FC<{
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
+          aria-busy={active.isFetching || undefined}
         />
         <ComboboxContent>
           <ComboboxEmpty>
-            {isLoading ? "Searching..." : MODE_EMPTY[type]}
+            <PickerListStatus
+              isFetching={active.isFetching}
+              error={active.error}
+              onRetry={handleRetry}
+              empty={MODE_EMPTY[type]}
+              subject={MODE_SUBJECT[type]}
+              loading="Searching…"
+            />
           </ComboboxEmpty>
-          <ComboboxList>
-            {items.map((option) => (
-              <ComboboxItem key={`${option.type}-${option.id}`} value={option}>
-                <BorrowerOptionRow option={option} />
-              </ComboboxItem>
-            ))}
-          </ComboboxList>
-          {/**
-           * A roll of nine hundred is not a list, so the cap is stated. The
-           * alternative — silently offering the first fifty with no count — is how
-           * a clerk concludes a child is not on the register.
-           */}
-          {isTruncated ? (
-            <p className="text-muted-foreground border-t px-3 py-2 text-xs">
-              {`Showing the first ${student.options.length} of ${student.matchCount} matches — keep typing to narrow it`}
-            </p>
-          ) : null}
+          {/*
+            The list body is its own component, and the reason is mechanical: with
+            the per-row note and the truncation count inline this field was three
+            branches over the complexity ceiling, which is the wrong reason for the
+            body of a form field to be hard to read. The content is unchanged —
+            three elements, passed as values.
+          */}
+          <BorrowerListBody
+            items={items}
+            sharedNameCount={sharedNameCount}
+            truncated={isTruncated}
+            shownCount={student.options.length}
+            matchCount={student.matchCount}
+          />
         </ComboboxContent>
       </Combobox>
 
       {value ? <BorrowerSelectionSummary value={value} /> : null}
+
+      {/*
+        "Not filtering by borrower" is a *chosen state* on the one call site that
+        clears (`allowClear`, the loans-list filter) and an absence of one on the
+        other (`required`, the lend dialog, where a null is a field nobody has
+        filled in and the error below says so).
+
+        So the two are told apart by which prop is in force rather than by a
+        boolean the caller has to remember to pass. On a filter, an empty box is
+        ambiguous in the one way that matters — "showing every loan" and "not set
+        yet" look identical — and it is a live region, because clearing it is a
+        change made with the mouse and is otherwise the one edit on this control
+        that is never spoken.
+      */}
+      {allowClear && !value ? (
+        <Badge
+          variant="outline"
+          className="text-muted-foreground w-fit border-dashed"
+          aria-live="polite"
+        >
+          <IconFilterOff aria-hidden="true" />
+          Not filtering by borrower
+        </Badge>
+      ) : null}
 
       {description ? (
         <FieldDescription id={descriptionId}>{description}</FieldDescription>

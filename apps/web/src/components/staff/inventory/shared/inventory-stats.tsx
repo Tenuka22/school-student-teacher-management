@@ -1,8 +1,6 @@
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@school-student-teacher-management/ui/components/card";
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import {
@@ -213,15 +211,34 @@ const STAT_DEFINITIONS: StatDefinition[] = [
 /**
  * The register's summary row.
  *
- * Values are rendered through `tabular-nums` so a column of them stays aligned
- * as they change — a storekeeper watching `availableUnits` fall while
- * `borrowedUnits` rises is comparing digits, and proportional figures make that
- * comparison a guess.
+ * ## A definition list, not a hero metric
+ *
+ * This row used to be the template the craft floor bans: seven cards, each one a
+ * large figure with a `text-xs text-muted-foreground` caption underneath it. The
+ * caption was *smaller* than the number, so the number was the thing being read
+ * and the words describing what it counted were the decoration. A storekeeper
+ * glancing across the row saw "1,250" and had to go and work out which of seven
+ * columns that was.
+ *
+ * It is a `<dl>` now, which is the HTML that already answers the question this
+ * row is asking: a term (`<dt>`, the label, at `text-sm` — legible, and *not*
+ * smaller than the figure it names) and its value (`<dd>`, `tabular-nums`). A
+ * screen reader announces "Items, 1,250, Distinct lines in the register" from
+ * the structure, with no `aria-label` bolted onto a `<p>` and nothing for the
+ * next person to keep in step by hand.
+ *
+ * ## The hint is inside the value's cell and in the accessible name
+ *
+ * Each figure's hint states what it counts rather than paraphrasing the label —
+ * "Every physical unit, tagged or bulk" is the difference between `totalUnits`
+ * and `totalItems`, and it is the sentence that stops a reader adding the two.
+ * It is a real `<p>` in the cell, not a `title`: the table's other explanations
+ * moved off `title` for the same reason, and a `title` is hover-only.
  *
  * `isLoading` swaps the figure for a skeleton of the same size rather than
- * blanking the card, so the row does not collapse and re-expand under the user
- * on every refetch. The label and hint stay: they are the only place the
- * register states what each of these words means.
+ * blanking the card, so the row does not collapse and re-expand under the user on
+ * every refetch. The label and hint stay: they are the only place the register
+ * states what each of these words means.
  *
  * **These are `<Card>`s and not `<Button>`s, and that is not an oversight.** The
  * "No manager" card is a *filter's* figure, and the filter's control is the "No
@@ -239,24 +256,30 @@ export const InventoryStatCards: React.FC<{
 }> = ({ stats, isLoading = false }) => (
   <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
     {STAT_DEFINITIONS.map(({ key, label, hint, tone, Icon }) => (
-      <Card key={key} size="sm" className="gap-2">
-        <CardHeader>
-          <CardTitle className="text-muted-foreground text-xs font-medium">
-            {label}
-          </CardTitle>
-        </CardHeader>
+      <Card key={key} size="sm">
         <CardContent>
-          <p
-            className={`flex items-center gap-1.5 text-xl font-medium tabular-nums ${TONE_CLASS[tone]}`}
-          >
-            <Icon className="size-4 shrink-0" />
-            {isLoading ? (
-              <Skeleton className="h-5 w-8" />
-            ) : (
-              formatCount(stats[key])
-            )}
-          </p>
-          <p className="text-muted-foreground mt-1 text-xs">{hint}</p>
+          <dl className="flex flex-col gap-1">
+            {/*
+              The label goes first in the source order, so a screen reader meets
+              "Items" before "1,250" — and the icon is `aria-hidden` because the
+              word beside it already says it, so the glyph is a third channel for
+              a sighted reader and noise in the tree for everyone else.
+            */}
+            <dt className="text-muted-foreground flex items-center gap-1.5 text-sm font-medium">
+              <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+              {label}
+            </dt>
+            <dd
+              className={`text-xl font-medium tabular-nums ${TONE_CLASS[tone]}`}
+            >
+              {isLoading ? (
+                <Skeleton className="h-5 w-8" />
+              ) : (
+                formatCount(stats[key])
+              )}
+            </dd>
+            <dd className="text-muted-foreground text-xs">{hint}</dd>
+          </dl>
         </CardContent>
       </Card>
     ))}

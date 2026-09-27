@@ -1,3 +1,59 @@
+# robots.txt — St. Aloysius' College staff management system
 # https://www.robotstxt.org/robotstxt.html
+#
+# This is an INTERNAL staff system. Only three pages are public; everything
+# else requires a session and must never enter a search index.
+#
+# The authenticated surfaces are additionally marked `noindex, nofollow` in the
+# document head, which is what actually stops a URL discovered through a link
+# from being indexed. The rules below stop the crawl; the meta tag stops the
+# index. Both are needed.
+
 User-agent: *
-Disallow:
+Allow: /$
+Allow: /login
+Allow: /signup
+
+# Authenticated workspaces. `_auth` is the file-based route prefix, so this
+# covers every current and future child route in one line.
+Disallow: /_auth
+Disallow: /admin
+Disallow: /teacher
+Disallow: /principal
+Disallow: /deputy-principal
+Disallow: /dashboard
+Disallow: /account
+Disallow: /verify
+Disallow: /pending-approval
+
+# Machine surfaces and uploaded documents — staff records, QR labels and
+# inventory photographs do not belong in an index.
+Disallow: /api
+Disallow: /uploads
+Disallow: /*?switch=
+
+# NOTE: no `Sitemap:` line. The sitemap is served dynamically from
+# /sitemap.xml so that its <loc> values carry the deployment's real origin;
+# a static file could only carry a host this repository cannot verify, and a
+# wrong absolute URL in a sitemap is worse than none. Crawlers probe the
+# well-known /sitemap.xml path regardless.
+
+# Block the well-known AI training crawlers explicitly. A staff records
+# system has nothing to offer them, and `noindex` alone is advisory.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /

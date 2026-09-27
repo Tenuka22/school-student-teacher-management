@@ -24,11 +24,19 @@ import {
 import {
   IconAlertTriangle,
   IconArchive,
+  IconRefresh,
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
 import type * as React from "react";
-import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 
 import type {
   AssignableStaffOption,
@@ -38,7 +46,11 @@ import type {
 } from "@/components/staff/inventory/inventory-types";
 import { hasActiveInventoryFilters } from "@/components/staff/inventory/inventory-types";
 import { itemStatusLabel } from "@/components/staff/inventory/shared/inventory-status-badge";
-import { useAssignableStaffOptions } from "@/components/staff/inventory/shared/teacher-combobox";
+import {
+  nameCollisions,
+  useAssignableStaffOptions,
+} from "@/components/staff/inventory/shared/teacher-combobox";
+import { formatApiErrorMessage } from "@/lib/api-error";
 
 /**
  * Long enough that a fast typist is not firing a request per character, short
@@ -105,14 +117,29 @@ export type StatusOrderIsComplete = AssertNever<
 /**
  * What the custodian trigger says, in one place so the three cases are read
  * together rather than as a nested expression in the middle of JSX.
+ *
+ * The second case is the interesting one. A filter value is a `user.id` and the
+ * list it is resolved against is a page of fifty names, so the person the filter
+ * is actually narrowing to is routinely not on the page. Printing the raw id
+ * would be honest and useless; printing a *guessed* name would be a lie that gets
+ * submitted. "Current custodian" is the one sentence that is true in all three
+ * readings — the filter is on, it is about the current holder, and the browser is
+ * telling the user it cannot name them.
+ *
+ * When the person *is* loaded and their name is not unique on the list, the
+ * collision count comes with it. `options.assignableStaff` no longer projects the
+ * badge number (`serviceNo`), so the name is the only thing on the wire that
+ * distinguishes two people, and "R. Perera" is not a disambiguator in a school
+ * that has three of them.
  */
 const custodianFilterLabel = (
   resolved: AssignableStaffOption | null,
-  value: string
+  value: string,
+  shared: number
 ): string => {
   if (resolved) {
-    return resolved.serviceNo
-      ? `${resolved.name} · ${resolved.serviceNo}`
+    return shared > 1
+      ? `${resolved.name} · ${shared} with this name`
       : resolved.name;
   }
 
@@ -125,19 +152,19 @@ const custodianFilterLabel = (
 
 /**
  * A stand-in row for a filter value whose person is not on the loaded page.
- * Built as a whole `AssignableStaffOption` so it cannot drift from the router's
- * projection the way a partial object with a cast would. The row prints the
- * filter's own words — "Current custodian" — because that is the claim the
- * control is making; `staffCategory` is a placeholder nothing here reads, the
- * column being `notNull` and typed as the closed `StaffCategory` pair.
+ *
+ * Built as a **whole** `AssignableStaffOption` — no cast, no partial — so it
+ * cannot drift from the router's projection. That is now a two-field object: the
+ * procedure selects `id` and `name` off `user` and returns.
+ *
+ * The row prints the filter's own words, "Current custodian", because that is the
+ * claim the control is making. It is left pickable — re-picking it is a no-op that
+ * hands back the id already in state, and disabling a *selected* listbox item
+ * would make the one row standing for the current filter unreachable by keyboard.
  */
 const unlistedCustodian = (id: string): AssignableStaffOption => ({
   id,
   name: "Current custodian",
-  serviceNo: null,
-  staffCategory: "teacher",
-  employmentStatus: null,
-  currentRole: null,
 });
 
 /**
@@ -176,30 +203,53 @@ const resultCountSentence = (
   }
 
   if (isFiltered) {
-    return `Showing ${resultCount} of ${totalCount} — clear a filter to widen the list`;
+    /*
+     * Names the button, in the button's own words, and the same words
+     * `EMPTY_FILTERED_COPY` uses. The two sentences appear on one screen — this
+     * line above the table, that one in place of the table when nothing matches —
+     * and a reader who has to work out that "a filter" and "Clear filters" are the
+     * same object is being asked for two pieces of work to understand one screen.
+     */
+    return `Showing ${resultCount} of ${totalCount} — press Clear filters to widen the list`;
   }
 
   return `Showing the first ${resultCount} of ${totalCount} — narrow the search to reach the rest`;
 };
 
 /**
- * A `Select` that always has a readable value.
+ * A `Select` that always has a readable value, and never renders a failure as an
+ * absence of people.
  *
- * The custodian filter is a pointer at a person who may not be in the loaded
- * page of fifty names. Rendering the raw id in the trigger would be honest and
- * useless, so an unresolvable active value gets a placeholder row instead — the
- * filter stays legible, and the user can still widen it.
+ * This is the one filter on the bar whose source can fail while the rest of the
+ * bar renders perfectly, and the failure mode is the worst in the feature: a
+ * dropped request for `options.assignableStaff` leaves this select holding
+ * **"Anyone"** as its only option, which is a `custodianStaffId: null` — *every*
+ * item, unfiltered, and indistinguishable from the truth. A storekeeper narrows
+ * to "the projector is in R. Perera's care", the select silently offers nobody,
+ * the row list stays at 312, and the filter looks like it was never set. It is
+ * therefore the one filter on this bar that states its own failure, with a retry
+ * that really refetches.
  */
 const CustodianSelect: React.FC<{
   id: string;
   value: string;
   onChange: (staffId: string) => void;
   options: AssignableStaffOption[];
-  isLoading: boolean;
-}> = ({ id, value, onChange, options, isLoading }) => {
+  isFetching: boolean;
+  error: unknown;
+  onRetry: () => void;
+}> = ({ id, value, onChange, options, isFetching, error, onRetry }) => {
   const resolved = useMemo(
     () => options.find((option) => option.id === value) ?? null,
     [options, value]
+  );
+
+  const collisions = useMemo(() => nameCollisions(options), [options]);
+
+  const shared = useMemo(
+    () =>
+      resolved ? (collisions.get(resolved.name.trim().toLowerCase()) ?? 0) : 0,
+    [collisions, resolved]
   );
 
   const items = useMemo(
@@ -208,9 +258,9 @@ const CustodianSelect: React.FC<{
     [options, resolved, value]
   );
 
-  const label = custodianFilterLabel(resolved, value);
+  const label = custodianFilterLabel(resolved, value, shared);
 
-  return (
+  const trigger = (
     <Select
       value={value || ALL}
       onValueChange={(next) => onChange(next === ALL ? "" : (next ?? ""))}
@@ -220,19 +270,76 @@ const CustodianSelect: React.FC<{
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ALL}>Anyone</SelectItem>
-        {isLoading ? (
+        {/*
+          Loading and failed are separate rows, and both are inert: neither is
+          pickable, so a click during a request cannot set the filter to a
+          sentinel the server would reject.
+        */}
+        {isFetching && !error ? (
           <SelectItem disabled value="__loading">
-            Loading staff...
+            Loading staff…
           </SelectItem>
         ) : null}
-        {items.map((option) => (
-          <SelectItem key={option.id} value={option.id}>
-            {option.name}
-            {option.serviceNo ? ` · ${option.serviceNo}` : ""}
+        {error ? (
+          <SelectItem disabled value="__error">
+            Could not load the staff list
           </SelectItem>
-        ))}
+        ) : null}
+        {items.map((option) => {
+          const count = collisions.get(option.name.trim().toLowerCase()) ?? 0;
+
+          return (
+            <SelectItem key={option.id} value={option.id}>
+              {option.name}
+              {count > 1 ? ` · ${count} with this name` : ""}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
+  );
+
+  /**
+   * The retry lives **outside** the popup, not inside it, and the reason is
+   * structural: `SelectContent` is a listbox, and a `<button>` inside a listbox
+   * is both invalid ARIA and unreachable — `Esc` and the outside-press handler
+   * close the popup over it. A failure that can only be recovered from inside the
+   * thing that failed is a failure with no recovery.
+   */
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      {trigger}
+      {error ? (
+        <p
+          className="text-destructive flex items-start gap-1.5 text-xs"
+          role="alert"
+        >
+          <IconAlertTriangle
+            aria-hidden="true"
+            className="mt-px size-3.5 shrink-0"
+          />
+          <span>
+            {formatApiErrorMessage(
+              error,
+              "Could not load the list of staff who may hold school property"
+            )}{" "}
+            — the custodian filter is showing everyone until it loads.
+          </span>
+        </p>
+      ) : null}
+      {error ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          data-icon="inline-start"
+        >
+          <IconRefresh aria-hidden="true" data-icon="inline-start" />
+          Try again
+        </Button>
+      ) : null}
+    </div>
   );
 };
 
@@ -295,6 +402,78 @@ export interface InventoryFilterBarProps {
   resultCount?: number;
   totalCount?: number;
 }
+
+/**
+ * The search box, on its own so the bar's component is about arrangement rather
+ * than about an `InputGroup`.
+ *
+ * It takes the *draft* and reports keystrokes, not the committed `search` prop,
+ * because the debounce lives in the bar: the box must not repaint from the
+ * committed value while the user is still typing, or the term they are halfway
+ * through replacing disappears under the caret.
+ */
+const SearchFilterField: React.FC<{
+  id: string;
+  draft: string;
+  onDraftChange: (value: string) => void;
+}> = ({ id, draft, onDraftChange }) => (
+  <Field className="min-w-[16rem] flex-1">
+    <FieldLabel htmlFor={id}>Search</FieldLabel>
+    <InputGroup>
+      <InputGroupAddon align="inline-start">
+        <IconSearch
+          aria-hidden="true"
+          className="text-muted-foreground size-4"
+        />
+      </InputGroupAddon>
+      <InputGroupInput
+        id={id}
+        placeholder="Search name, SKU or description"
+        value={draft}
+        onChange={(event) => onDraftChange(event.target.value)}
+      />
+    </InputGroup>
+  </Field>
+);
+
+/**
+ * A filter that is a **toggle** rather than a value: "low stock only" and "show
+ * retired".
+ *
+ * A toggle button rather than a checkbox, and `aria-pressed` rather than a
+ * second control for the state: the label has to read as the filter it switches,
+ * and a pressed button says "on" without borrowing a second box to say it in.
+ *
+ * One component for both, because the two are the same control with different
+ * copy — and because the *label* must not be a category heading. This one's read
+ * "Stock", which names a kind of thing rather than the narrowing being applied: a
+ * storekeeper scanning the bar saw seven controls and had to work out which of
+ * them "Stock" belonged to. Every control on this bar is now labelled for the
+ * filter it performs.
+ */
+const FilterToggle: React.FC<{
+  id: string;
+  label: string;
+  text: string;
+  Icon: typeof IconArchive;
+  pressed: boolean;
+  onToggle: () => void;
+}> = ({ id, label, text, Icon, pressed, onToggle }) => (
+  <Field className="w-auto">
+    <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    <Button
+      id={id}
+      type="button"
+      variant={pressed ? "default" : "outline"}
+      aria-pressed={pressed}
+      onClick={onToggle}
+      data-icon="inline-start"
+    >
+      <Icon aria-hidden="true" data-icon="inline-start" />
+      {text}
+    </Button>
+  </Field>
+);
 
 export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
   search,
@@ -370,8 +549,32 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
     return () => clearTimeout(timeout);
   }, [search, searchDraft]);
 
-  const { options: assignableStaff, isLoading: isLoadingAssignableStaff } =
-    useAssignableStaffOptions();
+  /**
+   * The control ids, namespaced per instance by one `useId`.
+   *
+   * Seven literal ids (`inventory-search`, `inventory-status`, …) were here, and
+   * they were a hazard rather than a convenience: a form that renders this bar
+   * twice — the register and the asset-tag register share the pattern — puts
+   * `inventory-status` in the document twice, and the second `<FieldLabel
+   * htmlFor>` then activates the first control while the second one has no
+   * accessible name at all. `MoneyField` had exactly that bug. One `useId` and
+   * seven suffixes cannot collide, and the ids stay readable in the inspector.
+   */
+  const idBase = useId();
+  const searchId = `${idBase}-search`;
+  const statusId = `${idBase}-status`;
+  const categoryId_ = `${idBase}-category`;
+  const conditionId = `${idBase}-condition`;
+  const custodianId = `${idBase}-custodian`;
+  const lowStockId = `${idBase}-low-stock`;
+  const retiredId = `${idBase}-include-deleted`;
+
+  const {
+    options: assignableStaff,
+    isFetching: isFetchingAssignableStaff,
+    error: assignableStaffError,
+    refetch: refetchAssignableStaff,
+  } = useAssignableStaffOptions();
 
   const filters: InventoryFilters = {
     search,
@@ -385,26 +588,21 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
 
   const isFiltered = hasActiveInventoryFilters(filters);
 
+  const handleRetryAssignableStaff = useCallback(() => {
+    refetchAssignableStaff();
+  }, [refetchAssignableStaff]);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
-        <Field className="min-w-[16rem] flex-1">
-          <FieldLabel htmlFor="inventory-search">Search</FieldLabel>
-          <InputGroup>
-            <InputGroupAddon align="inline-start">
-              <IconSearch className="text-muted-foreground size-4" />
-            </InputGroupAddon>
-            <InputGroupInput
-              id="inventory-search"
-              placeholder="Search name, SKU or description"
-              value={searchDraft}
-              onChange={(event) => setSearchDraft(event.target.value)}
-            />
-          </InputGroup>
-        </Field>
+        <SearchFilterField
+          id={searchId}
+          draft={searchDraft}
+          onDraftChange={setSearchDraft}
+        />
 
         <Field className="w-auto">
-          <FieldLabel htmlFor="inventory-status">Status</FieldLabel>
+          <FieldLabel htmlFor={statusId}>Status</FieldLabel>
           <Select
             value={status}
             onValueChange={(next) =>
@@ -418,7 +616,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
               })
             }
           >
-            <SelectTrigger id="inventory-status" className="w-[10rem]">
+            <SelectTrigger id={statusId} className="w-[10rem]">
               <SelectValue placeholder="Any status">
                 {status === ALL ? "Any status" : itemStatusLabel(status)}
               </SelectValue>
@@ -435,12 +633,12 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
         </Field>
 
         <Field className="w-auto">
-          <FieldLabel htmlFor="inventory-category">Category</FieldLabel>
+          <FieldLabel htmlFor={categoryId_}>Category</FieldLabel>
           <Select
             value={categoryId || ALL}
             onValueChange={(next) => onChange({ categoryId: next ?? "" })}
           >
-            <SelectTrigger id="inventory-category" className="w-[12rem]">
+            <SelectTrigger id={categoryId_} className="w-[12rem]">
               <SelectValue placeholder="All categories">
                 {categoryId
                   ? (categories.find((c) => c.id === categoryId)?.name ??
@@ -460,12 +658,12 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
         </Field>
 
         <Field className="w-auto">
-          <FieldLabel htmlFor="inventory-condition">Condition</FieldLabel>
+          <FieldLabel htmlFor={conditionId}>Condition</FieldLabel>
           <Select
             value={condition || ALL}
             onValueChange={(next) => onChange({ condition: next ?? "" })}
           >
-            <SelectTrigger id="inventory-condition" className="w-[10rem]">
+            <SelectTrigger id={conditionId} className="w-[10rem]">
               <SelectValue placeholder="Any condition">
                 {condition ? itemConditionLabel(condition) : "Any condition"}
               </SelectValue>
@@ -482,35 +680,26 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
         </Field>
 
         <Field className="w-auto">
-          <FieldLabel htmlFor="inventory-custodian">Custodian</FieldLabel>
+          <FieldLabel htmlFor={custodianId}>Custodian</FieldLabel>
           <CustodianSelect
-            id="inventory-custodian"
+            id={custodianId}
             value={custodianStaffId}
             onChange={(next) => onChange({ custodianStaffId: next })}
             options={assignableStaff}
-            isLoading={isLoadingAssignableStaff}
+            isFetching={isFetchingAssignableStaff}
+            error={assignableStaffError}
+            onRetry={handleRetryAssignableStaff}
           />
         </Field>
 
-        {/*
-          A toggle button rather than a checkbox: the label has to read as the
-          filter it switches, and `aria-pressed` states it as on without
-          borrowing a second control for the state.
-        */}
-        <Field className="w-auto">
-          <FieldLabel htmlFor="inventory-low-stock">Stock</FieldLabel>
-          <Button
-            id="inventory-low-stock"
-            type="button"
-            variant={lowStockOnly ? "default" : "outline"}
-            aria-pressed={lowStockOnly}
-            onClick={() => onChange({ lowStockOnly: !lowStockOnly })}
-            data-icon="inline-start"
-          >
-            <IconAlertTriangle data-icon="inline-start" />
-            Low stock only
-          </Button>
-        </Field>
+        <FilterToggle
+          id={lowStockId}
+          label="Low stock"
+          text="Low stock only"
+          Icon={IconAlertTriangle}
+          pressed={lowStockOnly}
+          onToggle={() => onChange({ lowStockOnly: !lowStockOnly })}
+        />
 
         {/*
           "Show retired", the seventh control, and the only one that adds rows to
@@ -538,20 +727,14 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
           listed, and a reader scanning the bar left to right should meet it after
           the narrowings rather than before them.
         */}
-        <Field className="w-auto">
-          <FieldLabel htmlFor="inventory-include-deleted">Retired</FieldLabel>
-          <Button
-            id="inventory-include-deleted"
-            type="button"
-            variant={includeDeleted ? "default" : "outline"}
-            aria-pressed={includeDeleted}
-            onClick={() => onChange({ includeDeleted: !includeDeleted })}
-            data-icon="inline-start"
-          >
-            <IconArchive data-icon="inline-start" />
-            Show retired
-          </Button>
-        </Field>
+        <FilterToggle
+          id={retiredId}
+          label="Retired"
+          text="Show retired"
+          Icon={IconArchive}
+          pressed={includeDeleted}
+          onToggle={() => onChange({ includeDeleted: !includeDeleted })}
+        />
 
         {isFiltered ? (
           <Button
@@ -560,7 +743,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
             onClick={onReset}
             data-icon="inline-start"
           >
-            <IconX data-icon="inline-start" />
+            <IconX aria-hidden="true" data-icon="inline-start" />
             Clear filters
           </Button>
         ) : null}

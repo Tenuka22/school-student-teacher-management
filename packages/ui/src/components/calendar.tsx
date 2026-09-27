@@ -10,7 +10,12 @@ import {
 } from "react-day-picker"
 
 import { Button, buttonVariants } from "@school-student-teacher-management/ui/components/button"
-import { IconChevronLeft, IconChevronRight, IconChevronDown } from "@tabler/icons-react"
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronDown,
+  IconChevronUp,
+} from "@tabler/icons-react"
 
 function Calendar({
   className,
@@ -31,7 +36,17 @@ function Calendar({
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
-        "group/calendar bg-background p-2 [--cell-size:--spacing(7)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
+        /*
+         * `--cell-radius` is defined here because sixteen class names below read
+         * it and nothing ever set it. An undefined custom property makes
+         * `border-radius: var(--cell-radius)` invalid at computed-value time,
+         * which silently falls back to `0` — so the calendar was square by
+         * accident, and any attempt to round it by setting the variable from a
+         * caller's `className` would have been fighting an undeclared name.
+         * `0px` states the incumbent geometry on purpose and leaves the
+         * variable as a real override hook.
+         */
+        "group/calendar bg-background p-2 [--cell-radius:0px] [--cell-size:--spacing(7)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
@@ -118,8 +133,15 @@ function Calendar({
           "relative isolate z-0 rounded-r-(--cell-radius) bg-muted after:absolute after:inset-y-0 after:left-0 after:w-4 after:bg-muted",
           defaultClassNames.range_end
         ),
+        /**
+         * Today, told three ways: a wash, a heavier numeral, and the
+         * `aria-current="date"` that `react-day-picker` puts on the button
+         * anyway. The wash alone is `--muted` on `--background` — a difference
+         * of a few percent — which is not a state anyone can see at a glance
+         * while looking for a date.
+         */
         today: cn(
-          "rounded-(--cell-radius) bg-muted text-foreground data-[selected=true]:rounded-none",
+          "rounded-(--cell-radius) bg-muted text-foreground data-[selected=true]:rounded-none [&>button]:font-semibold",
           defaultClassNames.today
         ),
         outside: cn(
@@ -147,18 +169,45 @@ function Calendar({
         Chevron: ({ className, orientation, ...props }) => {
           if (orientation === "left") {
             return (
-              <IconChevronLeft className={cn("size-4", className)} {...props} />
+              <IconChevronLeft
+                aria-hidden="true"
+                className={cn("size-4", className)}
+                {...props}
+              />
             )
           }
 
           if (orientation === "right") {
             return (
-              <IconChevronRight className={cn("size-4", className)} {...props} />
+              <IconChevronRight
+                aria-hidden="true"
+                className={cn("size-4", className)}
+                {...props}
+              />
+            )
+          }
+
+          /*
+           * `react-day-picker` asks for four orientations. The incumbent
+           * answered "up" with a down chevron, which pointed the wrong way in
+           * the two dropdowns the `label`-less caption layout uses.
+           */
+          if (orientation === "up") {
+            return (
+              <IconChevronUp
+                aria-hidden="true"
+                className={cn("size-4", className)}
+                {...props}
+              />
             )
           }
 
           return (
-            <IconChevronDown className={cn("size-4", className)} {...props} />
+            <IconChevronDown
+              aria-hidden="true"
+              className={cn("size-4", className)}
+              {...props}
+            />
           )
         },
         DayButton: ({ ...props }) => (
@@ -198,7 +247,16 @@ function CalendarDayButton({
     <Button
       variant="ghost"
       size="icon"
-      data-day={day.date.toLocaleDateString(locale?.code)}
+      /**
+       * An ISO date, and not `toLocaleDateString()`.
+       *
+       * This app renders on the server. `toLocaleDateString()` with no explicit
+       * locale resolves to the *runtime's* locale, so a staff machine set to
+       * `en-GB` server-rendered `27/09/2026` and hydrated the same element as
+       * `9/27/2026` — a React hydration mismatch on every date cell in the
+       * calendar, once per locale difference. ISO has one spelling.
+       */
+      data-day={day.date.toISOString().slice(0, 10)}
       data-selected-single={
         modifiers.selected &&
         !modifiers.range_start &&
@@ -209,7 +267,7 @@ function CalendarDayButton({
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
       className={cn(
-        "relative isolate z-10 flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 border-0 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50 data-[range-end=true]:rounded-(--cell-radius) data-[range-end=true]:rounded-r-(--cell-radius) data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-muted data-[range-middle=true]:text-foreground data-[range-start=true]:rounded-(--cell-radius) data-[range-start=true]:rounded-l-(--cell-radius) data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground dark:hover:text-foreground [&>span]:text-xs [&>span]:opacity-70",
+        "relative isolate z-10 flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 border-0 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50 data-[range-end=true]:rounded-(--cell-radius) data-[range-end=true]:rounded-r-(--cell-radius) data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-muted data-[range-middle=true]:text-foreground data-[range-start=true]:rounded-(--cell-radius) data-[range-start=true]:rounded-l-(--cell-radius) data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground [&>span]:text-xs [&>span]:opacity-70",
         defaultClassNames.day,
         className
       )}

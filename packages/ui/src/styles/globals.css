@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/roboto";
 /**
  * The two faces the product is actually set in, served from the bundle.
  *
@@ -10,7 +9,25 @@
  * school LAN, a privacy extension, a strict CSP or a slow link would collapse
  * every heading in the product to a generic serif, and it sent every page view
  * to a third party. Self-hosting removes the failure mode and the request.
+ *
+ * The four `@import`s below are one list, deliberately: the heading family
+ * (three static weights, because Cormorant Garamond has no variable cut worth
+ * the bytes for two sizes) and the two body weights. Roboto sits at the end of
+ * that list rather than the front because it is **not** a face the product is
+ * set in — it is the last real name in the `--font-sans` stack, so removing the
+ * import would make `"Roboto Variable"` in that token a lie.
+ *
+ * One duplication to be aware of, unchanged here because no dependency may be
+ * added or removed in this pass: `packages/ui` imports Roboto but does not
+ * declare `@fontsource-variable/roboto` in its own `package.json` — it
+ * resolves through `apps/web`, which does declare it. The same `apps/web`
+ * manifest also declares `@fontsource-variable/figtree` and
+ * `@fontsource-variable/inter`, and **no stylesheet in the monorepo imports
+ * either of them**; they are dead weights in the install, not dead faces in the
+ * product. Font loading is therefore correct but over-declared, and the fix is
+ * a manifest edit, recorded as cross-cutting rather than made here.
  */
+@import "@fontsource-variable/roboto";
 @import "@fontsource-variable/manrope";
 @import "@fontsource/cormorant-garamond/500.css";
 @import "@fontsource/cormorant-garamond/600.css";
@@ -34,7 +51,38 @@
   --secondary: #f3f1e9;
   --secondary-foreground: #013405;
   --muted: #f3f1e9;
-  --muted-foreground: color-mix(in oklab, #013405 60%, transparent);
+  /**
+   * The quiet ink: field labels, card descriptions, table meta, and every
+   * `placeholder:text-muted-foreground` in `packages/ui`.
+   *
+   * This token used to be `color-mix(in oklab, #013405 60%, transparent)`.
+   * A translucent token cannot be given a contrast ratio at all, because its
+   * ratio depends on whatever it is composited over, and the product has four
+   * light grounds it lands on. Composited in sRGB — which is what the browser
+   * does with the alpha — 60% came out at **4.07:1** on `--card` and **3.91:1**
+   * on `--background`. Both are below the 4.5:1 that `PRODUCT.md` calls the
+   * floor for body and placeholder text, on the single most-used secondary ink
+   * in the app.
+   *
+   * The fix is not a darker percentage, it is an **opaque** value: an opaque
+   * ink has one ratio, measurable, and it is the same ratio everywhere. The
+   * hue is unchanged, so this is a legibility correction and not a re-tint.
+   *
+   * Measured (WCAG 2.1 relative luminance, ratio = `(Llight + 0.05) /
+   * (Ldark + 0.05)`): `#4e6a52` → L = 0.125440, giving **6.14:1** on white,
+   * **6.00:1** on `--card` (#fffdf6), **5.65:1** on `--background` (#fdf8ec),
+   * **5.29:1** on `--muted`/`--secondary` (#f3f1e9) — the darkest ground it
+   * sits on, and the binding constraint — and **5.21:1** on the `bg-accent/20`
+   * of a `Borrowed` badge. Worst case 17% above the AA line.
+   *
+   * The `-default` alias exists so the sidebar and the sidebar's cream search
+   * field can each name a *different* one of the two inks below without either
+   * assignment becoming a self-reference.
+   */
+  --muted-foreground-default: #4e6a52;
+  --muted-foreground: var(--muted-foreground-default);
+  /** The same quiet ink for the deep-green sidebar, where it would vanish. */
+  --muted-foreground-inverse: color-mix(in oklab, #fff8e7 72%, #013405);
   --accent: #ffb203;
   --accent-foreground: #013405;
   /** Lighter gold, for the hover state of amber controls. */
@@ -77,7 +125,25 @@
   /** Pressed shade of the destructive red. */
   --destructive-hover: #7f1212;
   --border: color-mix(in oklab, #013405 16%, transparent);
-  --input: color-mix(in oklab, #013405 22%, transparent);
+  /**
+   * Form-control boundary: `Input`, `Textarea`, `Select`, `InputGroup`,
+   * `Checkbox`, and the ring on a focused control.
+   *
+   * 22% composited over `--card` was **1.54:1** and over `--background`
+   * **1.51:1**. WCAG 1.4.11 asks 3:1 for the visual boundary of a control you
+   * have to find, and an unlabelled cream field with a 1.5:1 edge is exactly
+   * the case it names. Raised to 60% — the same weight as the old quiet ink,
+   * so the two now form a legible pair: dividers whisper at `--border`, controls
+   * speak at `--input`. Composited: **4.07:1** on `--card`, **3.91:1** on
+   * `--background`, **3.73:1** on `--muted`. Clears 1.4.11 with margin on every
+   * ground it is used on.
+   *
+   * `--border` is deliberately **not** moved with it. At 16% it is 1.36:1 on
+   * the page, and 1.4.11's "essential" qualifier is arguable for a table rule;
+   * it also draws every card hairline and menu divider in the product, so
+   * raising it would restyle all of them at once. Recorded, not changed.
+   */
+  --input: color-mix(in oklab, #013405 60%, transparent);
   --ring: #013405;
   --chart-1: #013405;
   --chart-2: #ffb203;
@@ -93,6 +159,64 @@
   --sidebar-accent-foreground: #fff8e7;
   --sidebar-border: color-mix(in oklab, #ffb203 18%, transparent);
   --sidebar-ring: #ffb203;
+
+  /**
+   * The surfaces the browser draws, not the app.
+   *
+   * Everything above this line is a colour the product chose. Everything below
+   * is a colour the *user agent* draws: the selection highlight, the focus
+   * ring, the scrollbar, the placeholder, the caret, the print page. Those were
+   * shipping at whatever the browser in front of the staff member happened to
+   * default to, which is the cheapest way for a page to look assembled rather
+   * than built, so they are tokenised here and set once in the base layer.
+   *
+   * No rule outside `:root` names a colour literally. Where a surface needs a
+   * different value on the deep-green sidebar, the sidebar **re-points the
+   * variable** rather than restating the rule — see the base layer.
+   */
+  /** Text selection. `#013405` on `#ffb203` is 7.72:1, on any ground. */
+  --selection-background: var(--accent);
+  --selection-foreground: var(--foreground);
+  /**
+   * Focus ring. `--focus-ring-default` exists so the sidebar and the sidebar's
+   * cream search field can each point at a *different* one of these two names
+   * without either rule becoming a self-reference.
+   */
+  --focus-ring-default: var(--ring);
+  --focus-ring: var(--focus-ring-default);
+  /** Amber, because a green ring on the green sidebar is not a ring. */
+  --focus-ring-inverse: var(--sidebar-ring);
+  /**
+   * Placeholder text. Shares `--muted-foreground-default`'s value and its
+   * arithmetic: a placeholder is replacement text, not a hint, so it earns the
+   * same weight as a field label rather than the browser's ~54% grey, which is
+   * 2.6:1 on cream.
+   *
+   * Declared as its own literal rather than as `var(--muted-foreground)` so that
+   * the sidebar's re-point of `--muted-foreground` cannot reach it. Every input
+   * in the product sits on a light ground — including the sidebar's search
+   * field, which is a cream control on the green ground — so this token is
+   * always the light one and has no inverse.
+   */
+  --placeholder-foreground: #4e6a52;
+  /**
+   * Scrollbar. The track is transparent on purpose: a visible channel costs
+   * reading width on a records tool and shows up on every page.
+   *
+   * Thumb ratios are against WCAG 1.4.11's 3:1 for UI boundaries, computed on
+   * the composite (the track is the page behind it): `--background` →
+   * **3.55:1** at rest, **5.02:1** on hover; the deep-green sidebar →
+   * **3.31:1** at rest, **5.41:1** on hover.
+   */
+  --scrollbar-thumb: color-mix(in oklab, #013405 28%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklab, #013405 44%, transparent);
+  --scrollbar-track: transparent;
+  --sidebar-scrollbar-thumb: color-mix(in oklab, #fff8e7 40%, transparent);
+  --sidebar-scrollbar-thumb-hover: color-mix(
+    in oklab,
+    #fff8e7 58%,
+    transparent
+  );
 }
 
 /**
@@ -158,6 +282,7 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   --font-heading: "Cormorant Garamond", serif;
+  --color-placeholder-foreground: var(--placeholder-foreground);
 }
 
 @layer base {
@@ -166,12 +291,277 @@
   }
   body {
     @apply font-sans bg-background text-foreground;
+    /* The caret is drawn by the browser too, and it was coming out black. */
+    caret-color: var(--foreground);
   }
   html {
     @apply font-sans;
+    /**
+     * The product is light-only (see the note on the absent dark palette
+     * above), so the UA's own rendering of controls is pinned to light with it.
+     * Without this, a staff-room workstation on Windows dark mode paints date
+     * pickers, scrollbars and the form-control background in dark grey over a
+     * cream page, and nothing in the token layer can reach it.
+     */
+    color-scheme: light;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    /**
+     * Both of these inherit, which is the whole trick: re-pointing
+     * `--scrollbar-thumb` once on the sidebar re-themes every scroll box
+     * inside it, at any nesting depth, without a second rule.
+     */
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    scrollbar-width: thin;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+
+  /**
+   * Text selection. Deep green on amber is 7.72:1 and holds on the cream page,
+   * on a card and inside the green sidebar, so a dragged selection across a
+   * timetable row reads as a deliberate brand mark instead of the browser's
+   * grey-blue.
+   */
+  ::selection {
+    background-color: var(--selection-background);
+    color: var(--selection-foreground);
+  }
+
+  /**
+   * The focus ring for everything that has not declared one of its own.
+   *
+   * It lives in `base`, not in the clear, so a component's `outline-none` or
+   * `outline-hidden` still wins — every shadcn control in `packages/ui` pairs
+   * one of those with its own `focus-visible:ring-*`, and the sidebar pairs it
+   * with a 2px amber ring at 7.72:1 on green. This rule is the floor under
+   * everything that ships *no* indicator: bare `<a>`, `<summary>`, `<option>`,
+   * table cells with `tabindex`, and the long tail of `[tabindex]` divs.
+   *
+   * 2px of solid `--ring` at a 2px offset: green on cream is 16.9:1, which is
+   * far past the 3:1 of 1.4.11 and past the 2px perimeter of WCAG 2.2 SC
+   * 2.4.13. Nothing in this file removes an outline, and `use focus-ring` (see
+   * below) is the way to *replace* one at utility specificity.
+   */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  /**
+   * Placeholder text. The floor for any control that has not themed its own;
+   * `Input`, `Textarea` and `Select` reach the same value through
+   * `placeholder:text-muted-foreground`, which resolves to the token audited
+   * above. `opacity: 1` because WebKit dims placeholders on top of whatever
+   * colour it is given, and 5.65:1 does not survive being multiplied down.
+   */
+  ::placeholder {
+    color: var(--placeholder-foreground);
+    opacity: 1;
+  }
+
+  /**
+   * Underlines, where a link has one. Manrope's descenders and the tight
+   * leading this product is set with both collide with the default offset, so
+   * the rule lifts it off the text without moving the link box.
+   */
+  a {
+    text-decoration-thickness: from-font;
+    text-underline-offset: 0.18em;
+  }
+
+  /**
+   * Tabular figures.
+   *
+   * The numerals in a staff roster, a timetable grid or a leave balance are
+   * read in columns and compared down a column; proportional digits make every
+   * row a different width and every total look misaligned. This is the one
+   * piece of browser-default typography in a product that is otherwise fully
+   * specified, and it is the most-repeated typographic complaint this kind of
+   * data invites.
+   *
+   * Scoped to containers that are *definitionally* tabular rather than applied
+   * to `body`, so prose keeps its proportional figures.
+   */
+  table,
+  [data-slot="table"],
+  figure,
+  time,
+  kbd,
+  samp,
+  [data-slot="sidebar-menu-badge"] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /**
+   * The sidebar is the one large surface in the product that is not cream, so
+   * the browser surfaces that depend on their ground are re-pointed here once
+   * instead of restated per component.
+   */
+  [data-slot="sidebar"] {
+    --focus-ring: var(--focus-ring-inverse);
+    --muted-foreground: var(--muted-foreground-inverse);
+    --scrollbar-thumb: var(--sidebar-scrollbar-thumb);
+    --scrollbar-thumb-hover: var(--sidebar-scrollbar-thumb-hover);
+  }
+  /**
+   * …and the one exception, immediately below it: the sidebar's own search
+   * field is a cream `Input` sitting on the green ground. It is a light-ground
+   * control and has to read as one, so it takes the light ink and the light
+   * focus ring back. `--input` and `--placeholder-foreground` are *not* in
+   * either list, so they stay light everywhere.
+   */
+  [data-slot="sidebar-input"] {
+    --focus-ring: var(--focus-ring-default);
+    --muted-foreground: var(--muted-foreground-default);
+  }
+}
+
+/**
+ * The focus ring as a utility, for a control that opts out of the browser's
+ * own indicator on purpose.
+ *
+ * `focus-ring` is a real *replacement*, not a removal: because it compiles to
+ * `&:focus-visible` it outranks the `outline-none` / `outline-hidden` it is
+ * usually written next to, so `className="outline-none focus-ring"` is a
+ * complete and correct focus treatment. It reads the same `--focus-ring` the
+ * base rule does, so it flips to amber inside the sidebar for free.
+ */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+/**
+ * Scrollbar chrome for the engine that has no `scrollbar-color`.
+ *
+ * Firefox is served by the two inherited properties on `html` above; Chromium
+ * has no equivalent, so the two vendors need the two spellings. Both read the
+ * same three variables, so the sidebar re-point in the base layer themes both.
+ * The 2px transparent border plus `background-clip: content-box` keeps a 10px
+ * gutter from reading as a 10px thumb.
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/**
+ * Motion conveys state and nothing else, so none of it is load-bearing.
+ *
+ * This sits outside every layer on purpose: it has to beat `animate-spin` on a
+ * submit button, `animate-pulse` on a `Skeleton`, the `data-[open]:animate-in`
+ * transitions on `Dialog` and `Sheet`, and the plain `<style>` block in
+ * `auth-layout.tsx` that applies `om-pulse` and `om-drift` without a
+ * `motion-safe:` guard of its own. Animations resolve to their final frame and
+ * transitions resolve instantly, which is the correct reading of the state, not
+ * a loss of it — a `Skeleton` is still a `Skeleton` when it stops breathing, and
+ * `aria-busy` is what announces it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-delay: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/**
+ * Printing.
+ *
+ * The product's real exports are server-side Excel and PDF, but the browser's
+ * own print path exists — Ctrl+P on a timetable, an attendance register or a
+ * leave queue — and until now it printed the shell: a deep-green sidebar down
+ * the left edge, a 56px-tall header holding nothing but the sidebar toggle, and
+ * a stack of toasts. So this block does three things, in order of how much they
+ * matter.
+ *
+ * 1. **Drop the chrome.** The sidebar and its gap and rail, the trigger, the
+ *    empty header that holds only that trigger (`[role="toolbar"]` and the
+ *    `data-sonner-*` nodes cover toasts and filter bars), and every transient
+ *    overlay. An open `Dialog` is *not* dropped — it is the thing the user is
+ *    looking at — so its overlay goes and its portal is made static, which lets
+ *    the card flow into the page instead of floating over page one.
+ * 2. **Put ink on paper.** The ground tokens are re-pointed to white and the
+ *    inks to black *in `:root`*, so every component re-themes itself through
+ *    the tokens it already reads; nothing has to be restyled element by
+ *    element. The cream and the green are a screen. The rules are kept, one step
+ *    darker than the screen's, because a ledger is read as a grid of lines and
+ *    a grid with no rules is a list of floating words.
+ * 3. **Keep the grid whole.** `thead` repeats on every page and no row is
+ *    split across a page break, which is the only reason a printed table is
+ *    usable at all.
+ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --secondary: #ffffff;
+    --secondary-foreground: #000000;
+    --muted: #ffffff;
+    --border: color-mix(in oklab, #000000 38%, transparent);
+  }
+  [data-sonner-toaster],
+  [data-sonner-toast],
+  [data-slot="sidebar"],
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-rail"],
+  [data-slot="sidebar-trigger"],
+  [data-slot="sidebar-inset"] > header:has([data-slot="sidebar-trigger"]),
+  [role="toolbar"],
+  [data-slot="dialog-overlay"],
+  [data-slot="dropdown-menu-portal"],
+  [data-slot="select-content"],
+  [data-slot="combobox-content"],
+  [data-slot="popover-content"],
+  [data-slot="tooltip-content"] {
+    display: none !important;
+  }
+  [data-slot="sidebar-wrapper"] {
+    background: var(--background) !important;
+  }
+  [data-slot="sidebar-inset"] {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  [data-slot="dialog-portal"] {
+    position: static !important;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr,
+  [data-slot="card"] {
+    break-inside: avoid;
   }
 }

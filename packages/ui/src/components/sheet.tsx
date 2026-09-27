@@ -5,6 +5,13 @@ import { cn } from "cn"
 import { Button } from "@school-student-teacher-management/ui/components/button"
 import { IconX } from "@tabler/icons-react"
 
+/** See `dialog.tsx`: one soft brand-tinted shadow, and no second hairline. */
+const OVERLAY_SHADOW =
+  "shadow-[0_10px_30px_-12px_rgb(1_52_5/0.28),0_2px_8px_-4px_rgb(1_52_5/0.18)]"
+
+const OVERLAY_SCRIM =
+  "fixed inset-0 z-50 bg-foreground/20 text-xs/relaxed transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:duration-0 motion-reduce:transition-none"
+
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
 }
@@ -25,15 +32,28 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
   return (
     <SheetPrimitive.Backdrop
       data-slot="sheet-overlay"
-      className={cn(
-        "fixed inset-0 z-50 bg-black/10 text-xs/relaxed transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs",
-        className
-      )}
+      className={cn(OVERLAY_SCRIM, className)}
       {...props}
     />
   )
 }
 
+/**
+ * The side panel.
+ *
+ * Built on `Dialog`, so it inherits the same guarantees: portalled to
+ * `document.body` and positioned `fixed` (it escapes every scroll container),
+ * focus moved in on open, trapped while open, returned to the trigger on close,
+ * `Esc` to dismiss, and `role="dialog"` wired to `SheetTitle` through
+ * `aria-labelledby`. `aria-modal` is the one thing the primitive does not set,
+ * so it is set here.
+ *
+ * **Full-screen below `sm`.** The product constraint is explicit: no phone
+ * layouts, but a panel that covers a third of a narrow window is neither. Below
+ * the `sm` breakpoint every side becomes the whole viewport, which also means
+ * there is no 1rem strip of the page left over to look like a dismissable
+ * gutter that is not there.
+ */
 function SheetContent({
   className,
   children,
@@ -48,10 +68,24 @@ function SheetContent({
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Popup
+        aria-modal="true"
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col bg-popover bg-clip-padding text-xs/relaxed text-popover-foreground shadow-lg transition duration-200 ease-in-out data-ending-style:opacity-0 data-starting-style:opacity-0 data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=bottom]:data-ending-style:translate-y-[2.5rem] data-[side=bottom]:data-starting-style:translate-y-[2.5rem] data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:data-ending-style:translate-x-[-2.5rem] data-[side=left]:data-starting-style:translate-x-[-2.5rem] data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:data-ending-style:translate-x-[2.5rem] data-[side=right]:data-starting-style:translate-x-[2.5rem] data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=top]:data-ending-style:translate-y-[-2.5rem] data-[side=top]:data-starting-style:translate-y-[-2.5rem] data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+          "fixed z-50 flex flex-col bg-popover bg-clip-padding text-xs/relaxed text-popover-foreground outline-none transition duration-200 ease-in-out data-ending-style:opacity-0 data-starting-style:opacity-0",
+          OVERLAY_SHADOW,
+          "data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=bottom]:data-ending-style:translate-y-[2.5rem] data-[side=bottom]:data-starting-style:translate-y-[2.5rem]",
+          "data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:data-ending-style:translate-x-[-2.5rem] data-[side=left]:data-starting-style:translate-x-[-2.5rem]",
+          "data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:data-ending-style:translate-x-[2.5rem] data-[side=right]:data-starting-style:translate-x-[2.5rem]",
+          "data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=top]:data-ending-style:translate-y-[-2.5rem] data-[side=top]:data-starting-style:translate-y-[-2.5rem]",
+          "data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+          // Narrow viewports: the full window, on every side. `max-sm:`
+          // utilities outrank the `3/4` and `sm:max-w-sm` above, so this wins
+          // below the breakpoint and is inert above it. A caller that sets its
+          // own width through `className` still wins over both, because
+          // `className` is merged last.
+          "max-sm:inset-x-0 max-sm:w-full max-sm:max-w-none",
+          "motion-reduce:duration-0 motion-reduce:transition-none",
           className
         )}
         {...props}
@@ -68,8 +102,7 @@ function SheetContent({
               />
             }
           >
-            <IconX
-            />
+            <IconX aria-hidden="true" />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>
         )}
@@ -98,12 +131,13 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** Names the sheet: `aria-labelledby` on the popup points here. */
 function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
       className={cn(
-        "font-heading text-sm font-medium text-foreground",
+        "font-heading text-sm font-medium text-foreground text-balance",
         className
       )}
       {...props}
@@ -111,6 +145,7 @@ function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
   )
 }
 
+/** The sheet's `aria-describedby` target. */
 function SheetDescription({
   className,
   ...props

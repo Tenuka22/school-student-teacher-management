@@ -2,6 +2,7 @@ import type { SessionUser } from "@school-student-teacher-management/api/context
 import { createFileRoute } from "@tanstack/react-router";
 
 import { VerifyEmailContent } from "@/components/auth/verify-email-content";
+import { pageSeo } from "@/functions/get-site-origin";
 
 const VerifyRoute = () => {
   // The session is resolved once by the authed shell's guard and handed down
@@ -25,4 +26,13 @@ const VerifyRoute = () => {
  */
 export const Route = createFileRoute("/_auth/verify")({
   component: VerifyRoute,
+  head: ({ matches }) =>
+    pageSeo({
+      matches,
+      path: "/verify",
+      title: "Confirm your email address",
+      description:
+        "Enter the one-time code sent to your College email address to unlock the rest of the staff system.",
+      noindex: true,
+    }),
 });

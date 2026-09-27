@@ -16,9 +16,10 @@ import {
 } from "@school-student-teacher-management/ui/components/field";
 import { useQuery } from "@tanstack/react-query";
 import type * as React from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import type { InventoryItemStatus } from "@/components/staff/inventory/inventory-types";
+import { PickerListStatus } from "@/components/staff/inventory/shared/teacher-combobox";
 import { orpc } from "@/utils/orpc";
 
 const DEBOUNCE_MS = 250;
@@ -57,6 +58,9 @@ export const useItemOptions = (input?: {
 }): {
   options: ItemPickerOption[];
   isLoading: boolean;
+  isFetching: boolean;
+  error: unknown;
+  refetch: () => void;
   search: string;
   setSearch: (value: string) => void;
 } => {
@@ -101,6 +105,11 @@ export const useItemOptions = (input?: {
   return {
     options,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: () => {
+      void query.refetch();
+    },
     search,
     setSearch,
   };
@@ -156,15 +165,30 @@ export const ItemPickerField: React.FC<{
    * case the status filter cannot see (an item whose borrowed units are
    * exhausted but whose `qty` is not zero).
    */
-  const { options, isLoading, setSearch } = useItemOptions(
-    onlyAvailable ? { status: "available" } : undefined
-  );
+  const {
+    options,
+    isFetching,
+    error: loadError,
+    refetch,
+    setSearch,
+  } = useItemOptions(onlyAvailable ? { status: "available" } : undefined);
 
   /**
    * The chosen item can be off the current page — the box holds a search term,
-   * the page holds fifty rows. Without a placeholder row the field would render
-   * as empty while a value was set, and a dialog that looks like it has not been
+   * the page holds fifty rows. Without a stand-in row the field would render as
+   * empty while a value was set, and a dialog that looks like it has not been
    * filled in is the one thing that must not happen here.
+   *
+   * The row is worded as an absence of *knowledge* rather than an absence of the
+   * item: the id is real, the name and counters are not loaded, and a clerk must
+   * not read "Selected item" as a product called "Selected item".
+   *
+   * **It is left pickable, deliberately.** Disabling the control's own *value* is
+   * a Base UI edge case that cannot be exercised here, and it costs something
+   * real: a disabled selected item is skipped by keyboard navigation, so the one
+   * row representing the current selection becomes unreachable in the list. Picking
+   * it is a harmless no-op — `onValueChange` hands back the same `itemId` the
+   * dialog already had — so the honest label is the whole of the fix.
    */
   const items = useMemo(() => {
     if (!value || options.some((option) => option.value === value)) {
@@ -172,7 +196,11 @@ export const ItemPickerField: React.FC<{
     }
 
     return [
-      { value, label: "Selected item", description: "Not on this page" },
+      {
+        value,
+        label: "Chosen item — not on this page",
+        description: "Its name and counters are not loaded",
+      },
       ...options,
     ];
   }, [options, value]);
@@ -181,6 +209,10 @@ export const ItemPickerField: React.FC<{
     () => items.find((option) => option.value === value) ?? null,
     [items, value]
   );
+
+  const handleRetry = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   return (
     <Field data-invalid={Boolean(error)}>
@@ -203,10 +235,18 @@ export const ItemPickerField: React.FC<{
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
+          aria-busy={isFetching || undefined}
         />
         <ComboboxContent>
           <ComboboxEmpty>
-            {isLoading ? "Searching..." : "No items found"}
+            <PickerListStatus
+              isFetching={isFetching}
+              error={loadError}
+              onRetry={handleRetry}
+              empty="No items found"
+              subject="the item list"
+              loading="Searching the register…"
+            />
           </ComboboxEmpty>
           <ComboboxList>
             {items.map((option) => (

@@ -1,27 +1,38 @@
 "use client";
 
-import {
-  ITEM_CONDITIONS,
-  itemConditionLabel,
-  itemConditionSchema,
-  normalizeInventoryKey,
-} from "@school-student-teacher-management/db/constants/inventory";
-import {
-  inventoryCategoryIdSchema,
-  moneyStringSchema,
-} from "@school-student-teacher-management/db/schema/inventory";
-import { staffIdSchema } from "@school-student-teacher-management/db/schema/staff";
-import { Badge } from "@school-student-teacher-management/ui/components/badge";
+/*
+ * The item create and edit dialogs.
+ *
+ * The state and the validation live in `item-form-model.ts`; the fields live in
+ * `item-form-fields.tsx`. What is left here is the thing that actually cannot be
+ * extracted: the `<form>` that owns the state, and the two dialogs that wrap it.
+ *
+ * The three things that only exist at this level, and why:
+ *
+ * - **Derived form ids.** The two dialogs are mounted together — `admin/$year`
+ *   holds the create half open while the edit half is closed, and the register
+ *   can have one of each. Every id on this form is built from a single `useId`,
+ *   because a hardcoded `create-inventory-item-form` is one id and one `<form>`
+ *   per dialog that a future second mount would silently duplicate. The submit
+ *   button lives in the footer and reaches the form with `form={formId}`, so the
+ *   id is load-bearing in two places and must be one value.
+ * - **Escape is not an exit while there is typing in the dialog.** A half-typed
+ *   item is twenty fields of work and the register has no undo for it, so `Esc`
+ *   is cancelled while the form is dirty and left alone when it is not. The
+ *   Cancel button and the dialog's close button still close it, because choosing
+ *   to close a form is a different act from pressing a key that closes whatever
+ *   has focus.
+ * - **Where a failed save is announced.** The `useMutation`'s `onError` owns the
+ *   toast — it is the only one of the two that survives the dialog unmounting,
+ *   and toasting here too printed every sentence twice. What the toast cannot do
+ *   is survive: it is gone in four seconds, and the form it belongs to is still
+ *   open with everything the user typed still in it. So a failure that mapped to
+ *   no field gets a panel that stays, and a failure that did map to a field does
+ *   not — that one is already a `FieldError` with `role="alert"` on a control
+ *   that focus has just been moved to.
+ */
+
 import { Button } from "@school-student-teacher-management/ui/components/button";
-import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@school-student-teacher-management/ui/components/combobox";
 import {
   Dialog,
   DialogContent,
@@ -29,1679 +40,74 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@school-student-teacher-management/ui/components/field";
-import { Input } from "@school-student-teacher-management/ui/components/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@school-student-teacher-management/ui/components/select";
-import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
-import {
-  IconAlertTriangle,
-  IconInfoCircle,
-  IconPackageExport,
-  IconSwitchHorizontal,
-  IconTrash,
-  IconUserCheck,
-} from "@tabler/icons-react";
+import { IconAlertTriangle } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import type * as React from "react";
-import { useMemo, useState } from "react";
-import * as v from "valibot";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   CategoryOption,
   InventoryItemView,
 } from "@/components/staff/inventory/inventory-types";
+import type {
+  CategoryListState,
+  EditActionProps,
+} from "@/components/staff/inventory/item-form-fields";
 import {
-  MoneyField,
-  StaffComboboxField,
-} from "@/components/staff/inventory/shared";
-import { validationFieldErrors } from "@/lib/api-error";
-
-/** `createItem`'s own ceiling on `qty`, restated so the input can enforce it. */
-const MAX_ITEM_QTY = 1000;
-
-/**
- * The units a school's store actually counts things in. `unit` is a free
- * `text` column with no CHECK behind it — a school that counts something in
- * "reams" is still allowed to — so this is a picklist of common answers,
- * not a closed set: `CUSTOM_UNIT` is always the last option, and choosing it
- * reveals a plain text field for anything not on the list.
- */
-const UNIT_PRESETS = [
-  "unit",
-  "box",
-  "set",
-  "pair",
-  "pack",
-  "dozen",
-  "roll",
-  "kg",
-  "litre",
-] as const;
-const CUSTOM_UNIT = "__custom__";
-
-/** `inventory_item_sku_format` — the CHECK the column itself carries. */
-const SKU_PATTERN = /^INV-\d{5}$/u;
-
-/** `numeric(14,2)`, the money columns' own precision and scale. */
-const MONEY_PATTERN = /^\d{1,12}(?:\.\d{1,2})?$/u;
-
-type ItemFormField =
-  | "categoryId"
-  | "name"
-  | "sku"
-  | "unit"
-  | "description"
-  | "qty"
-  | "condition"
-  | "location"
-  | "minQty"
-  | "borrowable"
-  | "purchaseValue"
-  | "currentValue"
-  | "uniqueIds"
-  | "managerStaffId"
-  | "custodianStaffId";
-
-type ItemFormErrors = Partial<Record<ItemFormField, string>>;
-
-/** The fields both forms share, validated by one schema per mode. */
-const identitySchema = {
-  name: v.pipe(
-    v.string(),
-    v.trim(),
-    v.minLength(1, "Give the item a name"),
-    v.maxLength(200, "Keep the name under 200 characters")
-  ),
-  description: v.pipe(
-    v.string(),
-    v.trim(),
-    v.maxLength(500, "Keep the description under 500 characters")
-  ),
-  unit: v.pipe(
-    v.string(),
-    v.trim(),
-    v.minLength(1, "Say what one of these is counted in — unit, chair, box"),
-    v.maxLength(40, "Keep the unit under 40 characters")
-  ),
-  condition: itemConditionSchema,
-  location: v.pipe(v.string(), v.trim(), v.maxLength(200)),
-  borrowable: v.boolean(),
-  purchaseValue: v.optional(moneyStringSchema()),
-  currentValue: v.optional(moneyStringSchema()),
-};
-
-const reorderLevelSchema = v.pipe(
-  v.number(),
-  v.integer("The reorder level is a whole number of units"),
-  v.minValue(0, "The reorder level cannot be negative"),
-  v.maxValue(MAX_ITEM_QTY, "That is more units than a single line can hold")
-);
-
-const createItemSchema = v.object({
-  ...identitySchema,
-  qty: v.pipe(
-    v.number(),
-    v.integer("The quantity is a whole number of units"),
-    v.minValue(1, "A new item has to have at least one unit"),
-    v.maxValue(
-      MAX_ITEM_QTY,
-      `A single item line is at most ${MAX_ITEM_QTY} units`
-    )
-  ),
-  minQty: reorderLevelSchema,
-});
-
-/**
- * The edit schema is the create schema minus `qty`.
- *
- * `updateItem` refuses `qty` outright — it is the number of unit rows an item has,
- * a *consequence* of movements rather than an editable fact — so there is nothing
- * here to validate it against. The reorder level is the one cross-field rule that
- * survives, and it is checked against the item's own count at submit.
- *
- * **`categoryId` is absent from this schema on purpose, which used to hide a
- * blocker.** It is not validated here on create either: it arrives as a branded id
- * from a `Combobox` rather than from a typed `<input>`, so the builder parses it
- * with `v.parse(inventoryCategoryIdSchema, …)` after this schema has run. That is
- * correct — but the create branch said so out loud, and this one did not, which is
- * how the edit branch came to read `category` from nowhere and return
- * `{ ...result.output }` with the re-categorisation silently dropped. If a field is
- * added to `updateItem` by hand, the submit builder is where it has to be named.
- */
-const editItemSchema = v.object({
-  ...identitySchema,
-  minQty: reorderLevelSchema,
-});
-
-/**
- * Only the keys valibot objected to, so each issue lands on the field that caused
- * it. It takes the **issues** rather than the result object because
- * `v.SafeParseResult` is generic over the *schema*, and threading a schema type
- * through a helper whose whole job is to read `issue.path[0].key` would buy
- * nothing.
- */
-const issuesToErrors = <T extends string>(
-  issues: readonly {
-    path?: readonly { key?: unknown }[] | null;
-    message: string;
-  }[]
-): Partial<Record<T, string>> => {
-  const errors: Partial<Record<T, string>> = {};
-
-  for (const issue of issues) {
-    const key = issue.path?.[0]?.key;
-    if (typeof key === "string" && !(key in errors)) {
-      errors[key as T] = issue.message;
-    }
-  }
-
-  return errors;
-};
-
-const toQuantity = (raw: string): number => {
-  const parsed = Math.trunc(Number(raw));
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
-
-// ─── Asset tag rows ─────────────────────────────────────────────────────────
-
-/**
- * One row of the repeated tag input, with a **stable** identity.
- *
- * The rows are positional and the count is locked to the quantity, so the position
- * *is* the identity today — but a key that is only accidentally correct is a key
- * that breaks the day someone adds a "move row up" button, and React's
- * reconciliation would then carry a keystroke from one row to another. A counter is
- * enough: `crypto.randomUUID` is unavailable on a plain-HTTP origin, which is
- * exactly the school's LAN, and a row that exists for the lifetime of one dialog
- * does not need a globally unique identifier.
- */
-interface TagRow {
-  id: number;
-  value: string;
-}
-
-let nextTagRowId = 0;
-
-const newTagRow = (value = ""): TagRow => {
-  nextTagRowId += 1;
-  return { id: nextTagRowId, value };
-};
-
-/**
- * Grow or shrink the tag list to the quantity, keeping whatever is typed.
- *
- * The row count is *locked* to the quantity rather than validated against it, and
- * both directions are non-destructive where they can be: raising the quantity
- * never blanks a row, and lowering it discards only the rows past the new count —
- * which is exactly what typing the smaller number asks for. Existing rows keep
- * their ids, so nothing is remounted and no keystroke is lost.
- */
-const resizeTagRows = (rows: TagRow[], qty: number): TagRow[] => {
-  const size = Math.max(0, Math.min(qty, MAX_ITEM_QTY));
-  const kept = rows.slice(0, size);
-  const added = Array.from({ length: size - kept.length }, () => newTagRow());
-  return [...kept, ...added];
-};
-
-/**
- * Which rows repeat a tag typed somewhere else in the list.
- *
- * `normalizeInventoryKey` is the same function the server's unique index is written
- * against, so `LT-0042`, `lt 0042` and `LT-0042 ` are one tag here for exactly the
- * reason they are one tag in the database. Both the row that claimed a tag and the
- * row that repeated it are flagged: marking only the second leaves the first looking
- * innocent and the clerk guessing which one to change.
- */
-const duplicateTagRows = (rows: TagRow[]): Set<number> => {
-  const seen = new Map<string, number>();
-  const duplicates = new Set<number>();
-
-  for (const [index, row] of rows.entries()) {
-    const key = normalizeInventoryKey(row.value);
-    if (key.length === 0) {
-      continue;
-    }
-
-    const firstIndex = seen.get(key);
-    if (firstIndex === undefined) {
-      seen.set(key, index);
-    } else {
-      duplicates.add(firstIndex);
-      duplicates.add(index);
-    }
-  }
-
-  return duplicates;
-};
-
-interface AssetTagFieldsProps {
-  formId: string;
-  rows: TagRow[];
-  duplicates: Set<number>;
-  error: string | undefined;
-  disabled: boolean;
-  onChange: (next: TagRow[]) => void;
-}
-
-/**
- * The asset tags, one row per unit.
- *
- * **`createItem` requires `uniqueIds.length === qty` the moment a single tag is
- * supplied** — `resolveAssetTags` compares the normalized count against `qty` and
- * refuses a mismatch, while an entirely empty list stays legitimate because a bulk
- * line ("200 chairs") is counted rather than tagged. That is a rule an object schema
- * cannot express, so it lives here: the rows track the quantity, a live count says
- * how many are still missing, and the two ways the list can be wrong (a blank row,
- * the same tag twice) are both named on the field. Learning this from the server's
- * toast would have thrown away a twenty-field form's worth of typing to be told its
- * tags were short.
- */
-const AssetTagFields = ({
-  formId,
-  rows,
-  duplicates,
-  error,
-  disabled,
-  onChange,
-}: AssetTagFieldsProps) => {
-  const filled = rows.filter(
-    (row) => normalizeInventoryKey(row.value).length > 0
-  ).length;
-  const missing = rows.length - filled;
-
-  return (
-    <FieldSet>
-      <FieldLegend>Asset tags</FieldLegend>
-      <FieldDescription>
-        Optional, and it decides how this line is tracked. Leave every row blank
-        for a bulk-counted line — 20 office chairs sharing one QR code and a
-        quantity of 20. Fill in one tag per row to track each unit by its own QR
-        code instead — 3 projectors, each its own asset tag and its own history.
-        It is all-or-nothing: fill in as many as there are units, or leave all
-        of them blank.
-      </FieldDescription>
-      <FieldGroup>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-muted-foreground text-xs tabular-nums">
-            {filled} of {rows.length} entered
-            {missing > 0 ? ` — ${missing} still blank` : ""}
-          </p>
-          {duplicates.size > 0 ? (
-            <Badge variant="destructive">
-              <IconAlertTriangle />
-              Repeated in {duplicates.size} row(s)
-            </Badge>
-          ) : null}
-        </div>
-
-        {rows.map((row, index) => {
-          const inputId = `${formId}-tag-${row.id}`;
-          const isDuplicate = duplicates.has(index);
-
-          return (
-            <Field key={row.id} data-invalid={isDuplicate || Boolean(error)}>
-              <FieldLabel htmlFor={inputId}>
-                Tag {index + 1}
-                {isDuplicate ? (
-                  <Badge variant="destructive" className="ml-1">
-                    <IconAlertTriangle />
-                    Repeated
-                  </Badge>
-                ) : null}
-              </FieldLabel>
-              <div className="flex items-center gap-2">
-                <Input
-                  id={inputId}
-                  value={row.value}
-                  maxLength={64}
-                  autoComplete="off"
-                  placeholder="As written on the device, e.g. LT-0042"
-                  disabled={disabled}
-                  aria-invalid={
-                    isDuplicate || Boolean(error) ? true : undefined
-                  }
-                  aria-describedby={`${formId}-tags-error`}
-                  onChange={(event) => {
-                    const next = rows.toSpliced(index, 1, {
-                      ...row,
-                      value: event.target.value,
-                    });
-                    onChange(next);
-                  }}
-                />
-                {/*
-                  Clearing blanks the row rather than removing it. Removing it would
-                  silently break the one-row-per-unit coupling, and the next submit
-                  would then fail the count check for a reason the user did not cause
-                  and cannot see.
-                */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={disabled || row.value.length === 0}
-                  aria-label={`Clear asset tag ${index + 1}`}
-                  onClick={() =>
-                    onChange(rows.toSpliced(index, 1, newTagRow()))
-                  }
-                >
-                  <IconTrash />
-                </Button>
-              </div>
-            </Field>
-          );
-        })}
-
-        <FieldError id={`${formId}-tags-error`}>{error}</FieldError>
-        <FieldDescription>
-          One tag per unit, and the number of rows follows the quantity above. A
-          tag is how the school finds the thing again, so it is checked against
-          the whole register: a tag already on file anywhere is refused. A bulk
-          line that is counted rather than tracked individually simply leaves
-          these boxes empty.
-        </FieldDescription>
-      </FieldGroup>
-    </FieldSet>
-  );
-};
-
-// --- Unit field ---
-
-interface UnitFieldProps {
-  formId: string;
-  value: string;
-  error: string | undefined;
-  disabled: boolean;
-  onChange: (unit: string) => void;
-}
-
-/**
- * The unit of measure, as a select over the common answers plus a "Custom"
- * escape hatch — the same shape `CategoryPicker` uses for a value the
- * database does not close off. A value that already isn't one of the presets
- * (an item edited before this select existed, or a school's own word for
- * something) opens straight into the custom text field, pre-filled, rather
- * than silently swapping it for the nearest preset.
- */
-const UnitField = ({
-  formId,
-  value,
-  error,
-  disabled,
-  onChange,
-}: UnitFieldProps) => {
-  const isPreset = (UNIT_PRESETS as readonly string[]).includes(value);
-  const [isCustom, setIsCustom] = useState(!isPreset && value.length > 0);
-
-  return (
-    <Field data-invalid={Boolean(error)}>
-      <FieldLabel htmlFor={`${formId}-unit`}>Unit</FieldLabel>
-      <Select
-        value={isCustom ? CUSTOM_UNIT : value}
-        onValueChange={(next) => {
-          if (next === CUSTOM_UNIT) {
-            setIsCustom(true);
-            return;
-          }
-          setIsCustom(false);
-          onChange(next ?? "unit");
-        }}
-      >
-        <SelectTrigger disabled={disabled} id={`${formId}-unit`}>
-          <SelectValue placeholder="unit" />
-        </SelectTrigger>
-        <SelectContent>
-          {UNIT_PRESETS.map((preset) => (
-            <SelectItem key={preset} value={preset}>
-              {preset}
-            </SelectItem>
-          ))}
-          <SelectItem value={CUSTOM_UNIT}>Custom…</SelectItem>
-        </SelectContent>
-      </Select>
-      {isCustom ? (
-        <Input
-          aria-describedby={error ? `${formId}-unit-error` : undefined}
-          aria-invalid={error ? true : undefined}
-          className="mt-2"
-          disabled={disabled}
-          maxLength={40}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Type your own, e.g. reams"
-          value={isPreset ? "" : value}
-        />
-      ) : null}
-      <FieldDescription>
-        What one of these is counted in — unit, chair, box, set. It is what the
-        quantity is read as.
-      </FieldDescription>
-      <FieldError id={`${formId}-unit-error`}>{error}</FieldError>
-    </Field>
-  );
-};
-
-// --- Category picker ---
-
-interface CategoryPickerProps {
-  formId: string;
-  categories: CategoryOption[];
-  value: CategoryOption | null;
-  onChange: (category: CategoryOption | null) => void;
-  error: string | undefined;
-  disabled: boolean;
-}
-
-/**
- * The category, as a combobox.
- *
- * There used to be an inline "New category" row here, because `createItem`
- * requires a `categoryId` behind a `restrict` foreign key and a store with
- * nothing set up had no other way in. Categories are a closed set now —
- * the eight seeded ones, see `inventoryCategory`'s schema doc comment —
- * and `categories.create` no longer exists, so there is nothing left for this
- * picker to create. If the category picker is empty, the fix is the register's
- * own "Seed the eight starter categories" action, not a form typed here.
- *
- * Filtering is left to the combobox rather than sent to the server, unlike every
- * other picker in this feature — and that is because `categories.list` deliberately
- * returns *every* category, used or not. There is nothing to page through, and a
- * picker that needed a round trip to filter eight rows would be strictly worse.
- */
-const CategoryPicker = ({
-  formId,
-  categories,
-  value,
-  onChange,
-  error,
-  disabled,
-}: CategoryPickerProps) => (
-    <Field data-invalid={Boolean(error)}>
-      <FieldLabel htmlFor={`${formId}-category`}>Category *</FieldLabel>
-      <Combobox<CategoryOption>
-        items={categories}
-        value={value}
-        onValueChange={(option) => onChange(option ?? null)}
-        itemToStringLabel={(option) => option?.name ?? ""}
-        isItemEqualToValue={(a, b) => a?.id === b?.id}
-      >
-        <ComboboxInput
-          id={`${formId}-category`}
-          placeholder="Search the categories..."
-          disabled={disabled}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${formId}-category-error` : undefined}
-        />
-        <ComboboxContent>
-          <ComboboxEmpty>
-            {categories.length === 0
-              ? "No categories yet — seed the eight starters from the register"
-              : "No category matches that"}
-          </ComboboxEmpty>
-          <ComboboxList>
-            {categories.map((option) => (
-              <ComboboxItem key={option.id} value={option}>
-                <span className="flex items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className="ring-foreground/10 size-2 shrink-0 rounded-full ring-1"
-                    style={{ backgroundColor: option.color }}
-                  />
-                  <span className="truncate font-medium">{option.name}</span>
-                </span>
-              </ComboboxItem>
-            ))}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-      <FieldDescription>
-        Every item belongs to exactly one category, and the register&rsquo;s
-        category filter reads this same fixed list.
-      </FieldDescription>
-      {error ? (
-        <FieldError id={`${formId}-category-error`}>{error}</FieldError>
-      ) : null}
-    </Field>
-  );
-
-// ─── Valuation ──────────────────────────────────────────────────────────────
-
-/**
- * The second money field, and why it is not the shared `MoneyField`.
- *
- * The shared control renders `<Input id="inventory-money-field">` with a label
- * pointing at that same hardcoded id. One instance per form is fine; this form has
- * two valuation columns (`purchase_value` and `current_value`), and two instances
- * would put one id in the document twice — so the second label would activate the
- * *first* input, announcing "Current value" against "Purchase value" and moving the
- * caret into the wrong box on click. This is the same control with a caller-supplied
- * id and the same string-typed `numeric(14,2)` contract; it exists to fix the id and
- * nothing else. The purchase-value half still uses the shared `MoneyField`, because
- * a single instance of it is correct.
- */
-/**
- * The money field's error, with the format message taking precedence.
- *
- * Two messages are possible and only one can be shown: a malformed amount is
- * something the user can fix at the keyboard, and a server error is a statement
- * about the value as submitted. Showing the format message when both apply is
- * correct — it is the nearer problem — so the branch is a helper rather than a
- * nested ternary inside the markup.
- */
-const MoneyFieldError = ({
-  id,
-  error,
-  isMalformed,
-}: {
-  id: string;
-  error: string | undefined;
-  isMalformed: boolean;
-}) => {
-  if (isMalformed) {
-    return (
-      <FieldError id={id}>
-        This is not a valid amount. Type digits with an optional decimal point
-        and no comma, for example 1250.00
-      </FieldError>
-    );
-  }
-
-  if (!error) {
-    return null;
-  }
-
-  return <FieldError id={id}>{error}</FieldError>;
-};
-
-const CurrentValueField = ({
-  formId,
-  value,
-  onChange,
-  error,
-  description,
-}: {
-  formId: string;
-  value: string;
-  onChange: (next: string) => void;
-  error: string | undefined;
-  description: string;
-}) => {
-  const id = `${formId}-current-value`;
-  const isMalformed = value !== "" && !MONEY_PATTERN.test(value);
-
-  return (
-    <Field data-invalid={Boolean(error) || isMalformed}>
-      <FieldLabel htmlFor={id}>Current value</FieldLabel>
-      <Input
-        id={id}
-        type="text"
-        inputMode="decimal"
-        autoComplete="off"
-        placeholder="0.00"
-        value={value}
-        aria-invalid={error || isMalformed ? true : undefined}
-        aria-describedby={`${id}-error`}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <MoneyFieldError
-        id={`${id}-error`}
-        error={error}
-        isMalformed={isMalformed}
-      />
-      <FieldDescription>{description}</FieldDescription>
-      <FieldDescription>
-        Up to 12 digits with at most 2 decimal places. No thousands separators —
-        type 1250.00, not 1,250.00.
-      </FieldDescription>
-    </Field>
-  );
-};
-
-// ─── Form sections ──────────────────────────────────────────────────────────
-
-/** The two ways a tag list can be wrong, named on the field rather than toasted. */
-const resolveTagError = (
-  enteredTagCount: number,
-  qty: number,
-  duplicates: Set<number>
-): string | undefined => {
-  if (enteredTagCount > 0 && enteredTagCount !== qty) {
-    return `Enter one asset tag for each of the ${qty} unit(s) — ${enteredTagCount} entered so far.`;
-  }
-
-  if (duplicates.size > 0) {
-    return "The same asset tag appears more than once. A tag identifies one physical unit.";
-  }
-
-  return undefined;
-};
-
-/** What the form looks like when it is about to be submitted.
- *
- * `minQty` is a **string** here even though it is a number on the wire, because it
- * is an `<input type="number">` bound to a controlled value: a number in state
- * would render `""` for an empty box and `0` for a box holding a zero, and the
- * difference between "not answered yet" and "answered zero" is exactly what the
- * reorder-level field needs. It is parsed once, at submit.
- */
-interface FormValues {
-  name: string;
-  description: string;
-  unit: string;
-  minQty: string;
-  borrowable: boolean;
-  condition: string;
-  location: string;
-  purchaseValue: string;
-  currentValue: string;
-  imageFileId: string | null;
-}
-
-interface ImageUploadFieldProps {
-  formId: string;
-  disabled: boolean;
-  initialImageUrl: string | null;
-  onChange: (imageFileId: string | null) => void;
-}
-
-/**
- * A single item photo: pick a file, it uploads immediately to
- * `/api/files/upload`, and the returned `fileId` is what the form submits as
- * `imageFileId` — the item row itself is never sent binary data, only the
- * pointer. Uploading eagerly (rather than deferring to form submit) is what
- * lets the preview show the photo that was actually saved rather than a local
- * object URL that could still fail to upload after the item itself was created.
- */
-const ImageUploadField = ({
-  formId,
-  disabled,
-  initialImageUrl,
-  onChange,
-}: ImageUploadFieldProps) => {
-  const [previewUrl, setPreviewUrl] = useState(initialImageUrl);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inputId = `${formId}-image`;
-
-  const handleFile = async (file: File) => {
-    setIsUploading(true);
-    setError(null);
-    try {
-      const body = new FormData();
-      body.set("file", file);
-      const response = await fetch("/api/files/upload", {
-        method: "POST",
-        body,
-        credentials: "include",
-      });
-      const result = (await response.json()) as {
-        fileId?: string;
-        url?: string;
-        message?: string;
-      };
-      if (!response.ok || !result.fileId || !result.url) {
-        setError(result.message ?? "Could not upload that image");
-        setIsUploading(false);
-        return;
-      }
-      setPreviewUrl(result.url);
-      onChange(result.fileId);
-      setIsUploading(false);
-    } catch {
-      setError("Could not reach the server to upload that image");
-      setIsUploading(false);
-    }
-  };
-
-  return (
-    <Field>
-      <FieldLabel htmlFor={inputId}>Photo</FieldLabel>
-      <div className="flex items-center gap-3">
-        {previewUrl ? (
-          <img
-            alt=""
-            className="border-primary/14 size-16 border object-cover"
-            src={previewUrl}
-          />
-        ) : (
-          <div className="border-primary/14 text-muted-foreground flex size-16 items-center justify-center border text-xs">
-            None
-          </div>
-        )}
-        <div className="flex flex-col gap-1">
-          <Input
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            disabled={disabled || isUploading}
-            id={inputId}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void handleFile(file);
-              }
-              event.target.value = "";
-            }}
-            type="file"
-          />
-          {previewUrl ? (
-            <Button
-              disabled={disabled || isUploading}
-              onClick={() => {
-                setPreviewUrl(null);
-                onChange(null);
-              }}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              Remove photo
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      <FieldDescription>
-        Optional. PNG, JPEG, WEBP or GIF, up to 8 MB.
-      </FieldDescription>
-      {error ? <FieldError>{error}</FieldError> : null}
-    </Field>
-  );
-};
-
-interface IdentityFieldsetProps {
-  formId: string;
-  errors: ItemFormErrors;
-  isLoading: boolean;
-  isEdit: boolean;
-  values: FormValues;
-  categories: CategoryOption[];
-  category: CategoryOption | null;
-  sku: string;
-  onChange: (patch: Partial<FormValues>) => void;
-  onCategoryChange: (category: CategoryOption | null) => void;
-  onSkuChange: (sku: string) => void;
-  /** The item's current photo, if it already has one — absent on create. */
-  initialImageUrl?: string | null;
-}
-
-/**
- * What the thing is called, and what kind of thing it is.
- *
- * The SKU field exists **only on create**, and that is not an oversight:
- * `updateItem` does not accept `sku` either. A SKU is the item's identity on the
- * ledger, every historical row refers to it, and letting it be retyped would make
- * those rows describe something the register no longer contains. So the field is
- * absent rather than disabled — there is nothing on this form to change.
- */
-const IdentityFieldset = ({
-  formId,
-  errors,
-  isLoading,
-  isEdit,
-  values,
-  categories,
-  category,
-  sku,
-  onChange,
-  onCategoryChange,
-  onSkuChange,
-  initialImageUrl,
-}: IdentityFieldsetProps) => (
-  <FieldSet>
-    <FieldLegend>Identity</FieldLegend>
-    <FieldGroup>
-      <Field data-invalid={Boolean(errors.name)}>
-        <FieldLabel htmlFor={`${formId}-name`}>Name *</FieldLabel>
-        <Input
-          id={`${formId}-name`}
-          value={values.name}
-          maxLength={200}
-          placeholder="e.g. Portable projector, XGA"
-          disabled={isLoading}
-          aria-invalid={errors.name ? true : undefined}
-          aria-describedby={errors.name ? `${formId}-name-error` : undefined}
-          onChange={(event) => onChange({ name: event.target.value })}
-        />
-        <FieldError id={`${formId}-name-error`}>{errors.name}</FieldError>
-      </Field>
-
-      <CategoryPicker
-        formId={formId}
-        categories={categories}
-        value={category}
-        onChange={onCategoryChange}
-        error={errors.categoryId}
-        disabled={isLoading}
-      />
-
-      {isEdit ? null : (
-        <Field data-invalid={Boolean(errors.sku)}>
-          <FieldLabel htmlFor={`${formId}-sku`}>SKU</FieldLabel>
-          <Input
-            id={`${formId}-sku`}
-            value={sku}
-            maxLength={20}
-            autoComplete="off"
-            placeholder="INV-12345"
-            className="font-mono"
-            disabled={isLoading}
-            aria-invalid={errors.sku ? true : undefined}
-            aria-describedby={
-              errors.sku
-                ? `${formId}-sku-description ${formId}-sku-error`
-                : `${formId}-sku-description`
-            }
-            onChange={(event) => onSkuChange(event.target.value)}
-          />
-          <FieldDescription id={`${formId}-sku-description`}>
-            Leave it blank and the store generates one in the{" "}
-            <span className="font-mono">INV-12345</span> format. Type your own
-            only to match a numbering your school already uses — it has to look
-            exactly like that and be unique across the whole register. It cannot
-            be changed afterwards; it is the item&rsquo;s identity on the
-            ledger.
-          </FieldDescription>
-          <FieldError id={`${formId}-sku-error`}>{errors.sku}</FieldError>
-        </Field>
-      )}
-
-      <UnitField
-        disabled={isLoading}
-        error={errors.unit}
-        formId={formId}
-        onChange={(unit) => onChange({ unit })}
-        value={values.unit}
-      />
-
-      <Field data-invalid={Boolean(errors.description)}>
-        <FieldLabel htmlFor={`${formId}-description`}>Description</FieldLabel>
-        <Textarea
-          id={`${formId}-description`}
-          value={values.description}
-          rows={2}
-          maxLength={500}
-          placeholder="Anything that identifies this line — the make, the model, the room it was bought for"
-          disabled={isLoading}
-          aria-invalid={errors.description ? true : undefined}
-          aria-describedby={
-            errors.description ? `${formId}-description-error` : undefined
-          }
-          onChange={(event) => onChange({ description: event.target.value })}
-        />
-        <FieldDescription>
-          One of the three things the register&rsquo;s search box looks at,
-          alongside the name and the SKU.
-        </FieldDescription>
-        <FieldError id={`${formId}-description-error`}>
-          {errors.description}
-        </FieldError>
-      </Field>
-
-      <ImageUploadField
-        disabled={isLoading}
-        formId={formId}
-        initialImageUrl={initialImageUrl ?? null}
-        onChange={(imageFileId) => onChange({ imageFileId })}
-      />
-    </FieldGroup>
-  </FieldSet>
-);
-
-interface StockFieldsetProps {
-  formId: string;
-  errors: ItemFormErrors;
-  isLoading: boolean;
-  isEdit: boolean;
-  /** The count already on the shelf — create only, since edit cannot change it. */
-  qty: number;
-  onQtyChange: (raw: string) => void;
-  minQty: string;
-  onMinQtyChange: (raw: string) => void;
-  tagRows: TagRow[];
-  duplicates: Set<number>;
-  onTagRowsChange: (rows: TagRow[]) => void;
-}
-
-/**
- * How many there are, and when to reorder.
- *
- * On edit there is deliberately **no quantity field at all**. `updateItem` refuses
- * `qty`, and a disabled input would have been a lie about what this dialog can do —
- * the note at the bottom of the form, with its four working buttons, is the honest
- * version of the same information.
- */
-const StockFieldset = ({
-  formId,
-  errors,
-  isLoading,
-  isEdit,
-  qty,
-  onQtyChange,
-  minQty,
-  onMinQtyChange,
-  tagRows,
-  duplicates,
-  onTagRowsChange,
-}: StockFieldsetProps) => {
-  const onHandNote =
-    isEdit && qty > 0
-      ? ` It cannot be set above the ${qty} unit(s) on hand.`
-      : "";
-
-  return (
-    <FieldSet>
-      <FieldLegend>Stock</FieldLegend>
-      <FieldGroup>
-        <div className="grid grid-cols-2 gap-4">
-          {isEdit ? null : (
-            <Field data-invalid={Boolean(errors.qty)}>
-              <FieldLabel htmlFor={`${formId}-qty`}>Quantity *</FieldLabel>
-              <Input
-                id={`${formId}-qty`}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={MAX_ITEM_QTY}
-                value={String(qty)}
-                disabled={isLoading}
-                aria-invalid={errors.qty ? true : undefined}
-                aria-describedby={
-                  errors.qty ? `${formId}-qty-error` : undefined
-                }
-                onChange={(event) => onQtyChange(event.target.value)}
-              />
-              <FieldDescription>
-                How many are on the shelf today, counted in the unit above. The
-                asset-tag list has one row per unit to match it.
-              </FieldDescription>
-              <FieldError id={`${formId}-qty-error`}>{errors.qty}</FieldError>
-            </Field>
-          )}
-
-          <Field data-invalid={Boolean(errors.minQty)}>
-            <FieldLabel htmlFor={`${formId}-min-qty`}>Reorder level</FieldLabel>
-            <Input
-              id={`${formId}-min-qty`}
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={MAX_ITEM_QTY}
-              value={minQty}
-              disabled={isLoading}
-              aria-invalid={errors.minQty ? true : undefined}
-              aria-describedby={
-                errors.minQty ? `${formId}-min-qty-error` : undefined
-              }
-              onChange={(event) => onMinQtyChange(event.target.value)}
-            />
-            <FieldDescription>
-              A warning line, not a floor. Nothing stops the store dropping
-              below it — that is what makes a write-off possible at all — but
-              the register flags the item as low stock once the count reaches
-              this number.
-              {onHandNote}
-            </FieldDescription>
-            <FieldError id={`${formId}-min-qty-error`}>
-              {errors.minQty}
-            </FieldError>
-          </Field>
-        </div>
-
-        {isEdit ? null : (
-          <AssetTagFields
-            formId={formId}
-            rows={tagRows}
-            duplicates={duplicates}
-            error={errors.uniqueIds}
-            disabled={isLoading}
-            onChange={onTagRowsChange}
-          />
-        )}
-      </FieldGroup>
-    </FieldSet>
-  );
-};
-
-interface ConditionFieldsetProps {
-  formId: string;
-  errors: ItemFormErrors;
-  isLoading: boolean;
-  values: FormValues;
-  onChange: (patch: Partial<FormValues>) => void;
-}
-
-/**
- * Condition, where it lives, and whether it leaves the building.
- *
- * **Damaged is a status, not a note.** `calculateItemStatus` reads the condition
- * column, so an item marked Damaged is badged Damaged and stops counting as
- * available however many are on the shelf. Under Repair is deliberately a separate
- * value, because a repaired device comes back into service and a broken one does
- * not — collapsing them would hide the items that are coming back.
- *
- * The borrowable flag gets a checkbox rather than a switch, and a description that
- * says what it *does* rather than what it is called. `borrowable` gates
- * `custody.take` and the whole borrow flow on the server: an item that is not
- * borrowable is refused outright, with a sentence saying it stays with the store.
- * That is a policy about handing school property to people, and it deserves
- * stating before it is ticked rather than being discovered when somebody cannot
- * borrow a tripod.
- */
-const ConditionFieldset = ({
-  formId,
-  errors,
-  isLoading,
-  values,
-  onChange,
-}: ConditionFieldsetProps) => (
-  <FieldSet>
-    <FieldLegend>Condition and place</FieldLegend>
-    <FieldGroup>
-      <div className="grid grid-cols-2 gap-4">
-        <Field data-invalid={Boolean(errors.condition)}>
-          <FieldLabel htmlFor={`${formId}-condition`}>Condition</FieldLabel>
-          <Select
-            value={values.condition}
-            onValueChange={(next) => {
-              if (next) {
-                onChange({ condition: next });
-              }
-            }}
-          >
-            <SelectTrigger
-              id={`${formId}-condition`}
-              disabled={isLoading}
-              aria-invalid={errors.condition ? true : undefined}
-              aria-describedby={
-                errors.condition ? `${formId}-condition-error` : undefined
-              }
-            >
-              <SelectValue placeholder="Select a condition">
-                {itemConditionLabel(values.condition)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {ITEM_CONDITIONS.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {itemConditionLabel(option)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldDescription>
-            Damaged changes the item&rsquo;s status and takes it off the
-            available count until it is fixed. Under Repair is tracked
-            separately, because a repaired item comes back.
-          </FieldDescription>
-          <FieldError id={`${formId}-condition-error`}>
-            {errors.condition}
-          </FieldError>
-        </Field>
-
-        <Field data-invalid={Boolean(errors.location)}>
-          <FieldLabel htmlFor={`${formId}-location`}>Location</FieldLabel>
-          <Input
-            id={`${formId}-location`}
-            value={values.location}
-            maxLength={200}
-            placeholder="e.g. Science lab, cupboard B"
-            disabled={isLoading}
-            aria-invalid={errors.location ? true : undefined}
-            aria-describedby={
-              errors.location ? `${formId}-location-error` : undefined
-            }
-            onChange={(event) => onChange({ location: event.target.value })}
-          />
-          <FieldDescription>
-            Where it is kept. Blank is a legitimate answer for something that
-            moves, but a store cannot answer &ldquo;where is the
-            microscope&rdquo; without it.
-          </FieldDescription>
-          <FieldError id={`${formId}-location-error`}>
-            {errors.location}
-          </FieldError>
-        </Field>
-      </div>
-
-      <Field orientation="horizontal">
-        <Checkbox
-          id={`${formId}-borrowable`}
-          checked={values.borrowable}
-          disabled={isLoading}
-          onCheckedChange={(checked) =>
-            onChange({ borrowable: checked === true })
-          }
-        />
-        <FieldLabel htmlFor={`${formId}-borrowable`} className="font-normal">
-          Members of staff may borrow or take this item
-        </FieldLabel>
-      </Field>
-      <FieldDescription>
-        Unchecked, the item stays with the store: a member of staff claiming it
-        is refused and no loan can be raised against it. Checked, it appears in
-        the take and loan flows and can leave the building with whoever borrows
-        it.
-      </FieldDescription>
-    </FieldGroup>
-  </FieldSet>
-);
-
-interface ValuationFieldsetProps {
-  formId: string;
-  errors: ItemFormErrors;
-  isEdit: boolean;
-  values: FormValues;
-  onChange: (patch: Partial<FormValues>) => void;
-}
-
-/**
- * What it cost and what it is worth.
- *
- * **`updateItem` reads a missing money field as "leave this valuation alone"**
- * (`?? existing.purchaseValue`), so a blank on the edit form is not a request to
- * erase the figure — it is silence. Both descriptions say so, because the other
- * reading (blank means nothing) is the one that loses a school its purchase price.
- *
- * And no currency symbol anywhere: nothing in this repository's schema, constants
- * or any other screen names a currency, so printing `LKR` here would put a unit on
- * one dialog that contradicts the column heading everywhere else.
- */
-const ValuationFieldset = ({
-  formId,
-  errors,
-  isEdit,
-  values,
-  onChange,
-}: ValuationFieldsetProps) => (
-  <FieldSet>
-    <FieldLegend>Valuation</FieldLegend>
-    <FieldGroup>
-      <div className="grid grid-cols-2 gap-4">
-        <MoneyField
-          value={values.purchaseValue ?? ""}
-          onChange={(purchaseValue) => onChange({ purchaseValue })}
-          label="Purchase value"
-          error={errors.purchaseValue}
-          description={
-            isEdit
-              ? "What the school paid for one unit. Leave blank to keep the figure already on record."
-              : "What the school paid for one unit. Optional — donated or inherited stock may have none."
-          }
-        />
-        <CurrentValueField
-          formId={formId}
-          value={values.currentValue ?? ""}
-          onChange={(currentValue) => onChange({ currentValue })}
-          error={errors.currentValue}
-          description={
-            isEdit
-              ? "What one unit is worth today. Leave blank to keep the figure already on record."
-              : "What one unit is worth today, if that is no longer what it cost. Optional."
-          }
-        />
-      </div>
-      <FieldDescription>
-        No currency is assumed — the column is a number and the school&rsquo;s
-        own accounts decide what it is in.
-      </FieldDescription>
-    </FieldGroup>
-  </FieldSet>
-);
-
-interface InitialResponsibilityFieldsetProps {
-  managerStaffId: string | null;
-  custodianStaffId: string | null;
-  isLoading: boolean;
-  errors: ItemFormErrors;
-  onManagerChange: (staffId: string | null) => void;
-  onCustodianChange: (staffId: string | null) => void;
-}
-
-/**
- * Who is in charge, and who is holding it — recorded once, at creation.
- *
- * `createItem` seeds the first `inventoryCustodyHistory` row from these two, with
- * `reason: null` — the single case `inventory_custody_history_reason_required`
- * exempts, because a first assignment onto an empty slot displaces nobody.
- * Afterwards the two belong to `custody.transfer` and `assignManager`, which each
- * write a history row *and* a ledger action and each demand a reason.
- *
- * **Hence the different wording from the transfer dialogs: "Initially in charge of"
- * and "Initially held by"** rather than "In charge of this item" and "Hand it to".
- * That is not decoration — it tells the reader this choice is recorded once, here,
- * without a cause, and that the custody dialogs own these two columns from now on.
- * Both are optional: an item can sit in the store with nobody accountable for it,
- * and the register flags exactly those rows.
- */
-const InitialResponsibilityFieldset = ({
-  managerStaffId,
-  custodianStaffId,
-  isLoading,
-  errors,
-  onManagerChange,
-  onCustodianChange,
-}: InitialResponsibilityFieldsetProps) => (
-  <FieldSet>
-    <FieldLegend>Responsibility, recorded once</FieldLegend>
-    <FieldGroup>
-      <StaffComboboxField
-        value={managerStaffId}
-        onChange={onManagerChange}
-        label="Initially in charge of"
-        description="The member of staff accountable for this item. Optional — an item can sit in the store with nobody accountable for it, and the register flags those rows."
-        error={errors.managerStaffId}
-        disabled={isLoading}
-        allowClear
-      />
-      <StaffComboboxField
-        value={custodianStaffId}
-        onChange={onCustodianChange}
-        label="Initially held by"
-        description="The member of staff carrying it away today. Optional — leave blank if it is going on the shelf."
-        error={errors.custodianStaffId}
-        disabled={isLoading}
-        allowClear
-      />
-      <FieldDescription>
-        Both are written to the item&rsquo;s custody history from the moment it
-        is created, with no reason attached — a first assignment displaces
-        nobody. After this, custody moves through Transfer custody and the
-        manager through Assign manager, and both record who changed it and why.
-      </FieldDescription>
-    </FieldGroup>
-  </FieldSet>
-);
-
-export interface EditActionProps {
-  isLoading: boolean;
-  handleTransferCustody: () => void;
-  handleAssignManager: () => void;
-  handleRecordStockIn: () => void;
-  handleWriteOffStock: () => void;
-}
-
-/**
- * The four things this dialog cannot do, as four working buttons.
- *
- * `qty`, the two counters, the manager, the custodian **and** the SKU are all
- * absent from `items.update` on purpose, so there is nothing to render — six
- * greyed-out inputs would have been a lie about what the form can do, and a form
- * whose footer does nothing teaches the reader that the footer is decorative. So
- * the note says what is missing, why, and which action does each thing.
- */
-const EditScopeNotice: React.FC<EditActionProps> = ({
-  isLoading,
-  handleTransferCustody,
-  handleAssignManager,
-  handleRecordStockIn,
-  handleWriteOffStock,
-}) => (
-  /*
-   * `text-warning-ink` and not `text-gold`: this is a paragraph of body copy at
-   * `text-sm` on `bg-accent/10`, where `--gold` is 3.65:1 — under AA for body
-   * text. The border and the fill stay on `accent`, because those are surfaces
-   * rather than ink and `--gold` was never the problem. One token for warning
-   * *text* everywhere in this feature; the arithmetic is in
-   * `packages/ui/src/styles/globals.css`.
-   */
-  <div className="border-accent/50 bg-accent/10 text-warning-ink border p-3">
-    <p className="flex items-center gap-2 text-sm font-medium">
-      <IconInfoCircle className="size-4 shrink-0" />
-      What this dialog cannot change
-    </p>
-    <p className="mt-1 text-sm">
-      The count, the asset tags, the SKU, the manager and the custodian are not
-      editable here, and that is a rule rather than an oversight. A count is a
-      consequence of stock movements; a SKU is the identity every ledger row
-      refers to; and a custody pointer is only ever moved by the action that
-      also writes the history row, which is what makes the trail trustworthy.
-    </p>
-    <div className="mt-2 flex flex-wrap gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={isLoading}
-        onClick={handleRecordStockIn}
-        data-icon="inline-start"
-      >
-        <IconPackageExport data-icon="inline-start" />
-        Record stock in
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={isLoading}
-        onClick={handleWriteOffStock}
-        data-icon="inline-start"
-      >
-        <IconTrash data-icon="inline-start" />
-        Write off stock
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={isLoading}
-        onClick={handleTransferCustody}
-        data-icon="inline-start"
-      >
-        <IconSwitchHorizontal data-icon="inline-start" />
-        Transfer custody
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={isLoading}
-        onClick={handleAssignManager}
-        data-icon="inline-start"
-      >
-        <IconUserCheck data-icon="inline-start" />
-        Assign manager
-      </Button>
-    </div>
-  </div>
-);
-
-// ─── Submit ─────────────────────────────────────────────────────────────────
-
-/**
- * The non-blank asset tags, in one pass.
- *
- * The filter is `normalizeInventoryKey(...).length > 0` rather than
- * `tag.trim().length > 0` because that is the test `resolveAssetTags` in
- * `create-item.ts` applies, and the count the form checks against `qty` has to be
- * the count the server will compute — a row of three spaces is a blank there, and
- * if it were a tag here the form would pass a length check the server then refuses.
- */
-const enteredTags = (rows: TagRow[]): string[] => {
-  const result: string[] = [];
-  for (const row of rows) {
-    if (normalizeInventoryKey(row.value).length > 0) {
-      result.push(row.value);
-    }
-  }
-  return result;
-};
-
-/** The outcome of a client-side validation pass: values, or the fields to mark. */
-type SubmitOutcome =
-  | { ok: true; values: Record<string, unknown> }
-  | { ok: false; errors: ItemFormErrors };
-
-/**
- * The one "no category" outcome, shared by both modes.
- *
- * It was written out twice — once in the create branch, once (after this fix) in
- * the edit branch — and two copies of a rule that the server also enforces is two
- * places for the wording to drift. One frozen object, returned by both, so the two
- * modes cannot disagree about what an item without a category is.
- */
-const MISSING_CATEGORY: SubmitOutcome = {
-  ok: false,
-  errors: {
-    categoryId:
-      "Choose a category, or add one below — an item cannot exist without one.",
-  },
-};
-
-interface BuildSubmitInput {
-  isEdit: boolean;
-  values: FormValues;
-  qty: number;
-  category: CategoryOption | null;
-  sku: string;
-  tagRows: TagRow[];
-  tagError: string | undefined;
-  onHandCount: number;
-  managerStaffId: string | null;
-  custodianStaffId: string | null;
-}
-
-/**
- * Everything the form can decide on its own, in one place.
- *
- * The point of pulling this out of the component is that the rules become
- * readable as a list: the schema has the fields, and the three rules a schema
- * cannot express are the category, the asset-tag count and the reorder level. A
- * `handleSubmit` that grew them inline was forty branches of "and then"; here each
- * one is a line with a reason attached, and the component is left holding state.
- */
-const buildSubmitOutcome = ({
-  isEdit,
-  values,
-  qty,
-  category,
-  sku,
-  tagRows,
-  tagError,
-  onHandCount,
-  managerStaffId,
-  custodianStaffId,
-}: BuildSubmitInput): SubmitOutcome => {
-  const payload = {
-    name: values.name,
-    description: values.description,
-    unit: values.unit,
-    minQty: toQuantity(values.minQty),
-    borrowable: values.borrowable,
-    condition: values.condition,
-    location: values.location,
-    ...(values.purchaseValue?.trim()
-      ? { purchaseValue: values.purchaseValue.trim() }
-      : {}),
-    ...(values.currentValue?.trim()
-      ? { currentValue: values.currentValue.trim() }
-      : {}),
-  };
-
-  if (isEdit) {
-    const result = v.safeParse(editItemSchema, payload);
-    if (!result.success) {
-      return {
-        ok: false,
-        errors: issuesToErrors<ItemFormField>(result.issues),
-      };
-    }
-
-    /*
-     * The category, on edit as well as on create.
-     *
-     * **This key was missing here and the omission was client-side only.** The
-     * backend has always accepted a re-categorisation: `update-item.ts` lists
-     * `categoryId` among the fields it picks (`:89`), asserts the category exists
-     * (`:113`) and applies it with `input.categoryId ?? existing.categoryId`
-     * (`:148`). So the request the client used to send — everything except the
-     * category — was a *valid* `updateItem` call that quietly left
-     * `category_id` alone, and the success toast said the item was updated while
-     * the row, the category filter and the category dot had not moved. Nothing
-     * downstream of this function could have caught it: there is no error to
-     * handle, only a value that never left the browser. Written down here because
-     * this is exactly the omission that gets "fixed" in `packages/api` next time
-     * somebody finds it, by adding a server-side guard for a condition the server
-     * never had.
-     *
-     * The check comes after the schema parse and before the cross-field rule below
-     * for the same reason the create branch puts it there: a name that is empty is
-     * the nearer problem, and reporting one field per round trip is better than
-     * reporting the category and leaving the name to be found on the next submit.
-     */
-    if (category === null) {
-      return MISSING_CATEGORY;
-    }
-
-    // `updateItem` refuses a reorder level above the count on the shelf, and the
-    // count is not a field on this form — so this is the one cross-field rule the
-    // edit form still owns. Checking it here puts the message under the field
-    // that caused it instead of in a toast.
-    if (result.output.minQty > onHandCount) {
-      return {
-        ok: false,
-        errors: {
-          minQty: `The reorder level cannot be above the ${onHandCount} unit(s) currently on hand. The count changes through stock in and stock out.`,
-        },
-      };
-    }
-
-    /*
-     * `categoryId` is added *after* the spread for the same reason the create
-     * branch adds it there: it is not a key of `editItemSchema`, so `result.output`
-     * cannot carry it, and the id is parsed through the repository's own schema
-     * rather than asserted. `editItemSchema` validates shape (it runs against
-     * plain strings from `<input>`s) while the branded id on the wire is the
-     * thing worth parsing — one job each, and neither is doing the other's.
-     */
-    return {
-      ok: true,
-      values: {
-        ...result.output,
-        categoryId: v.parse(inventoryCategoryIdSchema, category.id),
-        imageFileId: values.imageFileId,
-      },
-    };
-  }
-
-  const result = v.safeParse(createItemSchema, { ...payload, qty });
-  if (!result.success) {
-    return { ok: false, errors: issuesToErrors<ItemFormField>(result.issues) };
-  }
-
-  if (category === null) {
-    return MISSING_CATEGORY;
-  }
-
-  if (tagError) {
-    return { ok: false, errors: { uniqueIds: tagError } };
-  }
-
-  const trimmedSku = sku.trim().toUpperCase();
-  if (trimmedSku !== "" && !SKU_PATTERN.test(trimmedSku)) {
-    return { ok: false, errors: { sku: "A SKU must look like INV-12345" } };
-  }
-
-  /*
-   * Ids are branded on the wire and plain strings in this component's state (a
-   * `Combobox` hands back a `string`), so they are parsed through the repository's
-   * own id schemas on the way out. That is a validation rather than an assertion: an
-   * id that is not one is caught here instead of turning into a foreign-key
-   * violation from the driver.
-   *
-   * The two staff pointers are omitted rather than sent as `null` when they were
-   * left blank, which is the same distinction `updateItem` reads on the other side:
-   * absent is "no initial assignment recorded", and the server's own default is
-   * null anyway.
-   */
-  return {
-    ok: true,
-    values: {
-      ...result.output,
-      categoryId: v.parse(inventoryCategoryIdSchema, category.id),
-      ...(trimmedSku === "" ? {} : { sku: trimmedSku }),
-      uniqueIds: enteredTags(tagRows),
-      ...(values.imageFileId ? { imageFileId: values.imageFileId } : {}),
-      ...(managerStaffId
-        ? { managerStaffId: v.parse(staffIdSchema, managerStaffId) }
-        : {}),
-      ...(custodianStaffId
-        ? { custodianStaffId: v.parse(staffIdSchema, custodianStaffId) }
-        : {}),
-    },
-  };
-};
-
-/**
- * The form's starting values, for either mode.
- *
- * A create form's defaults are decisions, so they are written out rather than left
- * implicit: a new line is called *Good*, counted in *unit*, has a reorder level of
- * zero (no warning line until somebody sets one) and is not borrowable — which is
- * the safe direction, since a non-borrowable item is refused to whoever tries to
- * take it rather than handed out. An edit form's values are simply the row's.
- */
-const initialFormValues = (item: InventoryItemView | undefined): FormValues => {
-  if (!item) {
-    return {
-      name: "",
-      description: "",
-      unit: "unit",
-      minQty: "0",
-      borrowable: false,
-      condition: "Good",
-      location: "",
-      purchaseValue: "",
-      currentValue: "",
-      imageFileId: null,
-    };
-  }
-
-  return {
-    name: item.name,
-    description: item.description,
-    unit: item.unit || "unit",
-    minQty: String(item.minQty),
-    borrowable: item.borrowable,
-    condition: item.condition,
-    location: item.location,
-    purchaseValue: item.purchaseValue ?? "",
-    currentValue: item.currentValue ?? "",
-    imageFileId: item.imageFileId,
-  };
-};
-
-/**
- * The category the form opens on, and the one case where it has to be built rather
- * than found.
- *
- * `categories.list` returns every category whether or not anything uses it, so the
- * item's own category is normally in the list — but if it was deleted between the
- * list being fetched and this row being opened, the option is missing. Falling back
- * to a synthesised one built from the row's own `categoryName` / `categoryColor`
- * means the edit form still opens with the name the item was registered under
- * instead of an empty picker that silently re-categorises the item on save.
- *
- * The id is parsed through the repository's own schema rather than asserted: the
- * wire carries a plain `string` where `CategoryOption` carries a branded id, and
- * parsing is a validation rather than a promise.
- */
-const initialCategory = (
-  item: InventoryItemView | undefined,
-  categories: CategoryOption[]
-): CategoryOption | null => {
-  if (!item) {
-    return null;
-  }
-
-  return (
-    categories.find((option) => option.id === item.categoryId) ?? {
-      id: v.parse(inventoryCategoryIdSchema, item.categoryId),
-      name: item.categoryName,
-      normalizedName: normalizeInventoryKey(item.categoryName),
-      color: item.categoryColor,
-      createdAt: item.createdAt,
-    }
-  );
-};
+  EditScopeNotice,
+  IdentityFieldset,
+  InitialResponsibilityFieldset,
+  StockFieldset,
+  ConditionFieldset,
+  ValuationFieldset,
+} from "@/components/staff/inventory/item-form-fields";
+import type {
+  FormValues,
+  ItemFormErrors,
+  TagRow,
+} from "@/components/staff/inventory/item-form-model";
+import {
+  buildSubmitOutcome,
+  duplicateTagRows,
+  enteredTagCount,
+  focusFirstInvalidField,
+  initialCategory,
+  initialFormValues,
+  newTagRow,
+  resizeTagRows,
+  resolveTagError,
+  toQuantity,
+} from "@/components/staff/inventory/item-form-model";
+import { formatApiErrorMessage, validationFieldErrors } from "@/lib/api-error";
+import { orpc } from "@/utils/orpc";
+
+export type { EditActionProps } from "@/components/staff/inventory/item-form-fields";
+
+/** `onOpenChange` as Base UI declares it, so the reason is available without a cast. */
+type DialogOpenChange = NonNullable<
+  React.ComponentProps<typeof Dialog>["onOpenChange"]
+>;
 
 interface InventoryItemFormProps {
   formId: string;
   categories: CategoryOption[];
+  categoryState: CategoryListState;
   initialData?: InventoryItemView;
   isLoading: boolean;
   serverErrors: ItemFormErrors;
   onSubmit: (values: Record<string, unknown>) => Promise<void>;
+  /**
+   * Reported upward so the dialog can decide whether `Esc` closes it. The form
+   * owns the values, so the form is the only thing that can answer it.
+   */
+  onDirtyChange: (isDirty: boolean) => void;
   /** Only supplied in edit mode — the create form has nothing to point at. */
   editActions?: EditActionProps;
 }
@@ -1717,10 +123,12 @@ interface InventoryItemFormProps {
 const InventoryItemForm = ({
   formId,
   categories,
+  categoryState,
   initialData,
   isLoading,
   serverErrors,
   onSubmit,
+  onDirtyChange,
   editActions,
 }: InventoryItemFormProps) => {
   const isEdit = initialData !== undefined;
@@ -1728,7 +136,7 @@ const InventoryItemForm = ({
   const [values, setValues] = useState<FormValues>(() =>
     initialFormValues(initialData)
   );
-  const [category, setCategory] = useState<CategoryOption | null>(() =>
+  const [category, setCategory] = useState(() =>
     initialCategory(initialData, categories)
   );
   const [sku, setSku] = useState("");
@@ -1738,13 +146,28 @@ const InventoryItemForm = ({
   const [custodianStaffId, setCustodianStaffId] = useState<string | null>(null);
   const [clientErrors, setClientErrors] = useState<ItemFormErrors>({});
 
+  const formRef = useRef<HTMLFormElement>(null);
+  const isSubmittingRef = useRef(false);
+
   /**
    * Client errors win over server errors for the same field, because they are the
    * more recent statement about it: the form clears its own errors at the top of
    * every submit, so anything left in `serverErrors` is from the last round trip and
    * is still the best thing to say until the user edits that field.
+   *
+   * **Memoised, and that is load-bearing rather than tidiness.** A fresh object on
+   * every render would give the focus effect below a new dependency on every
+   * keystroke, and the effect's whole job is to move focus — run on every render it
+   * would pull the caret out of whatever the user is typing, which is worse than
+   * never moving focus at all. As a memo it changes identity only when a submit
+   * produced new errors, which is the only time focus *should* move. It also stops
+   * five fieldsets re-rendering on every keystroke for an object they were handed
+   * unchanged.
    */
-  const errors: ItemFormErrors = { ...serverErrors, ...clientErrors };
+  const errors: ItemFormErrors = useMemo(
+    () => ({ ...serverErrors, ...clientErrors }),
+    [serverErrors, clientErrors]
+  );
   const duplicates = useMemo(() => duplicateTagRows(tagRows), [tagRows]);
 
   /**
@@ -1752,26 +175,99 @@ const InventoryItemForm = ({
    * `create-item.ts`: the moment one tag is typed the count has to equal the
    * quantity, and the comparison is on the *normalized* tag — so a row of three
    * spaces is a blank, not a tag. That is the same count the live counter above the
-   * rows shows, which is why the two can never disagree.
+   * rows shows, which is why the two can never disagree: both read
+   * `enteredTagCount`.
    */
-  const enteredTagCount = tagRows.filter(
-    (row) => normalizeInventoryKey(row.value).length > 0
-  ).length;
+  const tagError = resolveTagError(enteredTagCount(tagRows), qty, duplicates);
 
-  const tagError = resolveTagError(enteredTagCount, qty, duplicates);
+  /*
+   * Focus the first field the last submit failed on, once, after the messages are
+   * in the DOM.
+   *
+   * This is the step valibot does not do and the browser only does for native
+   * constraint validation. A `role="alert"` error on a field twelve fields up a
+   * scrolling dialog is announced and then invisible.
+   */
+  useEffect(() => {
+    focusFirstInvalidField(formRef.current, errors);
+  }, [errors]);
+
+  /*
+   * `latestErrors` is kept in a ref rather than read in the focus effect's closure
+   * so that the effect can depend on the two error *objects* — which only ever get
+   * a new identity at a submit — instead of on `errors`, which is a fresh object
+   * on every render. Depending on `errors` would re-run the effect on every
+   * keystroke and pull the caret out of whatever the user is typing, which is a
+   * worse defect than never moving focus at all.
+   */
+  /*
+   * Focus the first field the last submit failed on, once, after the messages are
+   * in the DOM.
+   *
+   * This is the step valibot does not do and the browser only does for native
+   * constraint validation. A `role="alert"` error on a field twelve fields up a
+   * scrolling dialog is announced and then invisible.
+   */
+  useEffect(() => {
+    focusFirstInvalidField(formRef.current, errors);
+  }, [errors]);
+
+  /**
+   * Anything the user touches marks the form dirty, once.
+   *
+   * It is deliberately not a comparison against the initial values: a form that
+   * was opened on an item and then had a field cleared and retyped to the same
+   * character is not at risk in any way a form with a changed description is, and
+   * the cost of being wrong is only that `Esc` closes. Being wrong the other way
+   * — refusing to close a dialog on `Esc` — is the one this avoids.
+   */
+  const markDirty = useCallback(() => {
+    onDirtyChange(true);
+  }, [onDirtyChange]);
 
   const handleQtyChange = (raw: string) => {
     setQty(toQuantity(raw));
     setTagRows((previous) => resizeTagRows(previous, toQuantity(raw)));
+    markDirty();
   };
 
   const handleValuesChange = (patch: Partial<FormValues>) => {
     setValues((previous) => ({ ...previous, ...patch }));
+    markDirty();
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    /*
+     * `Button loading` stops a second press of *the button* reaching the server,
+     * but the footer button lives outside the `<form>` and the form can also be
+     * submitted by pressing Enter in a text field — a real second path, not a
+     * theoretical one. A second `createItem` for the same line is a duplicate
+     * asset, so the guard is here as well as there.
+     */
+    if (isSubmittingRef.current) {
+      return;
+    }
+
     setClientErrors({});
+
+    /*
+     * A category read that failed is not the user's mistake, and `MISSING_CATEGORY`
+     * would tell them it is ("Choose a category, or seed the eight starter
+     * categories") — which is advice to go and do a thing that cannot help while
+     * the list is unreadable, and to seed eight categories the store may already
+     * have. The picker above already says what happened and offers the retry; this
+     * puts the same fact under the field so the message is on the field as well as
+     * in the announcement.
+     */
+    if (category === null && categoryState.isFailed) {
+      setClientErrors({
+        categoryId:
+          "The categories could not be read, so there is nothing to choose from yet. Try again on the field above, then pick one — nothing you have typed has been lost.",
+      });
+      return;
+    }
 
     const outcome = buildSubmitOutcome({
       isEdit,
@@ -1791,11 +287,26 @@ const InventoryItemForm = ({
       return;
     }
 
-    await onSubmit(outcome.values);
+    isSubmittingRef.current = true;
+    /*
+     * The guard is released on the promise rather than in a `finally`, because a
+     * `try`/`finally` is control flow the React compiler will not analyse, and
+     * this is the one function in the file that must not be left uncompiled by a
+     * lint rule about a cleanup clause.
+     */
+    await onSubmit(outcome.values).finally(() => {
+      isSubmittingRef.current = false;
+    });
   };
 
   return (
-    <form id={formId} onSubmit={handleSubmit} className="space-y-6">
+    <form
+      ref={formRef}
+      id={formId}
+      onSubmit={handleSubmit}
+      aria-busy={isLoading}
+      className="space-y-6"
+    >
       <IdentityFieldset
         formId={formId}
         errors={errors}
@@ -1803,11 +314,18 @@ const InventoryItemForm = ({
         isEdit={isEdit}
         values={values}
         categories={categories}
+        categoryState={categoryState}
         category={category}
         sku={sku}
         onChange={handleValuesChange}
-        onCategoryChange={setCategory}
-        onSkuChange={setSku}
+        onCategoryChange={(next) => {
+          setCategory(next);
+          markDirty();
+        }}
+        onSkuChange={(next) => {
+          setSku(next);
+          markDirty();
+        }}
         initialImageUrl={initialData?.imageUrl ?? null}
       />
 
@@ -1822,7 +340,10 @@ const InventoryItemForm = ({
         onMinQtyChange={(raw) => handleValuesChange({ minQty: raw })}
         tagRows={tagRows}
         duplicates={duplicates}
-        onTagRowsChange={setTagRows}
+        onTagRowsChange={(next) => {
+          setTagRows(next);
+          markDirty();
+        }}
       />
 
       <ConditionFieldset
@@ -1836,6 +357,7 @@ const InventoryItemForm = ({
       <ValuationFieldset
         formId={formId}
         errors={errors}
+        isLoading={isLoading}
         isEdit={isEdit}
         values={values}
         onChange={handleValuesChange}
@@ -1847,8 +369,14 @@ const InventoryItemForm = ({
           custodianStaffId={custodianStaffId}
           isLoading={isLoading}
           errors={errors}
-          onManagerChange={setManagerStaffId}
-          onCustodianChange={setCustodianStaffId}
+          onManagerChange={(staffId) => {
+            setManagerStaffId(staffId);
+            markDirty();
+          }}
+          onCustodianChange={(staffId) => {
+            setCustodianStaffId(staffId);
+            markDirty();
+          }}
         />
       )}
 
@@ -1857,7 +385,365 @@ const InventoryItemForm = ({
   );
 };
 
-// ─── Dialogs ────────────────────────────────────────────────────────────────
+/**
+ * What a save that was refused for a reason with no field behind it looks like.
+ *
+ * Shown only when the failure mapped to no field. When it did map to one, the
+ * `FieldError` on that field is the statement and focus has been moved to it —
+ * printing the same thing in a panel as well would be the third telling.
+ *
+ * The two sentences that matter are the ones about *what did not happen*: the
+ * dialog is still open and everything typed is still in it. A refused save that
+ * reads as a lost one is how a clerk retypes twenty fields.
+ */
+const SaveFailureNotice = ({
+  message,
+  itemNoun,
+}: {
+  message: string;
+  itemNoun: string;
+}) => (
+  <div
+    aria-live="assertive"
+    className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2 border px-3 py-2.5"
+    role="alert"
+  >
+    <IconAlertTriangle aria-hidden="true" className="mt-px size-4 shrink-0" />
+    <div className="min-w-0 text-xs">
+      <p className="font-bold">
+        The {itemNoun} was not saved — {message}
+      </p>
+      <p className="text-foreground/80 mt-1">
+        Nothing you typed has been lost. Fix the problem below if it is in this
+        form, then press the button again; if it is not, the register is busy or
+        the connection dropped, and trying again is safe.
+      </p>
+    </div>
+  </div>
+);
+
+/**
+ * The failure bookkeeping both dialogs share, as a hook rather than a helper
+ * called twice.
+ *
+ * Three things live here and nowhere else: the field errors a refused save maps
+ * to, the one sentence a refused save that maps to *nothing* gets, and whether
+ * anybody has typed in the form yet.
+ *
+ * **The catch deliberately does not toast, and that is not an omission.**
+ * `onSubmit` is `handleCreateSubmit` in `inventory-page.tsx`, which awaits
+ * `mutateAsync`; that rejection has *already* been through the mutation observer's
+ * own `onError`, which is where the toast comes from. Toasting here too printed
+ * the identical sentence twice for every validation failure, every duplicate SKU
+ * and every dropped connection — and the mutation observer is the only one of the
+ * two that survives the dialog unmounting, so it has to be the one that speaks.
+ * `custody-dialogs.tsx` reached the same conclusion from the other direction and
+ * its submit handlers are the pattern these two follow.
+ *
+ * The handler does not rethrow: the dialog is closed by the caller on success, so
+ * a failure is already reported, and letting it escape would put an unhandled
+ * rejection on the form's submit handler.
+ *
+ * `isDirtyRef` is a ref and not state, and that is deliberate: it is read by
+ * exactly one thing — the Escape-key guard — and re-rendering the whole form
+ * (five fieldsets, and on create up to a thousand asset-tag rows) because a field
+ * was touched would be work for nobody. The boolean appears nowhere on screen.
+ */
+const useItemSubmit = (
+  onSubmit: (values: Record<string, unknown>) => Promise<void>,
+  /** What to say when the refusal maps to no field at all. */
+  unmappedFallback: string
+) => {
+  const [fieldErrors, setFieldErrors] = useState<ItemFormErrors>({});
+  const [failure, setFailure] = useState<string | null>(null);
+  const isDirtyRef = useRef(false);
+
+  const handleSubmit = useCallback(
+    async (values: Record<string, unknown>) => {
+      setFieldErrors({});
+      setFailure(null);
+      try {
+        await onSubmit(values);
+      } catch (error) {
+        const mapped = validationFieldErrors<keyof ItemFormErrors>(error);
+        setFieldErrors(mapped);
+        setFailure(
+          Object.keys(mapped).length > 0
+            ? null
+            : formatApiErrorMessage(error, unmappedFallback)
+        );
+      }
+    },
+    [onSubmit, unmappedFallback]
+  );
+
+  const handleDirtyChange = useCallback((isDirty: boolean) => {
+    isDirtyRef.current = isDirty;
+  }, []);
+
+  const reset = useCallback(() => {
+    setFieldErrors({});
+    setFailure(null);
+    isDirtyRef.current = false;
+  }, []);
+
+  return {
+    fieldErrors,
+    failure,
+    isDirtyRef,
+    handleSubmit,
+    handleDirtyChange,
+    reset,
+  };
+};
+
+/**
+ * Whether this close should be refused.
+ *
+ * A dirty form is not dismissed by the Escape key, because the register has no undo
+ * for twenty typed fields. A clean form is, because that is what the key means
+ * everywhere else in the app. The Cancel button and the dialog's own close button
+ * are not second-guessed — a person who presses a button labelled Cancel has made
+ * the decision that button offers, and a control that ignores itself is worse than
+ * one that loses work.
+ */
+const refuseEscape = (
+  open: boolean,
+  details: Parameters<DialogOpenChange>[1],
+  isDirty: boolean
+): boolean => !open && details.reason === "escape-key" && isDirty;
+
+interface CreateItemDialogProps {
+  formId: string;
+  categories: CategoryOption[];
+  categoryState: CategoryListState;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  isPending: boolean;
+  onSubmit: (values: Record<string, unknown>) => Promise<void>;
+}
+
+/**
+ * The create half, on its own so that the edit half's state cannot be half of it.
+ *
+ * Both dialogs are composed the way `class-dialogs.tsx` composes them: the submit
+ * button lives in the footer, outside the `<form>`, and reaches it with
+ * `form={formId}`. That is not a stylistic choice. The footer has to stay put while
+ * the form body scrolls, and a `<form>` cannot be a flex child of a scrolling
+ * column without the footer scrolling away with it.
+ *
+ * **The form is keyed on `isOpen`, and that key is the reset.** The repeated
+ * asset-tag rows are the reason it is not optional: a create dialog that reopened
+ * carrying the last item's tags would submit them against a different item, and
+ * the server would either refuse a tag already on file or — for tags that are not
+ * — attach somebody else&rsquo;s equipment to this line. Remounting is what
+ * guarantees the rows come back empty and the counters at zero.
+ */
+const CreateItemDialog = ({
+  formId,
+  categories,
+  categoryState,
+  isOpen,
+  onOpenChange,
+  isPending,
+  onSubmit,
+}: CreateItemDialogProps) => {
+  const {
+    fieldErrors,
+    failure,
+    isDirtyRef,
+    handleSubmit,
+    handleDirtyChange,
+    reset,
+  } = useItemSubmit(onSubmit, "The store did not accept it.");
+
+  const handleOpenChange: DialogOpenChange = (open, details) => {
+    if (refuseEscape(open, details, isDirtyRef.current)) {
+      details.cancel();
+      return;
+    }
+    if (!open) {
+      reset();
+    }
+    onOpenChange(open);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
+          <DialogTitle>Register an item</DialogTitle>
+          <DialogDescription>
+            Add a line to the store: what it is, how many there are, and what
+            each one is tagged
+          </DialogDescription>
+        </DialogHeader>
+        <div
+          aria-busy={isPending}
+          className="flex-1 space-y-3 overflow-y-auto px-6 py-4"
+        >
+          {failure ? (
+            <SaveFailureNotice message={failure} itemNoun="item" />
+          ) : null}
+          <InventoryItemForm
+            key={`create-${String(isOpen)}`}
+            formId={formId}
+            categories={categories}
+            categoryState={categoryState}
+            isLoading={isPending}
+            serverErrors={fieldErrors}
+            onSubmit={handleSubmit}
+            onDirtyChange={handleDirtyChange}
+          />
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              onOpenChange(false);
+            }}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          {/*
+            `loading` rather than `disabled` plus a swapped label. The width does
+            not move, the button keeps focus so a keyboard submit does not drop the
+            caret onto `<body>`, the second activation is refused, and `aria-busy`
+            is set for assistive technology. The label stays in the layout and is
+            only made transparent, so the button is the same size before and after
+            the press — which is the whole point of the prop, given this is a
+            twenty-field form and the button used to grow a word mid-submit.
+          */}
+          <Button type="submit" form={formId} loading={isPending}>
+            Register item
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+interface EditItemDialogProps {
+  formId: string;
+  categories: CategoryOption[];
+  categoryState: CategoryListState;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  isPending: boolean;
+  selectedItem: InventoryItemView | null;
+  onSubmit: (values: Record<string, unknown>) => Promise<void>;
+  editActions: EditActionProps;
+}
+
+/** The edit half. Same shape as the create half, one fewer fieldset and one more edge. */
+const EditItemDialog = ({
+  formId,
+  categories,
+  categoryState,
+  isOpen,
+  onOpenChange,
+  isPending,
+  selectedItem,
+  onSubmit,
+  editActions,
+}: EditItemDialogProps) => {
+  const {
+    fieldErrors,
+    failure,
+    isDirtyRef,
+    handleSubmit,
+    handleDirtyChange,
+    reset,
+  } = useItemSubmit(onSubmit, "The store did not accept the change.");
+
+  const handleOpenChange: DialogOpenChange = (open, details) => {
+    if (refuseEscape(open, details, isDirtyRef.current)) {
+      details.cancel();
+      return;
+    }
+    if (!open) {
+      reset();
+    }
+    onOpenChange(open);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
+          <DialogTitle>Edit {selectedItem?.name ?? "item"}</DialogTitle>
+          <DialogDescription>
+            {selectedItem ? (
+              <span className="font-mono">{selectedItem.sku}</span>
+            ) : (
+              "Update the item's descriptive details"
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div
+          aria-busy={isPending}
+          className="flex-1 space-y-3 overflow-y-auto px-6 py-4"
+        >
+          {failure ? (
+            <SaveFailureNotice message={failure} itemNoun="change" />
+          ) : null}
+          {/*
+            The one combination with nothing to edit. It used to render an empty
+            body under a heading reading "Edit item", with a live "Save changes"
+            button pointing at a form that was not in the document — a submit into
+            a void, which is the shape of bug where a person is told their change
+            was saved and nothing happened. Two callers hold this state today
+            (`inventory-page.tsx` keeps the two in step, and `admin/$year` pins
+            the edit half shut), so it has never been seen; it is here because
+            "never been seen" is not the same as "cannot happen", and it costs one
+            paragraph and a disabled button.
+          */}
+          {selectedItem ? (
+            <InventoryItemForm
+              key={`edit-${selectedItem.id}`}
+              formId={formId}
+              categories={categories}
+              categoryState={categoryState}
+              initialData={selectedItem}
+              isLoading={isPending}
+              serverErrors={fieldErrors}
+              onSubmit={handleSubmit}
+              onDirtyChange={handleDirtyChange}
+              editActions={editActions}
+            />
+          ) : (
+            <output className="text-muted-foreground block text-sm">
+              No item is selected, so there is nothing to edit. Open the
+              register, choose an item, and choose Edit.
+            </output>
+          )}
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              onOpenChange(false);
+            }}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form={formId}
+            loading={isPending}
+            disabled={!selectedItem}
+          >
+            Save changes
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 export interface InventoryItemDialogsProps {
   categories: CategoryOption[];
@@ -1875,20 +761,13 @@ export interface InventoryItemDialogsProps {
 }
 
 /**
- * Create and edit, composed the way `class-dialogs.tsx` composes them: the submit
- * button lives in the dialog's footer, outside the `<form>`, and reaches it with
- * `form="id"`.
+ * The two dialogs, and the only two facts they share: one id namespace, and one
+ * read of the category list.
  *
- * That is not a stylistic choice. The footer has to stay put while the form body
- * scrolls, and a `<form>` cannot be a flex child of a scrolling column without the
- * footer scrolling away with it.
- *
- * **The create form is keyed on `isCreateOpen`, and that key is the reset.** The
- * repeated asset-tag rows are the reason it is not optional: a create dialog that
- * reopened carrying the last item's tags would submit them against a different item,
- * and the server would either refuse a tag already on file or — for tags that are
- * not — attach somebody else&rsquo;s equipment to this line. Remounting is what
- * guarantees the rows come back empty and the counters at zero.
+ * Everything else — the form, the failure state, the Escape policy — belongs to a
+ * dialog rather than to the pair, which is why they are two components and not one
+ * with a boolean in it. Two dialogs in one component meant one `isDirty`, one
+ * `fieldErrors` and one `failure` deciding which of the two forms was mid-write.
  */
 export const InventoryItemDialogs = ({
   categories,
@@ -1903,153 +782,68 @@ export const InventoryItemDialogs = ({
   onEditSubmit,
   editActions,
 }: InventoryItemDialogsProps) => {
-  const [createErrors, setCreateErrors] = useState<ItemFormErrors>({});
-  const [editErrors, setEditErrors] = useState<ItemFormErrors>({});
+  /**
+   * One id namespace for the whole component, and therefore for both forms.
+   *
+   * `useId` because the create and edit dialogs are siblings that can both be in
+   * the document: the register mounts this component once and holds two pieces of
+   * open state, and `admin/$year` mounts it with the edit half pinned shut. Two
+   * hardcoded form ids would put one id in the document twice, and the second
+   * submit button's `form="…"` would submit the first form. The colons `useId`
+   * produces are stripped because these values end up in a `form` attribute, an
+   * `id` and an `aria-describedby` list, and an id containing a colon is a trap
+   * for anyone who later tries to select it.
+   */
+  const formIdSuffix = useId().replaceAll(/[^\dA-Za-z_-]/gu, "");
 
   /**
-   * Server-side validation, mapped back onto the fields — and nothing else.
+   * The state of the category read, from the read the page already made.
    *
-   * `validationFieldErrors` exists for exactly this: `createItem` validates against
-   * the same `inventoryItemInsertSchema` the form does, so a message about a field
-   * the user is looking at has to land on that field rather than in a toast. Rules
-   * with no single field behind them — a duplicate asset tag on file, a reorder level
-   * above the count — still arrive as the server's sentence in a toast, which is the
-   * right place for them.
-   *
-   * **The catch deliberately does not toast, and that is not an omission.**
-   * `onCreateSubmit` is `handleCreateSubmit` in `inventory-page.tsx`, which awaits
-   * `mutateAsync`; that rejection has *already* been through the mutation
-   * observer's own `onError`, which is where the toast comes from. Toasting here
-   * too printed the identical sentence twice for every validation failure, every
-   * duplicate SKU and every dropped connection — and the mutation observer is the
-   * only one of the two that survives this dialog unmounting, so it has to be the
-   * one that speaks. `custody-dialogs.tsx` reached the same conclusion from the
-   * other direction and its submit handlers are the pattern these two now match.
-   *
-   * Neither handler rethrows: the dialog is closed by the caller on success, so the
-   * failure is already reported and letting it escape would put an unhandled
-   * rejection on the form's submit handler.
+   * `categories` is an array, and an array cannot say whether it is empty because
+   * the store has no categories or because the request failed — so this subscribes
+   * to `orpc.inventory.categories.list` with the *same key and the same no-input
+   * shape* the page and `admin/$year` use. TanStack deduplicates on the query key,
+   * so this is the page's own query observed, not a second one: no extra request,
+   * and no possibility of the picker and the categories panel describing different
+   * moments. The rows still come from the prop, which is the page's read.
    */
-  const handleCreateSubmit = async (values: Record<string, unknown>) => {
-    setCreateErrors({});
-    try {
-      await onCreateSubmit(values);
-    } catch (error) {
-      setCreateErrors(validationFieldErrors<keyof ItemFormErrors>(error));
-    }
-  };
-
-  const handleEditSubmit = async (values: Record<string, unknown>) => {
-    setEditErrors({});
-    try {
-      await onEditSubmit(values);
-    } catch (error) {
-      setEditErrors(validationFieldErrors<keyof ItemFormErrors>(error));
-    }
+  const categoriesQuery = useQuery(
+    orpc.inventory.categories.list.queryOptions()
+  );
+  const categoryState: CategoryListState = {
+    isLoading: categoriesQuery.isPending,
+    isFailed: categoriesQuery.isError,
+    failureMessage: categoriesQuery.isError
+      ? formatApiErrorMessage(categoriesQuery.error, "") || null
+      : null,
+    isRetrying: categoriesQuery.isFetching && !categoriesQuery.isPending,
+    onRetry: () => {
+      void categoriesQuery.refetch();
+    },
   };
 
   return (
     <>
-      <Dialog
-        open={isCreateOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreateErrors({});
-          }
-          onCreateOpenChange(open);
-        }}
-      >
-        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-2xl">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
-            <DialogTitle>Register an item</DialogTitle>
-            <DialogDescription>
-              Add a line to the store: what it is, how many there are, and what
-              each one is tagged
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            <InventoryItemForm
-              key={`create-${String(isCreateOpen)}`}
-              formId="create-inventory-item-form"
-              categories={categories}
-              isLoading={isCreatePending}
-              serverErrors={createErrors}
-              onSubmit={handleCreateSubmit}
-            />
-          </div>
-          <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onCreateOpenChange(false)}
-              disabled={isCreatePending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="create-inventory-item-form"
-              disabled={isCreatePending}
-            >
-              {isCreatePending ? "Saving..." : "Register item"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isEditOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditErrors({});
-          }
-          onEditOpenChange(open);
-        }}
-      >
-        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-2xl">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
-            <DialogTitle>Edit {selectedItem?.name ?? "item"}</DialogTitle>
-            <DialogDescription>
-              {selectedItem ? (
-                <span className="font-mono">{selectedItem.sku}</span>
-              ) : (
-                "Update the item's descriptive details"
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {selectedItem ? (
-              <InventoryItemForm
-                key={`edit-${selectedItem.id}`}
-                formId="edit-inventory-item-form"
-                categories={categories}
-                initialData={selectedItem}
-                isLoading={isEditPending}
-                serverErrors={editErrors}
-                onSubmit={handleEditSubmit}
-                editActions={editActions}
-              />
-            ) : null}
-          </div>
-          <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onEditOpenChange(false)}
-              disabled={isEditPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="edit-inventory-item-form"
-              disabled={isEditPending}
-            >
-              {isEditPending ? "Saving..." : "Save changes"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CreateItemDialog
+        categories={categories}
+        categoryState={categoryState}
+        formId={`create-item-form-${formIdSuffix}`}
+        isOpen={isCreateOpen}
+        isPending={isCreatePending}
+        onOpenChange={onCreateOpenChange}
+        onSubmit={onCreateSubmit}
+      />
+      <EditItemDialog
+        categories={categories}
+        categoryState={categoryState}
+        editActions={editActions}
+        formId={`edit-item-form-${formIdSuffix}`}
+        isOpen={isEditOpen}
+        isPending={isEditPending}
+        onOpenChange={onEditOpenChange}
+        onSubmit={onEditSubmit}
+        selectedItem={selectedItem}
+      />
     </>
   );
 };

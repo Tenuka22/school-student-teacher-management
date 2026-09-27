@@ -24,6 +24,7 @@ import {
 import {
   Field,
   FieldDescription,
+  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
@@ -37,190 +38,200 @@ import {
   SelectValue,
 } from "@school-student-teacher-management/ui/components/select";
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
-import { IconSearch, IconUsersPlus } from "@tabler/icons-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  IconAlertTriangle,
+  IconCalendar,
+  IconRefresh,
+  IconSearch,
+  IconUsersPlus,
+  IconX,
+} from "@tabler/icons-react";
 import { useRouteContext } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { AttendanceGrid } from "@/components/staff/attendance/attendance-grid";
-import type { AcademicYear } from "@/components/staff/attendance/use-attendance-page";
+import type {
+  AttendancePolicyValues,
+  AttendancePageApi,
+} from "@/components/staff/attendance/use-attendance-page";
 import { useAttendancePage } from "@/components/staff/attendance/use-attendance-page";
 import { PortTeachersDialog } from "@/components/staff/teacher-management/port-teachers-dialog";
-import { orpc } from "@/utils/orpc";
 
-interface AttendancePolicyValues {
-  arrivalCutoffTime: string;
-  shortLeavesPerMonth: number;
-  primaryStartPeriodNumber: number;
-  primaryEndPeriodNumber: number;
-  secondaryStartPeriodNumber: number;
-  secondaryEndPeriodNumber: number;
-}
+const POLICY_FIELDS: {
+  name: keyof AttendancePolicyValues;
+  label: string;
+  type: "time" | "number";
+  min?: number;
+  max?: number;
+}[] = [
+  {
+    name: "arrivalCutoffTime",
+    label: "Arrival cut-off",
+    type: "time",
+  },
+  {
+    name: "shortLeavesPerMonth",
+    label: "Short leaves / month",
+    type: "number",
+    min: 0,
+    max: 31,
+  },
+  {
+    name: "primaryStartPeriodNumber",
+    label: "Primary range starts",
+    type: "number",
+    min: 1,
+    max: 8,
+  },
+  {
+    name: "primaryEndPeriodNumber",
+    label: "Primary range ends",
+    type: "number",
+    min: 1,
+    max: 8,
+  },
+  {
+    name: "secondaryStartPeriodNumber",
+    label: "Secondary range starts",
+    type: "number",
+    min: 1,
+    max: 8,
+  },
+  {
+    name: "secondaryEndPeriodNumber",
+    label: "Secondary range ends",
+    type: "number",
+    min: 1,
+    max: 8,
+  },
+];
 
-interface AttendancePolicyUsage {
-  yearMonth: string;
-  shortLeavesUsed: number;
-}
+/** The four inputs the block rule is about, so the error lands on them. */
+const PERIOD_RANGE_FIELDS = new Set<keyof AttendancePolicyValues>([
+  "primaryStartPeriodNumber",
+  "primaryEndPeriodNumber",
+  "secondaryStartPeriodNumber",
+  "secondaryEndPeriodNumber",
+]);
+
+const POLICY_ERROR_ID = "attendance-policy-error";
 
 interface AttendancePolicyEditorProps {
-  academicYear: AcademicYear;
-  policy: AttendancePolicyValues;
-  usage: AttendancePolicyUsage | null;
-  isSaving: boolean;
-  onSave: (values: AttendancePolicyValues) => Promise<void>;
+  page: AttendancePageApi;
 }
 
-const AttendancePolicyEditor = ({
-  academicYear,
-  policy,
-  usage,
-  isSaving,
-  onSave,
-}: AttendancePolicyEditorProps) => {
+/**
+ * The policy form, for the seat that may write it.
+ *
+ * A refused save keeps everything that was typed. The form is uncontrolled and
+ * keyed on the policy's own `dataUpdatedAt`, so a failure — which changes
+ * nothing on the server — cannot remount it and wipe the numbers someone has
+ * just corrected.
+ */
+const AttendancePolicyEditor = ({ page }: AttendancePolicyEditorProps) => {
+  const [error, setError] = useState<string | null>(null);
+  const { policy, policyUsage, currentYear, isSavingPolicy } = page;
+
+  if (!policy || !currentYear) {
+    return null;
+  }
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    await onSave({
-      arrivalCutoffTime: String(formData.get("arrivalCutoffTime")),
-      shortLeavesPerMonth: Number(formData.get("shortLeavesPerMonth")),
-      primaryStartPeriodNumber: Number(
-        formData.get("primaryStartPeriodNumber")
-      ),
-      primaryEndPeriodNumber: Number(formData.get("primaryEndPeriodNumber")),
-      secondaryStartPeriodNumber: Number(
-        formData.get("secondaryStartPeriodNumber")
-      ),
-      secondaryEndPeriodNumber: Number(
-        formData.get("secondaryEndPeriodNumber")
-      ),
-    });
+    if (isSavingPolicy) {
+      return;
+    }
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const values = Object.fromEntries(
+      POLICY_FIELDS.map((field) => [
+        field.name,
+        field.type === "time"
+          ? String(formData.get(field.name))
+          : Number(formData.get(field.name)),
+      ])
+    ) as unknown as AttendancePolicyValues;
+    setError(null);
+    const saved = await page.savePolicy(values);
+    if (!saved) {
+      setError(
+        page.lastPolicyError ??
+          "The policy was not saved. Everything on this form is still yours — correct it and save again."
+      );
+    }
   };
 
   return (
-    <Card size="sm" className="w-full">
-      <form onSubmit={handleSubmit}>
+    <Card className="w-full" size="sm">
+      <form aria-busy={isSavingPolicy || undefined} onSubmit={handleSubmit}>
         <CardHeader className="border-b">
-          <CardTitle>Attendance policy</CardTitle>
+          <CardTitle>
+            <h2 className="font-heading text-sm font-medium">
+              Attendance policy
+            </h2>
+          </CardTitle>
           <CardDescription>
             Arrival, short leave, and half-day period rules for{" "}
-            {academicYear.year}.
+            {currentYear.year}. School-wide: it decides what recording an
+            arrival does.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {error ? (
+            <div className="mb-3" id={POLICY_ERROR_ID} role="alert">
+              <FieldError>{error}</FieldError>
+            </div>
+          ) : null}
           <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <Field>
-              <FieldLabel htmlFor="attendance-policy-cutoff">
-                Arrival cut-off
-              </FieldLabel>
-              <Input
-                id="attendance-policy-cutoff"
-                name="arrivalCutoffTime"
-                type="time"
-                defaultValue={policy.arrivalCutoffTime}
-                required
-                disabled={isSaving}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="attendance-policy-short-leaves">
-                Short leaves / month
-              </FieldLabel>
-              <Input
-                id="attendance-policy-short-leaves"
-                name="shortLeavesPerMonth"
-                type="number"
-                min="0"
-                max="31"
-                step="1"
-                defaultValue={policy.shortLeavesPerMonth}
-                required
-                disabled={isSaving}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="attendance-policy-primary-start">
-                Primary range starts
-              </FieldLabel>
-              <Input
-                id="attendance-policy-primary-start"
-                name="primaryStartPeriodNumber"
-                type="number"
-                min="1"
-                max="8"
-                step="1"
-                defaultValue={policy.primaryStartPeriodNumber}
-                required
-                disabled={isSaving}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="attendance-policy-primary-end">
-                Primary range ends
-              </FieldLabel>
-              <Input
-                id="attendance-policy-primary-end"
-                name="primaryEndPeriodNumber"
-                type="number"
-                min="1"
-                max="8"
-                step="1"
-                defaultValue={policy.primaryEndPeriodNumber}
-                required
-                disabled={isSaving}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="attendance-policy-secondary-start">
-                Secondary range starts
-              </FieldLabel>
-              <Input
-                id="attendance-policy-secondary-start"
-                name="secondaryStartPeriodNumber"
-                type="number"
-                min="1"
-                max="8"
-                step="1"
-                defaultValue={policy.secondaryStartPeriodNumber}
-                required
-                disabled={isSaving}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="attendance-policy-secondary-end">
-                Secondary range ends
-              </FieldLabel>
-              <Input
-                id="attendance-policy-secondary-end"
-                name="secondaryEndPeriodNumber"
-                type="number"
-                min="1"
-                max="8"
-                step="1"
-                defaultValue={policy.secondaryEndPeriodNumber}
-                required
-                disabled={isSaving}
-              />
-              <FieldDescription>
-                Half-days have no monthly allowance. Two half-days count as one
-                full leave day; a third in the same month is recorded as a half
-                day.
-              </FieldDescription>
-            </Field>
+            {POLICY_FIELDS.map((field) => {
+              const inputId = `attendance-policy-${field.name}`;
+              const describedByPeriodRange =
+                error && PERIOD_RANGE_FIELDS.has(field.name)
+                  ? POLICY_ERROR_ID
+                  : undefined;
+              return (
+                <Field key={field.name}>
+                  <FieldLabel htmlFor={inputId}>{field.label}</FieldLabel>
+                  <Input
+                    aria-describedby={describedByPeriodRange}
+                    defaultValue={policy[field.name]}
+                    disabled={isSavingPolicy}
+                    id={inputId}
+                    max={field.max}
+                    min={field.min}
+                    name={field.name}
+                    required
+                    step="1"
+                    type={field.type}
+                  />
+                </Field>
+              );
+            })}
           </FieldGroup>
+          <FieldDescription className="mt-3">
+            Half-days have no monthly allowance. Two half-days count as one full
+            leave day; a third in the same month is recorded as a half day. The
+            Primary block has to come before the Secondary block, and the two
+            cannot overlap.
+          </FieldDescription>
         </CardContent>
         <CardFooter className="flex-wrap justify-between gap-3">
           <div>
             <p className="font-medium">Your short leaves this month</p>
             <p className="text-muted-foreground">
-              {usage
-                ? `${usage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record`
+              {policyUsage
+                ? `${policyUsage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record`
                 : "This policy is school-wide; the count here is your own usage, not the whole staff."}
             </p>
           </div>
-          <Button type="submit" size="sm" disabled={isSaving}>
-            {isSaving ? "Saving…" : "Save policy"}
+          <Button
+            className="min-w-32"
+            disabled={isSavingPolicy}
+            size="sm"
+            type="submit"
+          >
+            {isSavingPolicy ? "Saving…" : "Save policy"}
           </Button>
         </CardFooter>
       </form>
@@ -238,15 +249,11 @@ const AttendancePolicyEditor = ({
  * here as text instead of as inputs: the read tier and the write tier describe
  * one policy, and only one of them belongs to the seats outside leadership.
  */
-const AttendancePolicySummary = ({
-  academicYear,
-  policy,
-  usage,
-}: {
-  academicYear: AcademicYear;
-  policy: AttendancePolicyValues;
-  usage: AttendancePolicyUsage | null;
-}) => {
+const AttendancePolicySummary = ({ page }: AttendancePolicyEditorProps) => {
+  const { currentYear, policy, policyUsage } = page;
+  if (!policy || !currentYear) {
+    return null;
+  }
   const detailRows: [string, string][] = [
     ["Arrival cut-off", policy.arrivalCutoffTime],
     ["Short leaves / month", String(policy.shortLeavesPerMonth)],
@@ -261,23 +268,27 @@ const AttendancePolicySummary = ({
   ];
 
   return (
-    <Card size="sm" className="w-full">
+    <Card className="w-full" size="sm">
       <CardHeader className="border-b">
-        <CardTitle>Attendance policy</CardTitle>
+        <CardTitle>
+          <h2 className="font-heading text-sm font-medium">
+            Attendance policy
+          </h2>
+        </CardTitle>
         <CardDescription>
-          Arrival, short leave, and half-day period rules for{" "}
-          {academicYear.year}. Read-only — the administrator sets these.
+          Arrival, short leave, and half-day period rules for {currentYear.year}
+          . Read-only — the administrator sets these.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
           {detailRows.map(([label, value]) => (
             <div
-              key={label}
               className="flex justify-between gap-4 border-b pb-2"
+              key={label}
             >
               <dt className="text-muted-foreground">{label}</dt>
-              <dd className="text-right font-medium">{value}</dd>
+              <dd className="text-right font-medium tabular-nums">{value}</dd>
             </div>
           ))}
         </dl>
@@ -288,8 +299,8 @@ const AttendancePolicySummary = ({
       </CardContent>
       <CardFooter>
         <p className="text-muted-foreground text-xs">
-          {usage
-            ? `Your short leaves this month: ${usage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record.`
+          {policyUsage
+            ? `Your short leaves this month: ${policyUsage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record.`
             : "This policy applies school-wide."}
         </p>
       </CardFooter>
@@ -307,71 +318,59 @@ const AttendancePolicySummary = ({
  * the gate lives here so that nobody is invited to fail.
  */
 const AttendancePolicyCard = ({
-  academicYear,
   canEdit,
-}: {
-  academicYear: AcademicYear | undefined;
-  canEdit: boolean;
-}) => {
-  const queryClient = useQueryClient();
-  const updateMutation = useMutation(
-    orpc.staff.attendance.updatePolicy.mutationOptions({
-      onSuccess: async () => {
-        toast.success("Attendance policy updated");
-        if (academicYear) {
-          await queryClient.invalidateQueries({
-            queryKey: orpc.staff.attendance.getPolicy.queryOptions({
-              input: { academicYearId: academicYear.id },
-            }).queryKey,
-          });
-        }
-      },
-      onError: (error) => {
-        toast.error(error.message);
-      },
-    })
-  );
-  const policyQuery = useQuery({
-    ...orpc.staff.attendance.getPolicy.queryOptions({
-      input: { academicYearId: academicYear?.id ?? "" },
-    }),
-    enabled: Boolean(academicYear?.id),
-  });
+  page,
+}: AttendancePolicyEditorProps & { canEdit: boolean }) => {
+  const { currentYear } = page;
 
-  if (!academicYear || policyQuery.isLoading) {
+  if (!currentYear || page.isLoadingPolicy) {
     return (
       <Card size="sm">
         <CardHeader className="border-b">
-          <CardTitle>Attendance policy</CardTitle>
-          <CardDescription>Loading year policy…</CardDescription>
+          <CardTitle>
+            <h2 className="font-heading text-sm font-medium">
+              Attendance policy
+            </h2>
+          </CardTitle>
+          <CardDescription>Loading this year&rsquo;s policy…</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          {Array.from({ length: 6 }, (_, index) => (
-            <Skeleton key={index} className="h-8" />
+          {POLICY_FIELDS.map((field) => (
+            <Skeleton
+              className="h-8 motion-reduce:animate-none"
+              key={field.name}
+            />
           ))}
         </CardContent>
       </Card>
     );
   }
 
-  if (policyQuery.isError || !policyQuery.data) {
+  if (page.isErrorPolicy) {
     return (
       <Card size="sm">
         <CardHeader>
-          <CardTitle>Attendance policy</CardTitle>
+          <CardTitle>
+            <h2 className="font-heading text-sm font-medium">
+              Attendance policy
+            </h2>
+          </CardTitle>
           <CardDescription>
-            The policy for {academicYear.year} could not be loaded.
+            The policy for {currentYear.year} could not be read
+            {page.errorPolicy ? `: ${page.errorPolicy.message}` : "."} Until it
+            loads, recording an arrival cannot say what it will record.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button
+            onClick={() => {
+              page.refetchPolicy();
+            }}
+            size="sm"
             type="button"
             variant="outline"
-            size="sm"
-            onClick={async () => {
-              await policyQuery.refetch();
-            }}
           >
+            <IconRefresh data-icon="inline-start" />
             Try again
           </Button>
         </CardContent>
@@ -379,14 +378,18 @@ const AttendancePolicyCard = ({
     );
   }
 
-  if (!policyQuery.data.policy) {
+  if (!page.policy) {
     return (
       <Card size="sm">
         <CardHeader>
-          <CardTitle>Attendance policy</CardTitle>
+          <CardTitle>
+            <h2 className="font-heading text-sm font-medium">
+              Attendance policy
+            </h2>
+          </CardTitle>
           <CardDescription>
             Arrival, short leave, and half-day period rules for{" "}
-            {academicYear.year}.
+            {currentYear.year}.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -394,22 +397,22 @@ const AttendancePolicyCard = ({
             <EmptyTitle>Attendance policy not configured</EmptyTitle>
             <EmptyDescription>
               {canEdit
-                ? "Configure the arrival cut-off, short-leave allowance, and Primary/Secondary period ranges for this academic year."
-                : "The arrival cut-off, short-leave allowance and Primary/Secondary period ranges are not set for this academic year. The administrator sets them."}
+                ? "Configure the arrival cut-off, short-leave allowance, and Primary/Secondary period ranges for this academic year. The register cannot be read for any date until it exists."
+                : "The arrival cut-off, short-leave allowance and Primary/Secondary period ranges are not set for this academic year, and the register cannot be read for any date until they are. The administrator sets them."}
             </EmptyDescription>
             {/* Seeding the row is the same `updatePolicy` write as the form
                 below, so it is the administrator's button too. */}
             {canEdit ? (
               <EmptyContent>
                 <Button
-                  type="button"
+                  disabled={page.isSavingPolicy}
+                  onClick={() => {
+                    void page.configureDefaultPolicy();
+                  }}
                   size="sm"
-                  disabled={updateMutation.isPending}
-                  onClick={() =>
-                    updateMutation.mutate({ academicYearId: academicYear.id })
-                  }
+                  type="button"
                 >
-                  {updateMutation.isPending
+                  {page.isSavingPolicy
                     ? "Configuring…"
                     : "Configure default policy"}
                 </Button>
@@ -422,25 +425,9 @@ const AttendancePolicyCard = ({
   }
 
   return canEdit ? (
-    <AttendancePolicyEditor
-      key={`${academicYear.id}:${policyQuery.dataUpdatedAt}`}
-      academicYear={academicYear}
-      policy={policyQuery.data.policy}
-      usage={policyQuery.data.usage}
-      isSaving={updateMutation.isPending}
-      onSave={async (values) => {
-        await updateMutation.mutateAsync({
-          academicYearId: academicYear.id,
-          ...values,
-        });
-      }}
-    />
+    <AttendancePolicyEditor key={currentYear.id} page={page} />
   ) : (
-    <AttendancePolicySummary
-      academicYear={academicYear}
-      policy={policyQuery.data.policy}
-      usage={policyQuery.data.usage}
-    />
+    <AttendancePolicySummary page={page} />
   );
 };
 
@@ -467,17 +454,13 @@ interface AttendancePageContentProps {
  * - **Write** — one seat above that. `updatePolicy` is `adminOnlyProcedure`,
  *   i.e. `requireRole("admin")`, and `isAdminRole` on its own is the *wrong*
  *   gate: it would hand the form to exactly the two leadership seats the
- *   server refuses. The write tier is the admin set minus leadership, which
- *   is the same reading `academic-year-gate.tsx` makes for `setCurrentYear`.
+ *   server refuses. The write tier is the admin set minus leadership, which is
+ *   the same reading `academic-year-gate.tsx` makes for `setCurrentYear`.
  *
  * The gate is here, in the UI, only so that a Deputy is not invited to fill in
  * a school-wide form and be told no. `adminOnlyProcedure` stays as it is.
  */
-const AttendancePolicySection = ({
-  academicYear,
-}: {
-  academicYear: AcademicYear | undefined;
-}) => {
+const AttendancePolicySection = ({ page }: { page: AttendancePageApi }) => {
   const { session } = useRouteContext({ from: "/_auth" });
   const role = (session?.user as SessionUser | undefined)?.role;
 
@@ -488,9 +471,7 @@ const AttendancePolicySection = ({
     return null;
   }
 
-  return (
-    <AttendancePolicyCard academicYear={academicYear} canEdit={canEditPolicy} />
-  );
+  return <AttendancePolicyCard canEdit={canEditPolicy} page={page} />;
 };
 
 export const AttendancePageContent = ({
@@ -500,13 +481,16 @@ export const AttendancePageContent = ({
   const [filter, setFilter] = useState("");
   const [isPortDialogOpen, setIsPortDialogOpen] = useState(false);
   const showImportBanner =
-    !page.isLoadingTeachers &&
-    !page.isErrorTeachers &&
+    page.registerState === "ready" &&
     page.teachers.length === 0 &&
     page.hasPreviousYear;
 
   const hasDateRange = Boolean(
     page.currentYear?.startDate && page.currentYear.endDate
+  );
+  const dateLabel = format(
+    new Date(`${page.date}T00:00:00`),
+    "EEEE d MMMM yyyy"
   );
 
   return (
@@ -514,14 +498,15 @@ export const AttendancePageContent = ({
       <div>
         <h1 className="text-3xl font-bold">Attendance</h1>
         <p className="text-muted-foreground mt-2">
-          Each tick is saved as soon as you make it — there is no separate save
-          step. Empty a period to record an absence for it, and add a reason to
-          help the Principal decide on leave. A teacher absent for all{" "}
-          {page.periods.length} periods is recorded as absent for the whole day.
+          {dateLabel} · academic year {page.currentYear?.year ?? "—"}. Every
+          mark saves as you make it, so there is no separate save step. Arrow
+          keys move between cells; Space or Enter marks one. A teacher absent
+          for all {page.periods.length} periods is recorded as absent for the
+          whole day.
         </p>
       </div>
 
-      <AttendancePolicySection academicYear={page.currentYear} />
+      <AttendancePolicySection page={page} />
 
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-end gap-4">
@@ -529,17 +514,15 @@ export const AttendancePageContent = ({
             <Field className="w-24">
               <FieldLabel htmlFor="attendance-day">Day</FieldLabel>
               <Select
-                value={String(page.day)}
                 onValueChange={(value: string | null) => {
                   if (value) {
                     page.setDay(Number(value));
                   }
                 }}
+                value={String(page.day)}
               >
                 <SelectTrigger id="attendance-day">
-                  <SelectValue placeholder="Day">
-                    {(value: string | null) => value ?? "Day"}
-                  </SelectValue>
+                  <SelectValue placeholder="Day" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -558,21 +541,15 @@ export const AttendancePageContent = ({
             <Field className="w-40">
               <FieldLabel htmlFor="attendance-month">Month</FieldLabel>
               <Select
-                value={String(page.month)}
                 onValueChange={(value: string | null) => {
                   if (value) {
                     page.setMonth(Number(value));
                   }
                 }}
+                value={String(page.month)}
               >
                 <SelectTrigger id="attendance-month">
-                  <SelectValue placeholder="Month">
-                    {(value: string | null) =>
-                      page.monthOptions.find(
-                        (option) => String(option.value) === value
-                      )?.label ?? "Month"
-                    }
-                  </SelectValue>
+                  <SelectValue placeholder="Month" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -591,17 +568,15 @@ export const AttendancePageContent = ({
             <Field className="w-28">
               <FieldLabel htmlFor="attendance-year">Calendar year</FieldLabel>
               <Select
-                value={String(page.year)}
                 onValueChange={(value: string | null) => {
                   if (value) {
                     page.setYear(Number(value));
                   }
                 }}
+                value={String(page.year)}
               >
                 <SelectTrigger id="attendance-year">
-                  <SelectValue placeholder="Year">
-                    {(value: string | null) => value ?? "Year"}
-                  </SelectValue>
+                  <SelectValue placeholder="Year" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -614,31 +589,72 @@ export const AttendancePageContent = ({
                 </SelectContent>
               </Select>
             </Field>
+            <Button
+              disabled={page.isToday}
+              onClick={() => page.setDate(page.todayIso)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <IconCalendar data-icon="inline-start" />
+              Today
+            </Button>
           </div>
 
-          <Field className="w-64 sm:ml-auto">
+          <Field className="w-72 sm:ml-auto">
             <FieldLabel htmlFor="attendance-filter">Filter teachers</FieldLabel>
-            <div className="relative">
-              <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-              <Input
-                id="attendance-filter"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="Search by name..."
-                className="pl-8"
-              />
+            <div className="flex items-end gap-2">
+              <div className="relative flex-1">
+                <IconSearch
+                  aria-hidden="true"
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+                />
+                <Input
+                  aria-describedby="attendance-filter-hint"
+                  className="pl-8"
+                  id="attendance-filter"
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder="Search by name…"
+                  value={filter}
+                />
+              </div>
+              {filter ? (
+                <Button
+                  aria-label="Clear the teacher search"
+                  onClick={() => setFilter("")}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <IconX data-icon="inline-start" />
+                  Clear
+                </Button>
+              ) : null}
             </div>
+            <FieldDescription id="attendance-filter-hint">
+              Searches the {page.summary.onRoll} teachers on this year&apos;s
+              roll. The register&apos;s own row filter is above the grid.
+            </FieldDescription>
           </Field>
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={hasDateRange ? "outline" : "destructive"}>
             Academic year {page.currentYear?.year ?? "—"}
           </Badge>
+          {page.isPastDate ? (
+            <Badge variant="secondary">
+              <IconAlertTriangle data-icon="inline-start" />
+              Backdating — every change is confirmed before it saves
+            </Badge>
+          ) : null}
           <p className="text-muted-foreground text-xs">
-            {hasDateRange
+            {hasDateRange &&
+            page.currentYear?.startDate &&
+            page.currentYear.endDate
               ? `Attendance dates are limited to ${formatDateRange(
-                  page.currentYear?.startDate ?? "",
-                  page.currentYear?.endDate ?? ""
+                  page.currentYear.startDate,
+                  page.currentYear.endDate
                 )}.`
               : "This year has no date range. Add its start and end dates to enforce attendance limits."}
           </p>
@@ -649,24 +665,28 @@ export const AttendancePageContent = ({
         <Empty className="min-h-[40vh] border-none">
           <EmptyTitle>No teachers for {page.currentYear?.year}</EmptyTitle>
           <EmptyDescription>
-            This academic year has no teachers yet. Import them from the
+            This academic year has no teaching staff yet. Import them from the
             previous year to start marking attendance.
           </EmptyDescription>
           <EmptyContent>
             <Button onClick={() => setIsPortDialogOpen(true)}>
               <IconUsersPlus data-icon="inline-start" />
-              Import from Previous Year
+              Import from previous year
             </Button>
           </EmptyContent>
         </Empty>
       ) : (
-        <AttendanceGrid page={page} filter={filter} />
+        <AttendanceGrid
+          filter={filter}
+          onClearFilters={() => setFilter("")}
+          page={page}
+        />
       )}
 
       <PortTeachersDialog
+        academicYearId={page.currentYear?.id}
         isOpen={isPortDialogOpen}
         onOpenChange={setIsPortDialogOpen}
-        academicYearId={page.currentYear?.id}
       />
     </div>
   );

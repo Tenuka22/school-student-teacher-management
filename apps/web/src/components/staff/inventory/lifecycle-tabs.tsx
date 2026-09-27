@@ -86,6 +86,13 @@ import { orpc } from "@/utils/orpc";
 export type LifecycleTab = "loans" | "issues" | "write-offs" | "register";
 
 /**
+ * The Records pane's heading id, exported so `inventory-page.tsx` can name the
+ * `<section>` that wraps this component with the element that names itself
+ * instead of with a string.
+ */
+export const LIFECYCLE_HEADING_ID = "inventory-records-heading";
+
+/**
  * The school-wide count of late loans, for the tab label.
  *
  * A separate, deliberately tiny query: `limit: 1` because only `total` is wanted,
@@ -133,12 +140,33 @@ export const InventoryLifecycleTabs = ({
   const ledgerHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    if (scrollToLedger) {
-      ledgerHeadingRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+    if (!scrollToLedger) {
+      return;
     }
+
+    /*
+     * The scroll to the ledgers, and it is the one piece of motion in this file.
+     *
+     * **`prefers-reduced-motion` is honoured, and it was not.** `behavior: "smooth"`
+     * was unconditional, so a reader who has asked their operating system for less
+     * motion got a full animated glide down the page every time they opened
+     * `/inventory/ledger` — which is a link, so it is repeatable, and it moves the
+     * whole viewport past four hundred rows of a loan queue. PRODUCT.md makes motion
+     * respect the preference a build requirement rather than a review pass, and
+     * `Loader`'s own skeleton leans on the global guard for the same reason.
+     *
+     * `auto` is not a lesser experience: it is the jump the reader asked for, and
+     * the heading is still scrolled to `block: "start"` either way, so the ledgers
+     * land in the same place on screen.
+     */
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    ledgerHeadingRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
   }, [scrollToLedger]);
 
   return (
@@ -154,14 +182,27 @@ export const InventoryLifecycleTabs = ({
           say which one the page is called.
 
           The sequence below it is `h1` (page) → `h2` (this pane) → `h2` ("Ledgers").
-          `Ledgers` stays at the same level rather than dropping to an `h3` because it
-          is a **sibling** of this header, not a subsection of it: the two movements
+          `Ledgers` stays at the same level rather than dropping to an `h3` because it is
+          an **sibling** of this header, not a subsection of it: the two movements
           and the four lifecycle tabs sit under this heading, and the ledgers are a
           separate `<section>` after them, not something inside the movements. Two
           `h2`s under one `h1` is a flat, valid outline; nesting one of them for a
           relationship the DOM does not have would not be.
+
+          **`text-2xl`, and it used to be `text-4xl`.** This heading is a *section* of
+          the page and the register pane's own `h2` is `text-2xl`; at `text-4xl` this
+          one was the same size as the page's `h1` above it, so the two documents a
+          screen reader navigates by — the page outline and the visual hierarchy — said
+          different things about which text is the title. It also carries
+          `LIFECYCLE_HEADING_ID` so the `<section>` in `inventory-page.tsx` can be
+          named by this element rather than by a string that matched neither heading.
         */}
-        <h2 className="font-heading text-4xl font-semibold">Stock movements</h2>
+        <h2
+          id={LIFECYCLE_HEADING_ID}
+          className="font-heading text-2xl font-semibold"
+        >
+          Stock movements
+        </h2>
         <p className="text-muted-foreground max-w-3xl">
           Everything the school has given out, written off, or received — and
           every tagged device behind it. A loan comes back; an issue does not; a

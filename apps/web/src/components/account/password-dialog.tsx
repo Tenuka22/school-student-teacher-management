@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { getAuthEmailAvailability } from "@/functions/get-auth-email-availability";
@@ -17,9 +17,13 @@ import type { OtpCooldown } from "@/lib/otp-cooldown";
 
 type Mode = "current-password" | "email-code";
 
+const PASSWORD_MIN_LENGTH = 8;
+
 const inputClass =
-  "w-full border border-primary/22 bg-white px-3 py-2 text-sm text-primary outline-none focus:border-primary";
-const labelClass = "text-xs font-bold tracking-[0.12em] text-primary/70";
+  "w-full border border-primary/25 bg-white px-3 py-2 text-sm text-primary outline-none placeholder:text-primary/70 focus:border-primary focus:shadow-[0_0_0_2px_var(--primary)]";
+const labelClass = "text-primary/75 text-xs font-bold tracking-[0.12em]";
+const errorClass =
+  "border-destructive/40 bg-destructive/5 text-destructive m-0 border p-3 text-[13px] leading-relaxed";
 
 const getSendCodeLabel = (cooldown: OtpCooldown, codeSent: boolean): string => {
   if (cooldown.isSending) {
@@ -33,27 +37,290 @@ const getSendCodeLabel = (cooldown: OtpCooldown, codeSent: boolean): string => {
   return codeSent || cooldown.hasSent ? "RESEND" : "SEND CODE";
 };
 
+/**
+ * What the code field is currently offering. Three states rather than a
+ * nested ternary, because the middle one — a disabled button mid-countdown —
+ * is the one that has to read as an explanation rather than as a fault.
+ */
+const getCodeHint = (
+  cooldown: OtpCooldown,
+  codeSent: boolean,
+  email: string
+): React.ReactNode => {
+  if (cooldown.isCoolingDown) {
+    return (
+      <>
+        Held back for another {cooldown.secondsLeft} seconds. A code already
+        sent is still valid, and you can still enter it.
+      </>
+    );
+  }
+
+  if (codeSent) {
+    return (
+      <>
+        Check {email}. The code expires in 10 minutes; only three guesses are
+        allowed.
+      </>
+    );
+  }
+
+  return <>A one-time code will be sent to {email}.</>;
+};
+
+/**
+ * Every failure says what did not happen and what to do instead.
+ *
+ * A better-auth message on its own ("Invalid password") names a verdict and no
+ * way forward, and in the email-code branch it names the wrong half: the code
+ * was wrong, not the password. The branches below keep the two apart.
+ */
+const describeChangeFailure = (error: Error, mode: Mode): string => {
+  const detail = error.message.trim();
+
+  if (/rate|limit|too many|throttle/iu.test(detail)) {
+    return "The College server is holding back further requests. Wait for the countdown in the code panel, then send a new code — nothing about your password has changed.";
+  }
+
+  if (mode === "email-code" && /expired/iu.test(detail)) {
+    return "That code expired before it was used. Send a new one and enter it straight away; your current password is untouched until a change succeeds.";
+  }
+
+  if (mode === "email-code") {
+    return `${detail || "That code was not accepted."} Check the digits in the email sent to your address, or send a fresh code. If the code keeps failing, switch to “Current password” and use that instead.`;
+  }
+
+  return `${detail || "The current password was not accepted."} Check it and try again, or switch to “Email code” to confirm with a one-time code sent to your address instead.`;
+};
+
 interface PasswordDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   email: string;
   username?: string | null;
+  /**
+   * The control that opened the dialog. Focused again when it closes, because
+   * the dialog is opened by a plain button rather than by `Dialog.Trigger`
+   * and so has no trigger of its own to return to.
+   */
+  returnFocusTo?: React.RefObject<HTMLElement | null>;
 }
 
 const Field = ({
+  id,
   label,
-  error,
+  hint,
   children,
 }: {
+  id: string;
   label: string;
-  error?: string;
+  hint?: React.ReactNode;
   children: React.ReactNode;
 }) => (
-  <label className="flex flex-col gap-1.5">
-    <span className={labelClass}>{label}</span>
+  <div className="flex flex-col gap-1.5">
+    <label className={labelClass} htmlFor={id}>
+      {label}
+    </label>
     {children}
-    {error && <span className="text-destructive text-xs">{error}</span>}
-  </label>
+    {hint ? (
+      <span
+        className="text-primary/65 text-xs leading-relaxed"
+        id={`${id}-hint`}
+      >
+        {hint}
+      </span>
+    ) : null}
+  </div>
+);
+
+interface ChangePasswordFormProps {
+  mode: Mode;
+  email: string;
+  currentPassword: string;
+  otp: string;
+  newPassword: string;
+  confirmPassword: string;
+  codeSent: boolean;
+  error: string | null;
+  fieldError: string | null;
+  isSaving: boolean;
+  isSendingCode: boolean;
+  canSendCode: boolean;
+  isInternalLogin: boolean;
+  cooldown: OtpCooldown;
+  currentRef: React.RefObject<HTMLInputElement | null>;
+  otpRef: React.RefObject<HTMLInputElement | null>;
+  newRef: React.RefObject<HTMLInputElement | null>;
+  confirmRef: React.RefObject<HTMLInputElement | null>;
+  onCurrentPasswordChange: (value: string) => void;
+  onOtpChange: (value: string) => void;
+  onNewPasswordChange: (value: string) => void;
+  onConfirmPasswordChange: (value: string) => void;
+  onClearFieldError: () => void;
+  onSendCode: () => void;
+  onSubmit: () => void;
+}
+
+const ChangePasswordForm = ({
+  mode,
+  email,
+  currentPassword,
+  otp,
+  newPassword,
+  confirmPassword,
+  codeSent,
+  error,
+  fieldError,
+  isSaving,
+  isSendingCode,
+  canSendCode,
+  isInternalLogin,
+  cooldown,
+  currentRef,
+  otpRef,
+  newRef,
+  confirmRef,
+  onCurrentPasswordChange,
+  onOtpChange,
+  onNewPasswordChange,
+  onConfirmPasswordChange,
+  onClearFieldError,
+  onSendCode,
+  onSubmit,
+}: ChangePasswordFormProps) => (
+  <form
+    className="flex flex-col gap-4"
+    noValidate
+    onSubmit={(event) => {
+      event.preventDefault();
+      onSubmit();
+    }}
+  >
+    {mode === "current-password" ? (
+      <Field id="password-current" label="CURRENT PASSWORD">
+        <input
+          aria-describedby={
+            fieldError ? "password-field-error" : "password-current-hint"
+          }
+          aria-invalid={fieldError ? true : undefined}
+          autoComplete="current-password"
+          className={inputClass}
+          id="password-current"
+          onChange={(event) => {
+            onCurrentPasswordChange(event.target.value);
+            onClearFieldError();
+          }}
+          ref={currentRef}
+          type="password"
+          value={currentPassword}
+        />
+        <span className="sr-only" id="password-current-hint">
+          Proves you hold this account. Leave it empty and use the email code
+          option instead if you cannot remember it.
+        </span>
+      </Field>
+    ) : (
+      <Field
+        hint={getCodeHint(cooldown, codeSent, email)}
+        id="password-otp"
+        label="ONE-TIME CODE"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            aria-describedby={
+              fieldError
+                ? "password-otp-hint password-field-error"
+                : "password-otp-hint"
+            }
+            aria-invalid={fieldError ? true : undefined}
+            autoComplete="one-time-code"
+            className={inputClass}
+            id="password-otp"
+            inputMode="numeric"
+            onChange={(event) => {
+              onOtpChange(event.target.value);
+              onClearFieldError();
+            }}
+            placeholder="123456"
+            ref={otpRef}
+            type="text"
+            value={otp}
+          />
+          <button
+            className="border-primary/35 text-primary hover:bg-primary/5 shrink-0 border px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isSendingCode || cooldown.isCoolingDown}
+            onClick={onSendCode}
+            type="button"
+          >
+            {getSendCodeLabel(cooldown, codeSent)}
+          </button>
+        </div>
+      </Field>
+    )}
+
+    <Field
+      hint={`At least ${PASSWORD_MIN_LENGTH} characters. Choosing a new one signs every other session out.`}
+      id="password-new"
+      label="NEW PASSWORD"
+    >
+      <input
+        aria-describedby="password-new-hint"
+        autoComplete="new-password"
+        className={inputClass}
+        id="password-new"
+        onChange={(event) => {
+          onNewPasswordChange(event.target.value);
+          onClearFieldError();
+        }}
+        ref={newRef}
+        type="password"
+        value={newPassword}
+      />
+    </Field>
+
+    <Field id="password-confirm" label="CONFIRM NEW PASSWORD">
+      <input
+        autoComplete="new-password"
+        className={inputClass}
+        id="password-confirm"
+        onChange={(event) => {
+          onConfirmPasswordChange(event.target.value);
+          onClearFieldError();
+        }}
+        ref={confirmRef}
+        type="password"
+        value={confirmPassword}
+      />
+    </Field>
+
+    {error ? (
+      <p className={errorClass} id="password-form-error" role="alert">
+        {error}
+      </p>
+    ) : null}
+
+    {fieldError ? (
+      <p className={errorClass} id="password-field-error" role="alert">
+        {fieldError}
+      </p>
+    ) : null}
+
+    {!canSendCode && isInternalLogin ? (
+      <p className="text-primary/65 m-0 text-xs leading-relaxed">
+        This login has no mailbox of its own, so a recovery code cannot be sent
+        to it. Use your current password, or ask an administrator to issue a new
+        one.
+      </p>
+    ) : null}
+
+    <button
+      className="bg-primary text-primary-foreground hover:bg-primary-hover min-w-[11rem] self-start px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={isSaving}
+      type="submit"
+    >
+      {isSaving ? "SAVING…" : "UPDATE PASSWORD"}
+    </button>
+  </form>
 );
 
 /**
@@ -74,6 +341,7 @@ export const PasswordDialog = ({
   onOpenChange,
   email,
   username,
+  returnFocusTo,
 }: PasswordDialogProps) => {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>("current-password");
@@ -83,6 +351,12 @@ export const PasswordDialog = ({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  const currentRef = useRef<HTMLInputElement>(null);
+  const otpRef = useRef<HTMLInputElement>(null);
+  const newRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
 
   // The server reseeds the institutional accounts' passwords from env on every
   // boot, so a change made here would silently revert at the next restart.
@@ -97,6 +371,13 @@ export const PasswordDialog = ({
     setNewPassword("");
     setConfirmPassword("");
     setError(null);
+    setFieldError(null);
+  };
+
+  const close = () => {
+    reset();
+    onOpenChange(false);
+    returnFocusTo?.current?.focus();
   };
 
   const sendCodeMutation = useMutation({
@@ -123,15 +404,18 @@ export const PasswordDialog = ({
       // state rather than leave a stale verification result around.
       await queryClient.invalidateQueries({ queryKey: ["auth"] });
       toast.success(`Code sent to ${email}`);
+      otpRef.current?.focus();
     },
     onError: (sendError: Error) => {
-      setError(sendError.message);
+      setError(
+        `${describeChangeFailure(sendError, "email-code")} Your password has not changed.`
+      );
     },
   });
 
   // Same exponential backoff as the verification page: each resend waits
   // twice as long as the last, so the button stops offering what the server
-  // would refuse.
+  // would refuse. The interval behind the countdown is cleared by the hook.
   const codeCooldown = useOtpCooldown({
     email,
     purpose: "forget-password",
@@ -150,8 +434,10 @@ export const PasswordDialog = ({
         throw new Error("New passwords do not match");
       }
 
-      if (newPassword.length < 8) {
-        throw new Error("New password must be at least 8 characters");
+      if (newPassword.length < PASSWORD_MIN_LENGTH) {
+        throw new Error(
+          `New password must be at least ${PASSWORD_MIN_LENGTH} characters`
+        );
       }
 
       if (mode === "current-password") {
@@ -191,18 +477,23 @@ export const PasswordDialog = ({
     },
     onSuccess: () => {
       codeCooldown.clear();
-      toast.success("Password changed");
-      reset();
-      onOpenChange(false);
+      toast.success(
+        "Password changed — every other session on this account has been signed out"
+      );
+      close();
     },
     onError: (changeError: Error) => {
-      setError(changeError.message);
+      setError(
+        `${describeChangeFailure(changeError, mode)} Nothing was changed.`
+      );
+      (mode === "email-code" ? otpRef : currentRef).current?.focus();
     },
   });
 
   const selectMode = (next: Mode) => {
     setMode(next);
     setError(null);
+    setFieldError(null);
     setCodeSent(false);
   };
 
@@ -221,8 +512,48 @@ export const PasswordDialog = ({
     ? (["current-password", "email-code"] as const)
     : (["current-password"] as const);
 
+  /** Client-side checks first, so focus lands on the field that needs work. */
+  const validate = (): boolean => {
+    if (mode === "current-password" && !currentPassword) {
+      setFieldError(
+        "Enter your current password to confirm the change, or switch to “Email code” above."
+      );
+      currentRef.current?.focus();
+      return false;
+    }
+
+    if (mode === "email-code" && !otp.trim()) {
+      setFieldError(
+        "Enter the one-time code from the email, or send a new one with the button beside the field."
+      );
+      otpRef.current?.focus();
+      return false;
+    }
+
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      setFieldError(
+        `The new password needs at least ${PASSWORD_MIN_LENGTH} characters. What you typed is still in the box.`
+      );
+      newRef.current?.focus();
+      return false;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setFieldError(
+        "The two new passwords are different. Retype the confirmation so it matches."
+      );
+      confirmRef.current?.focus();
+      return false;
+    }
+
+    return true;
+  };
+
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <Dialog
+      onOpenChange={(next) => (next ? onOpenChange(true) : close())}
+      open={open}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change password</DialogTitle>
@@ -244,7 +575,7 @@ export const PasswordDialog = ({
               className={`px-3 py-2.5 text-xs font-extrabold tracking-[0.1em] transition-colors ${
                 mode === option
                   ? "bg-primary text-primary-foreground"
-                  : "border-primary/20 text-primary/70 hover:bg-primary/5 border"
+                  : "border-primary/25 text-primary/75 hover:bg-primary/5 border"
               }`}
             >
               {option === "current-password"
@@ -255,110 +586,55 @@ export const PasswordDialog = ({
         </fieldset>
 
         {isEnvManaged ? (
-          <p className="border-primary/20 bg-primary/5 text-primary/75 border px-4 py-3 text-[13px] leading-relaxed">
+          <p className="border-primary/25 bg-primary/5 text-primary/80 m-0 border px-4 py-3 text-[13px] leading-relaxed">
             This is an institutional login. Its password is set by the
             College&rsquo;s server configuration and re-applied on every start,
             so it cannot be changed from here. Ask an administrator to update
             the environment if it needs to rotate.
           </p>
         ) : (
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setError(null);
-              changeMutation.mutate();
+          <ChangePasswordForm
+            canSendCode={canSendCode}
+            codeSent={codeSent}
+            confirmPassword={confirmPassword}
+            confirmRef={confirmRef}
+            cooldown={codeCooldown}
+            currentPassword={currentPassword}
+            currentRef={currentRef}
+            email={email}
+            error={error}
+            fieldError={fieldError}
+            isInternalLogin={isInternalLogin}
+            isSaving={changeMutation.isPending}
+            isSendingCode={sendCodeMutation.isPending}
+            mode={mode}
+            newPassword={newPassword}
+            newRef={newRef}
+            otp={otp}
+            otpRef={otpRef}
+            onClearFieldError={() => setFieldError(null)}
+            onConfirmPasswordChange={setConfirmPassword}
+            onCurrentPasswordChange={setCurrentPassword}
+            onNewPasswordChange={setNewPassword}
+            onOtpChange={setOtp}
+            onSendCode={() => {
+              sendCodeMutation.mutate(undefined, {
+                onSuccess: () => codeCooldown.registerSend(),
+              });
             }}
-          >
-            {mode === "current-password" ? (
-              <Field label="CURRENT PASSWORD">
-                <input
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  className={inputClass}
-                />
-              </Field>
-            ) : (
-              <Field label="ONE-TIME CODE">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    value={otp}
-                    onChange={(event) => setOtp(event.target.value)}
-                    className={inputClass}
-                  />
-                  <button
-                    type="button"
-                    disabled={
-                      sendCodeMutation.isPending || codeCooldown.isCoolingDown
-                    }
-                    onClick={() => {
-                      sendCodeMutation.mutate(undefined, {
-                        onSuccess: () => codeCooldown.registerSend(),
-                      });
-                    }}
-                    className="border-primary/30 text-primary hover:border-primary shrink-0 border px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50"
-                  >
-                    {getSendCodeLabel(codeCooldown, codeSent)}
-                  </button>
-                </div>
-                {codeSent && (
-                  <span className="text-primary/55 text-xs">
-                    Check {email} — the code expires in 10 minutes, and only
-                    three guesses are allowed.
-                  </span>
-                )}
-              </Field>
-            )}
+            onSubmit={() => {
+              if (changeMutation.isPending) {
+                return;
+              }
 
-            <Field label="NEW PASSWORD">
-              <input
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                className={inputClass}
-              />
-            </Field>
+              setError(null);
 
-            <Field label="CONFIRM NEW PASSWORD">
-              <input
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                className={inputClass}
-              />
-            </Field>
-
-            {error && <p className="text-destructive text-sm">{error}</p>}
-
-            {!canSendCode && isInternalLogin && (
-              <p className="text-primary/60 text-xs leading-relaxed">
-                This login has no mailbox of its own, so a recovery code cannot
-                be sent to it. Use your current password, or ask an
-                administrator to issue a new one.
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={changeMutation.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary-hover self-start px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:opacity-60"
-            >
-              {changeMutation.isPending ? "SAVING…" : "UPDATE PASSWORD"}
-            </button>
-          </form>
+              if (validate()) {
+                setFieldError(null);
+                changeMutation.mutate();
+              }
+            }}
+          />
         )}
       </DialogContent>
     </Dialog>

@@ -1,21 +1,49 @@
 # Teacher Management
 
-> **This file is a planning document, and parts of it no longer describe the product.** The divergences below are deliberate. Treat everything below the list as history, not specification.
+> **This file began as a planning document, and parts of it no longer describe the product.** The divergences below are deliberate. **Everything below the "Two more behaviours worth knowing" list is history, not specification** — and the most misleading parts of it are the "Empty States", "Loading States", "Error States", "Bulk Actions" and "Keyboard Shortcuts" sections, all of which describe screens that have since been rebuilt. Read the banner; do not implement from the rest.
 
 ## What actually shipped
 
 | Planned | Shipped | Why |
 | --- | --- | --- |
 | `Sheet` create/edit forms | `Dialog` | Create and edit are short forms; a centred modal keeps them predictable. |
-| "Export as EXCEL coming soon" | Export is implemented | `staff.exports.teachersExcel` produces a real XLSX. It is scoped to the selected year by default, so the file and the on-screen roster describe the same people. |
+| "Export as EXCEL coming soon" | Export is implemented | `staff.exports.teachersExcel` produces a real XLSX. It is scoped to the selected year by default, so the file and the on-screen roster describe the same people. A second export, `staff.exports.teacherProfilePdf`, sits at the foot of the profile dialog. |
 | Address field on the teacher form | Not collected | Out of scope for the staff record; the audit found no screen that reads it. |
 | Cmd+K / Cmd+N / Cmd+E shortcuts | None | No shortcut layer is implemented. |
-| NIC / Position / Status as list columns | Name, service number, employment | What a teacher list is for; the rest live in the profile dialog. |
+| NIC / Position / Status as list columns | Name, contact, employment, account | What a teacher list is for. The account column (`Linked` / `No account` / `Banned` / `Unverified email`) is hidden below `md`; everything else scrolls horizontally rather than reflowing. |
+| Search strip below the toolbar | Search in the toolbar, above the table | The old strip was inside the "the roster has rows" branch, so the search sat under the table and the page's two primary controls vanished on every refetch. |
+| CSV import writes as it reads | **Preview, then write** | See "CSV import" below. |
+| `AlertDialog` for the conflict resolver | `Dialog` | An `AlertDialog` is one question with one answer. The resolver is a list of per-row decisions with a diff for each. |
+| Nested `Card` per qualification | One `Card`, a bordered row per qualification | A card inside a card is a second ground, a second ring and a second set of padding wrapped around each row. |
+| "Position" as a profile field | "Account role" and "Positions", stated as different things | A staff record's **role** is what the sign-in may do (`teacher`, `admin`, `principal`, `vicePrincipal`) and is set by the linked account. A **position** is this year's appointment and is scoped to one academic year. Collapsing them tells a reader that a teacher is a deputy principal for 2026 and every year after. |
+| `staff.category` shown for a record with none | `—` | The old mapping fell through to "Teacher", asserting a staff category — the field that decides whether a person appears on a teaching roster — on a record that has never been given one. |
 
-Two behaviours worth knowing:
+### Nothing dangles
 
-- **CSV import.** "Blank template" downloads a genuinely empty file with one example row. It used to write every teacher's name, email, phone, NIC, gender and date of birth into a file labelled "Template". Real data leaves through "Export as Excel", which says what it contains.
-- **Office staff** have no self-service sign-up. Their accounts are issued by an administrator, who creates the staff record and hands over the login.
+Every async surface in this folder now resolves to content, a taught empty state, or a named error with a recovery. The four that were not:
+
+- **A roster that has not answered yet** used to print "No teachers yet". `listStaff` is `enabled` only once the academic year has resolved, so for a moment after a year switch `data` is `undefined` while `isLoading` is `false`, and the page confidently claimed the College had no teachers. It now draws the loading shape.
+- **Qualifications, positions and subject assignments** each read `data ?? []`, so a failed read and a genuinely empty list were the same `[]` and each said "No qualifications recorded" / "No positions assigned" / "No subjects configured" — a claim about the record, printed by a request that had learned nothing. Each is now a `QueryErrorPanel` naming what could not be read, with a retry that re-requests.
+- **`PortTeachersDialog`** had one branch for "no data", so a request in flight and a request that failed both printed "No previous academic year". It now has a loading shape and a named failure.
+- **The write-then-refetch ordering** in `useTeachersPage` meant a _failed refetch_ after a successful create was reported to the reader as "Failed to create teacher", with a real teacher on the server and an issued password nobody was shown. The write now decides: close, then refetch in the background.
+
+### CSV import
+
+The highest-risk surface in the folder, and the one that changed most.
+
+- **Nothing is written until it is confirmed.** The file is parsed and every row classified first — will be created, will be staged for review, already matches, cannot be imported — and the preview says so before a single record is touched. It used to be `Promise.all` over `rows.map(processRow)`, where `processRow` called `onCreate` before the next row had been looked at.
+- **Per-row problems, with the line number and the reason.** A row that fails validation is listed as `Line 41 — Nimal Perera` / `NIC: Enter a valid Sri Lankan NIC…`, and is not written.
+- **Fatal and row-level are different states.** A file that is not a teacher import, has a header and no data, or cannot be read gets the error panel and **no confirm button at all** — there is nothing that could be confirmed.
+- **A blank cell means "leave the field alone."** It cannot mean "clear it": `updateStaff` cannot null `gender` at all, and an absent key means "do not change" everywhere else. The preview states the rule, so the diff and the write cannot disagree.
+- **A row carrying an `id` that is not on this year's roster** is a warning, not an error. It still creates, because that is what the importer has always done, but the preview says in words what will happen before it happens.
+- **A partial import never reports success.** `toast.success` is only ever reached by a run with zero failures; anything else is an error toast naming both numbers, over a table of the rows that were not written and why. The failed rows can be downloaded as a CSV with the reason beside each one.
+- **Applying a staged conflict writes only the fields the diff shows**, so an unrelated edit made on the record since the file was read is not silently rolled back.
+- The blank template is still genuinely blank, with one example row.
+
+Two more behaviours worth knowing:
+
+- **Office staff** have no self-service sign-up. Their accounts are issued by an administrator, who creates the staff record and hands over the login. The profile dialog says so where the account would otherwise be empty.
+- **Required is a machine-readable fact, not an asterisk.** Name and NIC carry `required` / `aria-required` and a screen-reader-only "(required)"; the form is `noValidate` so the browser's own bubble does not argue with the valibot messages. **Email is not required** and no longer claims to be — `staffColumnRefinements` types it `optionalNullable`, so the old asterisk was promising a constraint the database does not have.
 
 ## Overview
 

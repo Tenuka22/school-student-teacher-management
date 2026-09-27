@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 type Class = typeof classTable.$inferSelect;
@@ -24,7 +25,38 @@ interface TeacherTimetableEntry {
   dayOfWeek: number;
   periodNumber: number;
   subjectKey: string;
+  /**
+   * Whether the server's conflict scan reported this row. The teacher-timetable
+   * read does not carry the stored `isCombinedSession` flag, so the scan is the
+   * only honest source for "was this overlap declared?" on this page.
+   */
+  isClash?: boolean;
 }
+
+type ReadState = "unread" | "pending" | "known" | "failed";
+
+/**
+ * The error a form should show.
+ *
+ * Kept as an `Error` and rethrown so the form can print it inline next to the
+ * control that caused it, instead of only in a toast that has gone by the time
+ * the dialog is read again.
+ */
+const rethrow = (error: unknown, fallback: string): never => {
+  throw error instanceof Error
+    ? error
+    : new Error(formatApiErrorMessage(error, fallback));
+};
+
+const readStateOf = (query: {
+  isError: boolean;
+  isPending: boolean;
+}): ReadState => {
+  if (query.isError) {
+    return "failed";
+  }
+  return query.isPending ? "pending" : "known";
+};
 
 export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
   const [staffId, setStaffId] = useState(initialStaffId ?? "");
@@ -60,6 +92,33 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
   );
 
   const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
+
+  /**
+   * The conflict scan for the year, so a shared slot can be labelled honestly.
+   *
+   * The teacher-timetable read does not return `isCombinedSession`, so without
+   * this a slot holding two classes could only be called a combined session or
+   * a mistake — and the first would be a claim the data does not support. The
+   * scan leaves declared overlaps out of its report, so a multi-class slot the
+   * scan did not report is a declared combined session, and one it did report
+   * is not. Nothing here claims the timetable has been checked and found clean:
+   * a failed scan marks no slot, and says so.
+   */
+  const conflictsQuery = useQuery({
+    ...orpc.staff.periods.listPeriodConflicts.queryOptions({
+      input: { academicYearId: currentYear?.id ?? "" },
+    }),
+    enabled: !!currentYear?.id,
+  });
+
+  const conflictingAssignmentIds = useMemo(() => {
+    if (conflictsQuery.isError || conflictsQuery.isPending) {
+      return new Set<string>();
+    }
+    return new Set(conflictsQuery.data?.conflictingAssignmentIds);
+  }, [conflictsQuery.data, conflictsQuery.isError, conflictsQuery.isPending]);
+
+  const conflictsRead: ReadState = readStateOf(conflictsQuery);
 
   const currentStaff = useMemo(() => {
     const staffList = staffQuery.data as unknown as Staff[] | undefined;
@@ -113,7 +172,7 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
 
   const handleAddSubmit = useCallback(
     async (data: unknown) => {
-      if (!(currentYear?.id && staffId)) {
+      if (!(currentYear?.id && staffId) || assignMutation.isPending) {
         return;
       }
       try {
@@ -123,78 +182,147 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
           ...(data as Record<string, unknown>),
         } as never);
         setIsAddDialogOpen(false);
-        await timetableQuery.refetch();
-        toast.success("Assignment added successfully");
         setAddSlot(null);
+        await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
+        toast.success("Assignment added successfully");
       } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to add assignment"
-        );
+        rethrow(error, "Failed to add the assignment");
       }
     },
-    [currentYear, staffId, assignMutation, timetableQuery]
+    [assignMutation, conflictsQuery, currentYear, staffId, timetableQuery]
   );
 
   const handleEditSubmit = useCallback(
     async (data: unknown) => {
-      if (!selectedEntry) {
+      if (!selectedEntry || updateMutation.isPending) {
         return;
       }
       try {
-        const { subjectKey } = data as { subjectKey: string };
+        const { subjectKey, isCombinedSession } = data as {
+          subjectKey: string;
+          isCombinedSession?: boolean;
+        };
         await updateMutation.mutateAsync({
           id: selectedEntry.id,
           subjectKey,
           staffId,
+          ...(isCombinedSession === undefined ? {} : { isCombinedSession }),
         } as never);
         setIsEditDialogOpen(false);
-        await timetableQuery.refetch();
+        await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
         toast.success("Assignment updated successfully");
       } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to update assignment"
-        );
+        rethrow(error, "Failed to update the assignment");
       }
     },
-    [selectedEntry, staffId, updateMutation, timetableQuery]
+    [conflictsQuery, selectedEntry, staffId, timetableQuery, updateMutation]
   );
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!selectedEntry) {
+    if (!selectedEntry || deleteMutation.isPending) {
       return;
     }
     try {
       await deleteMutation.mutateAsync({ id: selectedEntry.id } as never);
       setIsDeleteDialogOpen(false);
       setSelectedEntry(null);
-      await timetableQuery.refetch();
+      await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
       toast.success("Assignment removed successfully");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to remove assignment"
+        formatApiErrorMessage(error, "Failed to remove the assignment")
       );
     }
-  }, [selectedEntry, deleteMutation, timetableQuery]);
+  }, [conflictsQuery, deleteMutation, selectedEntry, timetableQuery]);
 
   const classes = useMemo(
     () => (classesQuery.data || []) as unknown as Class[],
     [classesQuery.data]
   );
 
+  /**
+   * The teacher's rows, each carrying the scan's verdict.
+   *
+   * `timetableQuery.data` is `[]` before a teacher is chosen, while the read is
+   * in flight and after a failure, so the grid cannot be handed that directly:
+   * it would render forty free slots and call it a timetable. `entriesRead`
+   * travels beside it and the page shows a skeleton, a taught empty state or a
+   * named error instead.
+   */
   const entries = useMemo(
-    () => (timetableQuery.data || []) as unknown as TeacherTimetableEntry[],
-    [timetableQuery.data]
+    () =>
+      ((timetableQuery.data || []) as unknown as TeacherTimetableEntry[]).map(
+        (entry) => ({
+          ...entry,
+          isClash: conflictingAssignmentIds.has(entry.id),
+        })
+      ),
+    [conflictingAssignmentIds, timetableQuery.data]
   );
+
+  const entriesRead: ReadState = staffId
+    ? readStateOf(timetableQuery)
+    : "unread";
+
+  const handleRetryEntries = useCallback(() => {
+    void timetableQuery.refetch();
+  }, [timetableQuery]);
+
+  const handleRetryStaff = useCallback(() => {
+    void staffQuery.refetch();
+  }, [staffQuery]);
+
+  const handleRetryClasses = useCallback(() => {
+    void classesQuery.refetch();
+  }, [classesQuery]);
+
+  const handleRetryConflicts = useCallback(() => {
+    void conflictsQuery.refetch();
+  }, [conflictsQuery]);
+
+  const handleRetryYears = useCallback(() => {
+    void currentYearQuery.refetch();
+  }, [currentYearQuery]);
 
   return {
     staffId,
     setStaffId,
     currentYear,
+    currentYearRead: readStateOf(currentYearQuery),
+    currentYearMessage: formatApiErrorMessage(
+      currentYearQuery.error,
+      "The academic year list could not be read."
+    ),
+    handleRetryYears,
     currentStaff,
+    staffRead: readStateOf(staffQuery),
+    staffMessage: formatApiErrorMessage(
+      staffQuery.error,
+      "The staff list could not be read."
+    ),
+    handleRetryStaff,
     classes,
+    classesRead: readStateOf(classesQuery),
+    classesMessage: formatApiErrorMessage(
+      classesQuery.error,
+      "The class list could not be read."
+    ),
+    handleRetryClasses,
     periods: CODE_DEFINED_PERIODS,
     entries,
-    isLoadingEntries: timetableQuery.isLoading,
+    entriesRead,
+    entriesMessage: formatApiErrorMessage(
+      timetableQuery.error,
+      "This teacher's timetable could not be read."
+    ),
+    handleRetryEntries,
+    isLoadingEntries: timetableQuery.isPending,
+    conflictsRead,
+    conflictsMessage: formatApiErrorMessage(
+      conflictsQuery.error,
+      "The server did not run the conflict scan."
+    ),
+    handleRetryConflicts,
     isAddDialogOpen,
     handleAddOpenChange,
     isEditDialogOpen,

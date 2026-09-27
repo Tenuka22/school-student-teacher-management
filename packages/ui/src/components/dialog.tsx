@@ -5,6 +5,33 @@ import { cn } from "cn"
 import { Button } from "@school-student-teacher-management/ui/components/button"
 import { IconX } from "@tabler/icons-react"
 
+/**
+ * The one shadow every floating surface in this package uses.
+ *
+ * Elevation is declared exactly once per surface: a soft, brand-tinted shadow
+ * and nothing else. The incumbent paired `ring-1 ring-foreground/10` *under*
+ * `shadow-md`, which is the "ghost card" the craft floor bans — two elevation
+ * signals describing one plane, and the hairline read as a second, tighter
+ * shadow. Overlays are the one place a soft shadow is load-bearing: a popover or
+ * a dialog on cream paper with a hairline only is nearly invisible.
+ *
+ * The colour is `--foreground` (deep green) rather than black so the shadow
+ * belongs to the brand instead of greying the cream out.
+ */
+const OVERLAY_SHADOW =
+  "shadow-[0_10px_30px_-12px_rgb(1_52_5/0.28),0_2px_8px_-4px_rgb(1_52_5/0.18)]"
+
+/**
+ * The scrim behind a modal surface.
+ *
+ * `--foreground` at 20% rather than the incumbent's flat `black/10`. A 10% black
+ * wash over `#fdf8ec` is a barely-there grey; the brand's own green at the same
+ * weight is a legible, on-brand separation and keeps the cream reading as cream
+ * underneath it. The overlay stays a *ground* change, not a colour statement.
+ */
+const OVERLAY_SCRIM =
+  "fixed inset-0 isolate z-50 bg-foreground/20 duration-150 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:duration-0 motion-reduce:animate-none"
+
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
@@ -21,22 +48,36 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
-function DialogOverlay({
-  className,
-  ...props
-}: DialogPrimitive.Backdrop.Props) {
+function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
-        className
-      )}
+      className={cn(OVERLAY_SCRIM, className)}
       {...props}
     />
   )
 }
 
+/**
+ * The dialog surface.
+ *
+ * Three things are load-bearing here and all three are easy to lose:
+ *
+ * 1. **Focus.** `@base-ui/react` puts the popup inside a `FloatingFocusManager`
+ *    with `modal` on and `returnFocus` on, so focus moves to the first tabbable
+ *    element on open, is trapped for as long as the dialog is open, and returns
+ *    to the trigger element on close. Nothing here has to re-implement that;
+ *    what this component must not do is break it.
+ * 2. **Announcement.** `Dialog.Popup` sets `role="dialog"` and wires
+ *    `aria-labelledby`/`aria-describedby` to whatever `DialogTitle` and
+ *    `DialogDescription` register — but it does **not** set `aria-modal`, so a
+ *    screen reader is told about a dialog it is still allowed to leave. It is
+ *    set here, and it stays overridable for the one case that needs it: a
+ *    non-modal dialog (`<Dialog modal={false}>`) must pass `aria-modal={false}`.
+ * 3. **Escape.** The popup is portalled to `document.body` and positioned
+ *    `fixed`, so it escapes every `overflow: auto`/`hidden` ancestor — the
+ *    records tables and scroll panes in this app are full of them.
+ */
 function DialogContent({
   className,
   children,
@@ -49,9 +90,21 @@ function DialogContent({
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
+        aria-modal="true"
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-none bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 bg-popover p-4 text-xs/relaxed text-popover-foreground outline-none duration-150 sm:max-w-sm",
+          // A viewport cap, so a dialog cannot grow off-screen. Deliberately
+          // *not* an `overflow` utility: the app's taller dialogs own their
+          // scroll region (`max-h-[85vh] overflow-hidden` plus an inner
+          // scroller) and an `overflow` here would fight theirs.
+          "max-h-[calc(100dvh-2rem)]",
+          // Full-screen when narrow, per the product constraint. Below `sm` a
+          // centred card leaves a 1rem gutter on each side, which is a phone
+          // layout pretending to be a dialog.
+          "max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none",
+          OVERLAY_SHADOW,
+          "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:duration-0 motion-reduce:animate-none",
           className
         )}
         {...props}
@@ -68,8 +121,7 @@ function DialogContent({
               />
             }
           >
-            <IconX
-            />
+            <IconX aria-hidden="true" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
@@ -115,16 +167,29 @@ function DialogFooter({
   )
 }
 
+/**
+ * The dialog's accessible name.
+ *
+ * `Dialog.Popup` picks this element's id up and writes it to the popup's
+ * `aria-labelledby`; without one, the dialog is announced as an unlabelled
+ * dialog, which is the single most common cause of "what is this box?" in a
+ * screen reader. Every dialog in this app must render one.
+ */
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("font-heading text-sm font-medium", className)}
+      className={cn("font-heading text-sm font-medium text-balance", className)}
       {...props}
     />
   )
 }
 
+/**
+ * The dialog's accessible description, and the paragraph `aria-describedby`
+ * points at. Optional, but a destructive or irreversible dialog should carry one
+ * that names the consequence.
+ */
 function DialogDescription({
   className,
   ...props

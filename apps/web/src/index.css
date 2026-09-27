@@ -1,5 +1,35 @@
 @import "@school-student-teacher-management/ui/globals.css";
 
+/**
+ * The four ambient loops, all still live.
+ *
+ * These are decoration, not state: a slow amber bloom behind the sign-in
+ * panel, a drifting crest watermark, a pulse on the landing-page halo and a
+ * blink on the landing page's online dot. Nothing depends on them for meaning,
+ * which is exactly why each one is gated on `motion-reduced`.
+ *
+ * Where each is applied, and whether it gates itself:
+ *
+ * - `om-glow`   — `routes/index.tsx`, `motion-safe:` — gated at the call site.
+ * - `om-blink`  — `routes/index.tsx`, `motion-safe:` — gated at the call site.
+ * - `om-pulse`  — `components/login-form.tsx`, `motion-safe:` — gated.
+ * - `om-drift`  — `components/login-form.tsx`, `motion-safe:` — gated.
+ *
+ * `om-pulse` and `om-drift` are applied a *second* time from the plain
+ * `<style>` block inside `components/auth-layout.tsx`, which cannot use a
+ * `motion-safe:` variant because the rule is raw CSS rather than a class. The
+ * global guard in `packages/ui/src/styles/globals.css` neutralises it, and so
+ * does the block below — naming the two class names, which is the one piece of
+ * coupling this file takes on. If `auth-layout.tsx` ever moves those two
+ * animations onto `motion-safe:` variants, this block can go with them.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .auth-orb,
+  .auth-crest-bg {
+    animation: none !important;
+  }
+}
+
 @keyframes om-glow {
   0%,
   100% {

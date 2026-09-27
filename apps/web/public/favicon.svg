@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="St. Aloysius' College">
+  <rect width="64" height="64" fill="#013405"/>
+  <path d="M32 11 L46 52 L37.5 52 L32 36 L26.5 52 L18 52 Z" fill="#ffb203"/>
+  <rect x="25.5" y="41" width="13" height="4.5" fill="#ffb203"/>
+</svg>

@@ -9,6 +9,7 @@ import {
   Field,
   FieldDescription,
   FieldError,
+  FieldGroup,
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
 import { Input } from "@school-student-teacher-management/ui/components/input";
@@ -21,6 +22,13 @@ import {
 } from "@school-student-teacher-management/ui/components/select";
 import { useState } from "react";
 import * as v from "valibot";
+
+import { formatApiErrorMessage, validationFieldErrors } from "@/lib/api-error";
+
+type ClassFieldName = "gradeLevel" | "name" | "medium";
+type FieldErrors = Partial<Record<ClassFieldName, string>>;
+
+const ALL_FIELDS: ClassFieldName[] = ["gradeLevel", "name", "medium"];
 
 interface ClassFormProps {
   formId: string;
@@ -37,6 +45,89 @@ interface ClassFormProps {
   };
 }
 
+const focusField = (formId: string, field: ClassFieldName) => {
+  const element = document.querySelector<HTMLElement>(
+    `#${CSS.escape(`${formId}-${field}`)}`
+  );
+  element?.focus();
+};
+
+/**
+ * Move the caret to the first control anybody objected to.
+ *
+ * A form that renders its errors and leaves the caret wherever it was has told
+ * the user what is wrong and then hidden it: the next thing a screen reader
+ * announces is whatever the field after the failure happens to be. Ordered by
+ * tab position, so the caret lands where reading would have gone anyway.
+ */
+const focusFirstError = (formId: string, errors: FieldErrors) => {
+  const firstInvalid = ALL_FIELDS.find((field) => errors[field]);
+  if (firstInvalid) {
+    requestAnimationFrame(() => focusField(formId, firstInvalid));
+  }
+};
+
+/** Keep every error except the one whose field has just been corrected. */
+const withoutField = (
+  errors: FieldErrors,
+  field: ClassFieldName
+): FieldErrors => {
+  const next: FieldErrors = {};
+  for (const name of ALL_FIELDS) {
+    const message = errors[name];
+    if (name !== field && message) {
+      next[name] = message;
+    }
+  }
+  return next;
+};
+
+/**
+ * Put the server's objections back on the fields they belong to.
+ *
+ * The class-name uniqueness constraint lives in the database, so the client
+ * schema cannot know about it and a duplicate name arrives as a refusal. A
+ * refusal that only reaches a toast is a refusal attached to nothing.
+ */
+const serverFieldErrors = (error: unknown): FieldErrors => {
+  const issues = validationFieldErrors<ClassFieldName>(error);
+  const mapped: FieldErrors = {};
+  for (const field of ALL_FIELDS) {
+    const message = issues[field];
+    if (message) {
+      mapped[field] = message;
+    }
+  }
+  return mapped;
+};
+
+const schemaFieldErrors = (
+  issues: readonly v.BaseIssue<unknown>[]
+): FieldErrors => {
+  const mapped: FieldErrors = {};
+  for (const issue of issues) {
+    const path = issue.path?.[0]?.key as ClassFieldName | undefined;
+    if (path && !mapped[path]) {
+      mapped[path] = issue.message || "Invalid value";
+    }
+  }
+  return mapped;
+};
+
+/**
+ * `aria-invalid`, or nothing at all.
+ *
+ * The base-lyra controls style themselves from `aria-invalid` and not from a
+ * `data-invalid` attribute, so the earlier `data-invalid` on these inputs drew
+ * a red message with a control that looked perfectly valid — the error text
+ * without the error state.
+ */
+const ariaInvalid = (message?: string) => (message ? true : undefined);
+
+/** The message under a field, or nothing. */
+const FieldMessage = ({ id, message }: { id: string; message?: string }) =>
+  message ? <FieldError id={id}>{message}</FieldError> : null;
+
 export const ClassForm = ({
   formId,
   academicYearId,
@@ -51,8 +142,16 @@ export const ClassForm = ({
     medium: initialData?.medium || "sinhala",
   });
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [generalError, setGeneralError] = useState("");
+  /**
+   * The parent disables the submit button from its own mutation state, which
+   * arrives a tick after the click. Without this the same form can be submitted
+   * twice inside one frame, and class names are unique within a grade — so the
+   * second write is a constraint violation surfacing as a confusing error after
+   * a success toast.
+   */
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const schema = initialData
     ? v.pick(classUpdateSchema, ["name", "medium"])
@@ -63,129 +162,159 @@ export const ClassForm = ({
         "medium",
       ]);
 
-  const handleChange = (field: string, value: string | number) => {
+  const isBusy = isLoading || isSubmitting;
+
+  const reportErrors = (fieldErrors: FieldErrors) => {
+    setErrors(fieldErrors);
+    focusFirstError(formId, fieldErrors);
+  };
+
+  const handleChange = (field: ClassFieldName, value: string | number) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
     if (errors[field]) {
-      setErrors((prev) => {
-        const newErrors = {} as Record<string, string>;
-        for (const key of Object.keys(prev)) {
-          if (key !== field) {
-            newErrors[key] = prev[key];
-          }
-        }
-        return newErrors;
-      });
+      setErrors(withoutField(errors, field));
     }
   };
 
+  const describedBy = (field: ClassFieldName, ...extra: string[]) =>
+    [...extra, errors[field] ? `${formId}-${field}-error` : null]
+      .filter(Boolean)
+      .join(" ") || undefined;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isBusy) {
+      return;
+    }
     setErrors({});
     setGeneralError("");
 
     const result = v.safeParse(schema, formData);
-
     if (!result.success) {
-      const fieldErrors: Record<string, string> = {};
-      for (const issue of result.issues) {
-        const path = issue.path?.[0]?.key as string | undefined;
-        if (path) {
-          fieldErrors[path] = issue.message || "Invalid field";
-        }
-      }
-      setErrors(fieldErrors);
+      reportErrors(schemaFieldErrors(result.issues));
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await onSubmit(result.output);
     } catch (error) {
-      setGeneralError(
-        error instanceof Error ? error.message : "Failed to save class"
-      );
+      const fieldErrors = serverFieldErrors(error);
+      if (Object.keys(fieldErrors).length > 0) {
+        reportErrors(fieldErrors);
+      } else {
+        setGeneralError(
+          formatApiErrorMessage(error, "The class could not be saved.")
+        );
+      }
     }
+    setIsSubmitting(false);
   };
 
   return (
-    <form id={formId} onSubmit={handleSubmit} className="space-y-6">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-6" noValidate>
       {generalError && (
-        <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+        <div
+          role="alert"
+          className="text-destructive border-destructive/40 bg-destructive/10 rounded-none border px-3 py-2 text-sm font-semibold"
+        >
           {generalError}
         </div>
       )}
 
-      {!initialData && (
-        <Field>
-          <FieldLabel htmlFor={`${formId}-grade`}>Grade Level *</FieldLabel>
+      <FieldGroup>
+        {!initialData && (
+          <Field data-invalid={Boolean(errors.gradeLevel)}>
+            <FieldLabel htmlFor={`${formId}-grade`}>
+              Grade Level <span aria-hidden="true">*</span>
+            </FieldLabel>
+            <Select
+              // `null` is Base UI's "nothing selected". An empty string reads
+              // as a real option with no label, which is why the placeholder
+              // never appeared on a fresh form.
+              value={
+                formData.gradeLevel === "" ? null : String(formData.gradeLevel)
+              }
+              onValueChange={(value) => {
+                handleChange("gradeLevel", value ? Number(value) : "");
+              }}
+              disabled={isBusy}
+            >
+              <SelectTrigger
+                id={`${formId}-grade`}
+                aria-required="true"
+                aria-invalid={ariaInvalid(errors.gradeLevel)}
+                aria-describedby={describedBy("gradeLevel")}
+              >
+                <SelectValue placeholder="Select a grade" />
+              </SelectTrigger>
+              <SelectContent>
+                {GRADE_LEVELS.map((grade) => (
+                  <SelectItem key={grade} value={String(grade)}>
+                    Grade {grade}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldMessage
+              id={`${formId}-gradeLevel-error`}
+              message={errors.gradeLevel}
+            />
+          </Field>
+        )}
+
+        <Field data-invalid={Boolean(errors.name)}>
+          <FieldLabel htmlFor={`${formId}-name`}>
+            Class Name <span aria-hidden="true">*</span>
+          </FieldLabel>
+          <Input
+            id={`${formId}-name`}
+            placeholder="e.g. 10-A, Grade 9 Science"
+            value={formData.name}
+            onChange={(e) => handleChange("name", e.target.value)}
+            disabled={isBusy}
+            aria-required="true"
+            aria-invalid={ariaInvalid(errors.name)}
+            aria-describedby={describedBy("name", `${formId}-name-description`)}
+          />
+          <FieldDescription id={`${formId}-name-description`}>
+            Unique name for this class within its grade
+          </FieldDescription>
+          <FieldMessage id={`${formId}-name-error`} message={errors.name} />
+        </Field>
+
+        <Field data-invalid={Boolean(errors.medium)}>
+          <FieldLabel htmlFor={`${formId}-medium`}>
+            Medium of Instruction
+          </FieldLabel>
           <Select
-            value={formData.gradeLevel.toString()}
+            value={formData.medium}
             onValueChange={(value) => {
               if (value) {
-                handleChange("gradeLevel", Number(value));
+                handleChange("medium", value);
               }
             }}
+            disabled={isBusy}
           >
             <SelectTrigger
-              id={`${formId}-grade`}
-              disabled={isLoading}
-              data-invalid={errors.gradeLevel ? true : undefined}
+              id={`${formId}-medium`}
+              aria-invalid={ariaInvalid(errors.medium)}
+              aria-describedby={describedBy("medium")}
             >
-              <SelectValue placeholder="Select a grade" />
+              <SelectValue placeholder="Select medium" />
             </SelectTrigger>
             <SelectContent>
-              {GRADE_LEVELS.map((grade) => (
-                <SelectItem key={grade} value={grade.toString()}>
-                  Grade {grade}
-                </SelectItem>
-              ))}
+              <SelectItem value="sinhala">Sinhala</SelectItem>
+              <SelectItem value="tamil">Tamil</SelectItem>
+              <SelectItem value="english">English</SelectItem>
             </SelectContent>
           </Select>
-          {errors.gradeLevel && <FieldError>{errors.gradeLevel}</FieldError>}
+          <FieldMessage id={`${formId}-medium-error`} message={errors.medium} />
         </Field>
-      )}
-
-      <Field>
-        <FieldLabel htmlFor={`${formId}-name`}>Class Name *</FieldLabel>
-        <Input
-          id={`${formId}-name`}
-          placeholder="e.g., 10-A, Grade 9 Science"
-          value={formData.name}
-          onChange={(e) => handleChange("name", e.target.value)}
-          disabled={isLoading}
-          data-invalid={errors.name ? true : undefined}
-        />
-        <FieldDescription>
-          Unique name for this class within its grade
-        </FieldDescription>
-        {errors.name && <FieldError>{errors.name}</FieldError>}
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor={`${formId}-medium`}>
-          Medium of Instruction
-        </FieldLabel>
-        <Select
-          value={formData.medium}
-          onValueChange={(value) => {
-            if (value) {
-              handleChange("medium", value);
-            }
-          }}
-        >
-          <SelectTrigger id={`${formId}-medium`} disabled={isLoading}>
-            <SelectValue placeholder="Select medium" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="sinhala">Sinhala</SelectItem>
-            <SelectItem value="tamil">Tamil</SelectItem>
-            <SelectItem value="english">English</SelectItem>
-          </SelectContent>
-        </Select>
-        {errors.medium && <FieldError>{errors.medium}</FieldError>}
-      </Field>
+      </FieldGroup>
     </form>
   );
 };

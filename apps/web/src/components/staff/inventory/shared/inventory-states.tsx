@@ -14,8 +14,10 @@ import {
   IconInfoCircle,
   IconPackage,
   IconRefresh,
+  IconSearchOff,
 } from "@tabler/icons-react";
 import type * as React from "react";
+import { useState } from "react";
 
 import { formatApiErrorMessage } from "@/lib/api-error";
 
@@ -72,66 +74,164 @@ export const EMPTY_REGISTER_COPY = {
     "Start with the eight starter store categories — IT Equipment, Lab Equipment, Sports Equipment and the rest. An item cannot be created until its category exists, so this is the step that unblocks the item form. Open Categories at the top of this pane, then press Seed the eight starter categories. Running it again is safe: it skips anything already there rather than overwriting it.",
 } as const;
 
-/** The same guidance for a store that has categories but where a filter found nothing. */
+/**
+ * The same guidance for a store that has categories but where a filter found
+ * nothing.
+ *
+ * The sentence names a control that exists, and names it in the words the control
+ * wears. It used to say "Clear one of them to widen the list" — which is advice
+ * with no handle on it, printed on the screen where a clerk has just concluded
+ * the register is broken. **"Clear filters"** is the button at the right-hand end
+ * of the filter bar, it is on screen whenever any filter is active, and it is the
+ * only single action that undoes all seven at once; the bar also renders "Showing
+ * N of M" on the same screen, so the reader can see that the register is not empty
+ * and *why* before pressing anything.
+ */
 export const EMPTY_FILTERED_COPY = {
   title: "Nothing matches these filters",
   description:
-    "The register is not empty — this search, category, condition or custodian filter matched no rows. Clear one of them to widen the list.",
+    "The register is not empty — this search, category, condition, custodian, status, low-stock or retired filter matched no rows. Press Clear filters at the right-hand end of the bar above to put the whole register back.",
 } as const;
 
+/**
+ * One taught empty state, in either of two flavours.
+ *
+ * The two callers are the register with nothing in it and the register with
+ * nothing *matching* — the same words on the same screen meaning opposite
+ * things, which is why they are two flavours rather than one component with
+ * different copy: the media icon is part of the claim, and a "no items yet"
+ * parcel over "your filters are too narrow" tells a storekeeper to go and create
+ * the item they were looking for, which already exists.
+ *
+ * `variant` is optional and defaults to `empty`, so every existing call site
+ * keeps the icon it had.
+ */
 export const InventoryEmptyState: React.FC<{
   title: string;
   description: string;
   action?: React.ReactNode;
-}> = ({ title, description, action }) => (
-  <Empty className="border">
-    <EmptyHeader>
-      <EmptyMedia variant="icon">
-        <IconPackage />
-      </EmptyMedia>
-      <EmptyTitle>{title}</EmptyTitle>
-      <EmptyDescription>{description}</EmptyDescription>
-    </EmptyHeader>
-    {action ? <EmptyContent>{action}</EmptyContent> : null}
-  </Empty>
-);
+  variant?: "empty" | "no-results";
+}> = ({ title, description, action, variant = "empty" }) => {
+  const Media = variant === "no-results" ? IconSearchOff : IconPackage;
+
+  return (
+    <Empty className="border">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <Media aria-hidden="true" />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
+      </EmptyHeader>
+      {action ? <EmptyContent>{action}</EmptyContent> : null}
+    </Empty>
+  );
+};
 
 /**
  * A failed read, in place of the list.
  *
  * The message runs through `formatApiErrorMessage` so a server-side valibot
  * failure arrives as `Qty: Value does not match the required format` rather than
- * as the generic `Input validation failed` the client would otherwise show, and
- * an `ORPCError` with a real sentence shows that sentence. The retry is a real
- * button rather than a link, because the overwhelmingly common cause is a
- * dropped connection on a school LAN and the correct response is to try again.
+ * as the generic `Input validation failed` the client would otherwise show, and an
+ * `ORPCError` with a real sentence shows that sentence. The retry is a real button
+ * rather than a link, because the overwhelmingly common cause is a dropped
+ * connection on a school LAN and the correct response is to try again.
+ *
+ * ## Nothing is swallowed
+ *
+ * This panel used to lead with the server's sentence and drop the rest of it, and
+ * that is one of the two rules `query-error-panel.tsx` — the app's single failure
+ * surface and the reference for how a failure is *written* — is built around:
+ * shorten what leads, never throw it away. A member of staff has to be able to
+ * copy a failure into a message to the office, and a developer has to be able to
+ * diagnose one, and a panel that keeps only the first sentence serves neither. So
+ * the full reply is here, behind a disclosure, exactly as the reference does it.
+ *
+ * It is the feature-local wrapper rather than a reuse of `QueryErrorPanel` itself
+ * because the two disagree about the *subject*: that panel is generic across every
+ * list in the app, and this one names the inventory register. Same rules, feature
+ * copy.
  */
 export const InventoryErrorState: React.FC<{
   error: unknown;
   onRetry: () => void;
-}> = ({ error, onRetry }) => (
-  <div
-    role="alert"
-    className="border-destructive/30 bg-destructive/5 flex flex-col items-start gap-3 border p-6"
-  >
-    <div className="text-destructive flex items-center gap-2">
-      <IconCircleX className="size-4 shrink-0" />
-      <p className="font-heading text-sm font-medium">
-        {formatApiErrorMessage(error, "Could not load the inventory register")}
-      </p>
-    </div>
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={onRetry}
-      data-icon="inline-start"
+}> = ({ error, onRetry }) => {
+  const [retrying, setRetrying] = useState(false);
+
+  const message = formatApiErrorMessage(
+    error,
+    "Could not load the inventory register"
+  );
+
+  /**
+   * A retry that re-renders the same cached failure is the same lie wearing a
+   * button, so the click really refetches and the button says so while it is in
+   * flight. The rejection is caught rather than allowed to escape: the query owns
+   * the error and this panel is about to be replaced by whatever the refetch
+   * resolves to, so an unhandled rejection would land in the console of every
+   * clerk who clicks "Try again" on a network that is down.
+   *
+   * Written as a chain rather than `try`/`catch`/`finally` because the React
+   * Compiler does not lower a `finalizer` clause — so the obvious shape of this
+   * function is a build error, and the flagging is worth recording here rather
+   * than rediscovering it.
+   */
+  const handleRetry = async () => {
+    setRetrying(true);
+    await Promise.resolve()
+      .then(() => onRetry())
+      .catch(() => {
+        setRetrying(false);
+      });
+    setRetrying(false);
+  };
+
+  return (
+    <div
+      role="alert"
+      aria-busy={retrying}
+      className="border-destructive/30 bg-destructive/5 flex flex-col items-start gap-3 border p-6"
     >
-      <IconRefresh data-icon="inline-start" />
-      Try again
-    </Button>
-  </div>
-);
+      <div className="text-destructive flex items-start gap-2">
+        <IconCircleX aria-hidden="true" className="mt-px size-4 shrink-0" />
+        <div className="min-w-0">
+          <p className="font-heading text-sm font-medium">
+            Could not load the inventory register
+          </p>
+          <p className="mt-1 text-sm">{message}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={retrying}
+          onClick={() => {
+            void handleRetry();
+          }}
+          data-icon="inline-start"
+        >
+          <IconRefresh
+            aria-hidden="true"
+            className="motion-safe:animate-spin"
+            data-icon="inline-start"
+          />
+          {retrying ? "Trying again…" : "Try again"}
+        </Button>
+        {/*
+          The reassurance is bounded: "nothing has been changed" is true of a
+          read, and it is the sentence that stops a panicking clerk from
+          re-keying a register entry they have not lost.
+        */}
+        <p className="text-muted-foreground text-xs">
+          Nothing has been changed — this is a read, not a write.
+        </p>
+      </div>
+    </div>
+  );
+};
 
 /**
  * Placeholder rows for a list read in flight.
@@ -186,8 +286,16 @@ export const InventorySkeleton: React.FC<{ rows?: number }> = ({
 );
 
 const NOTICE_TONES = {
+  /**
+   * The container carries `text-foreground` and the **description** carries
+   * `text-muted-foreground`. It used to be the other way round — the whole notice
+   * was muted and the description repeated it — so an info notice's title and body
+   * were the same colour and at the same weight, which is two pieces of text
+   * pretending to be a heading and a sentence.
+   */
   info: {
-    className: "border-border bg-muted/50 text-muted-foreground",
+    className: "border-border bg-muted/50 text-foreground",
+    descriptionClassName: "text-muted-foreground",
     Icon: IconInfoCircle,
   },
   /**
@@ -197,13 +305,23 @@ const NOTICE_TONES = {
    * than ink and `--gold` was never the problem. Arithmetic in
    * `packages/ui/src/styles/globals.css`; the same token carries the register's
    * `Borrowed` badge and its warning figures.
+   *
+   * **The description is `--warning-ink` too, and it used not to be.** It was
+   * `text-muted-foreground` — a neutral green — so a warning notice led with amber
+   * ink and then switched to an unrelated hue halfway down, and a reader could not
+   * tell which half of it was the warning. UI.md says every consumer of a warning
+   * state reads `--warning-ink`; this was the one that did not, and it is a
+   * description rather than a figure so nobody had measured it. 5.79:1 on
+   * `bg-accent/10`.
    */
   warning: {
     className: "border-accent/50 bg-accent/10 text-warning-ink",
+    descriptionClassName: "text-warning-ink",
     Icon: IconAlertTriangle,
   },
   danger: {
     className: "border-destructive/30 bg-destructive/5 text-destructive",
+    descriptionClassName: "text-destructive",
     Icon: IconCircleX,
   },
 } as const;
@@ -222,16 +340,16 @@ export const InventoryInlineNotice: React.FC<{
   title: string;
   description?: string;
 }> = ({ tone, title, description }) => {
-  const { className, Icon } = NOTICE_TONES[tone];
+  const { className, descriptionClassName, Icon } = NOTICE_TONES[tone];
 
   return (
     <div className={className}>
       <div className="flex items-start gap-2 p-3">
-        <Icon className="mt-px size-4 shrink-0" />
+        <Icon aria-hidden="true" className="mt-px size-4 shrink-0" />
         <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-sm font-medium">{title}</p>
           {description ? (
-            <p className="text-muted-foreground text-sm">{description}</p>
+            <p className={`text-sm ${descriptionClassName}`}>{description}</p>
           ) : null}
         </div>
       </div>

@@ -64,13 +64,20 @@ export const TransferReasonField: React.FC<{
   required = true,
 }) => {
   /**
-   * The caller's description wins when there is one, and the requirement is
-   * stated separately rather than being folded into it — a caller that supplied
-   * "Applies to both the manager and the custodian" must not be able to
-   * accidentally drop the rule that the field is mandatory.
+   * The caller's description and the requirement are **two sentences, and both
+   * are rendered.**
+   *
+   * They used to be one, chosen with `description ?? REQUIRED_REASON_COPY` — so
+   * the rule that this field is mandatory was printed only on the dialogs whose
+   * author happened not to pass a description, and silently dropped on the ones
+   * that did. The comment immediately above this code claimed the opposite ("the
+   * requirement is stated separately rather than being folded into it"), and the
+   * code was doing the folding. On a field with a `CHECK` constraint behind it,
+   * that is the wrong thing to lose: the clerk who is told "Applies to both the
+   * manager and the custodian" and nothing else discovers the mandatory rule from
+   * a toast, after a round trip.
    */
-  const shownDescription =
-    description ?? (required ? REQUIRED_REASON_COPY : null);
+  const requirement = required ? REQUIRED_REASON_COPY : null;
 
   /**
    * A stable id per instance rather than the fixed `inventory-transfer-reason`
@@ -85,9 +92,11 @@ export const TransferReasonField: React.FC<{
   const inputId = useId();
   const errorId = `${inputId}-error`;
   const descriptionId = `${inputId}-description`;
+  const requirementId = `${inputId}-requirement`;
   const describedBy = [
     error ? errorId : null,
-    shownDescription ? descriptionId : null,
+    description ? descriptionId : null,
+    requirement ? requirementId : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -123,9 +132,8 @@ export const TransferReasonField: React.FC<{
         programmatic form of "you must choose something" *is* `aria-required`.
         With the asterisk alone the requirement existed only as a glyph.
       */}
-      <FieldLabel htmlFor={inputId}>
+      <FieldLabel htmlFor={inputId} required={required}>
         {label}
-        {required ? " *" : ""}
       </FieldLabel>
       <Select
         value={value || null}
@@ -150,10 +158,17 @@ export const TransferReasonField: React.FC<{
           ))}
         </SelectContent>
       </Select>
-      {shownDescription ? (
-        <FieldDescription id={descriptionId}>
-          {shownDescription}
-        </FieldDescription>
+      {/*
+        The caller's own sentence first — it says what this particular reason is
+        for — and the requirement underneath it, where a rule lives rather than
+        where a description does. Only ids that were rendered are referenced, so
+        the `aria-describedby` list never names an element that is not there.
+      */}
+      {description ? (
+        <FieldDescription id={descriptionId}>{description}</FieldDescription>
+      ) : null}
+      {requirement ? (
+        <FieldDescription id={requirementId}>{requirement}</FieldDescription>
       ) : null}
       {error ? <FieldError id={errorId}>{error}</FieldError> : null}
     </Field>

@@ -7,14 +7,20 @@ import {
   Field,
   FieldDescription,
   FieldError,
-  FieldLabel,
+  FieldLegend,
+  FieldSet,
 } from "@school-student-teacher-management/ui/components/field";
-import { IconSortAscending } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconRefresh,
+  IconSortAscending,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import type * as React from "react";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 
 import type { UnitOption } from "@/components/staff/inventory/inventory-types";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
 /** A school's asset drawer for one item line is comfortably under this. */
@@ -33,7 +39,13 @@ const LOADING_PLACEHOLDER_ROWS = [0, 1, 2];
 export const useItemUnits = (
   itemId: string | null,
   status?: string
-): { units: UnitOption[]; isLoading: boolean } => {
+): {
+  units: UnitOption[];
+  isLoading: boolean;
+  isFetching: boolean;
+  error: unknown;
+  refetch: () => void;
+} => {
   /**
    * `status` is typed as a plain `string` here so a caller can hand over a value
    * straight from a form, but `orpc.inventory.units.list` takes a picklist. An
@@ -58,7 +70,15 @@ export const useItemUnits = (
 
   const units = useMemo(() => query.data?.units ?? [], [query.data]);
 
-  return { units, isLoading: query.isLoading };
+  return {
+    units,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 };
 
 /**
@@ -153,7 +173,19 @@ export const UnitPickerField: React.FC<{
   error,
   disabled = false,
 }) => {
-  const { units, isLoading } = useItemUnits(itemId, "available");
+  const {
+    units,
+    isLoading,
+    error: loadError,
+    refetch,
+  } = useItemUnits(itemId, "available");
+
+  /**
+   * One id per rendered instance, the namespace for every checkbox in the list
+   * below. See the note on `controlId` for why the literal prefix it replaced was
+   * not a namespace.
+   */
+  const idBase = useId();
 
   const claimOrder = useMemo(() => byClaimOrder(units), [units]);
 
@@ -215,10 +247,11 @@ export const UnitPickerField: React.FC<{
   const canSelectOldest =
     !disabled && qty > 0 && claimOrder.length > 0 && value.length !== qty;
 
-  // One `if` per state rather than a chain of ternaries: these are four
-  // genuinely different situations (nothing chosen yet, still loading, a bulk
-  // item with no tags, a tagged item) and reading them as a nested expression
-  // is how one of them ends up rendering inside the wrong branch.
+  // One `if` per state rather than a chain of ternaries: these are five
+  // genuinely different situations (nothing chosen yet, still loading, **the
+  // list could not be read**, a bulk item with no tags, a tagged item) and
+  // reading them as a nested expression is how one of them ends up rendering
+  // inside the wrong branch — which is exactly what the failed read used to do.
   let body: React.ReactNode;
 
   if (!itemId) {
@@ -243,6 +276,49 @@ export const UnitPickerField: React.FC<{
             <div key={row} className="bg-muted h-6 animate-pulse" />
           ))}
         </div>
+      </div>
+    );
+  } else if (loadError) {
+    /*
+     * **This branch is the reason the order above is the order above.**
+     *
+     * A failed `units.list` produces `units === []`, and the branch below reads
+     * an empty list as a fact about the College's data: *"This item is counted
+     * in bulk — it has no tagged units."* That is a confident, specific and
+     * completely untrue claim, printed by a dropped connection on a school LAN,
+     * in the one dialog a storekeeper opens specifically to find out whether the
+     * thing they are about to move has tags. And it is not harmless: the copy
+     * then says the server will take the units oldest-first "by its own record",
+     * so the clerk ticks nothing, submits, and `getAvailableUnits` is asked to
+     * claim tags off an item that has three of them.
+     *
+     * A failure is named, and it offers a retry that really refetches.
+     */
+    body = (
+      <div
+        className="border-destructive/30 bg-destructive/5 flex flex-col items-start gap-2 border p-3"
+        role="alert"
+      >
+        <p className="text-destructive flex items-start gap-1.5 text-sm">
+          <IconAlertTriangle
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0"
+          />
+          {formatApiErrorMessage(
+            loadError,
+            "Could not read this item's asset tags"
+          )}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={refetch}
+          data-icon="inline-start"
+        >
+          <IconRefresh aria-hidden="true" data-icon="inline-start" />
+          Try again
+        </Button>
       </div>
     );
   } else if (claimOrder.length === 0) {
@@ -284,7 +360,7 @@ export const UnitPickerField: React.FC<{
               disabled={disabled}
               data-icon="inline-start"
             >
-              <IconSortAscending data-icon="inline-start" />
+              <IconSortAscending aria-hidden="true" data-icon="inline-start" />
               Select the oldest {qty}
             </Button>
           ) : null}
@@ -298,7 +374,14 @@ export const UnitPickerField: React.FC<{
             // button — so the row would toggle twice on some paths and once on
             // others. The label is the accessible name, which is also why the
             // checkbox needs no `aria-label` of its own.
-            const controlId = `inventory-unit-${unit.id}`;
+            //
+            // Namespaced from one `useId` rather than from the literal prefix
+            // `inventory-unit-` this used to build from the row id. The prefix was
+            // unique per *unit* but said nothing about which item's list it was
+            // in, and a dialog that reuses the component for a second item would
+            // put the same ids in the document twice — the second label focusing
+            // the first checkbox.
+            const controlId = `${idBase}-${unit.id}`;
 
             return (
               <div
@@ -355,8 +438,19 @@ export const UnitPickerField: React.FC<{
 
   return (
     <Field data-invalid={Boolean(shownError)}>
-      <FieldLabel>{label}</FieldLabel>
-      {body}
+      {/*
+        A `FieldSet` + `FieldLegend`, not a `FieldLabel`. This control is a *group*
+        of checkboxes, and a `<label for>` can only name one of them — pointing one
+        at the first row would announce "Select the oldest 2" as the name of a
+        single checkbox, which is worse than no name. A legend names the group, and
+        `role="group"` on a `div` says the same thing to a browser, which is what
+        this codebase's `prefer-tag-over-role` rule objects to. The same reasoning
+        is why `BorrowerModeToggle` is a fieldset.
+      */}
+      <FieldSet>
+        <FieldLegend>{label}</FieldLegend>
+        {body}
+      </FieldSet>
       {shownError ? <FieldError>{shownError}</FieldError> : null}
       {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>

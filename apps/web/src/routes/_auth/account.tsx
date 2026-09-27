@@ -15,17 +15,19 @@ import {
 } from "@school-student-teacher-management/ui/components/card";
 import { Separator } from "@school-student-teacher-management/ui/components/separator";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { AccountSessions } from "@/components/account/account-panels";
 import { PasswordDialog } from "@/components/account/password-dialog";
 import { getAvatarFallback } from "@/components/nav-user";
+import { pageSeo } from "@/functions/get-site-origin";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Administrator",
   principal: "Principal",
   vicePrincipal: "Deputy Principal",
   teacher: "Teacher",
+  "teacher-requester": "Awaiting staff approval",
   user: "User",
 };
 
@@ -103,15 +105,19 @@ const ProfileCard = ({ user }: { user: SessionUser | undefined }) => {
 const PasswordSection = ({
   email,
   isEnvManaged,
+  triggerRef,
   onOpenChange,
 }: {
   email: string;
   isEnvManaged: boolean;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
   onOpenChange: (open: boolean) => void;
 }) => (
   <Card>
     <CardHeader>
-      <CardTitle>Password</CardTitle>
+      <CardTitle>
+        <h2 className="m-0 text-base font-medium">Password</h2>
+      </CardTitle>
       <CardDescription>
         {isEnvManaged
           ? "This is an institutional login. Its password is set by the College's server configuration and re-applied on every start, so it is managed outside the app."
@@ -122,6 +128,7 @@ const PasswordSection = ({
       <Button
         disabled={isEnvManaged}
         onClick={() => onOpenChange(true)}
+        ref={triggerRef}
         variant="outline"
       >
         Change password
@@ -133,7 +140,9 @@ const PasswordSection = ({
 const SwitchAccountSection = () => (
   <Card>
     <CardHeader>
-      <CardTitle>Add or switch account</CardTitle>
+      <CardTitle>
+        <h2 className="m-0 text-base font-medium">Add or switch account</h2>
+      </CardTitle>
       <CardDescription>
         Sign in as someone else without signing out of this account — useful for
         checking a teacher&rsquo;s portal or approving a request as a different
@@ -155,6 +164,7 @@ const SwitchAccountSection = () => (
 const AccountPage = () => {
   const { session } = Route.useRouteContext();
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const passwordTrigger = useRef<HTMLButtonElement>(null);
 
   // The client-side session type drops the `username` plugin's additional
   // fields, but they are genuinely on the wire (see packages/auth).
@@ -162,7 +172,7 @@ const AccountPage = () => {
   const isEnvManaged = isSeededAccount(user?.username);
 
   return (
-    <div className="flex flex-col gap-4">
+    <main className="flex flex-col gap-4">
       <div>
         <h1 className="font-heading text-3xl font-semibold md:text-4xl">
           Account
@@ -178,6 +188,7 @@ const AccountPage = () => {
         email={user?.email ?? ""}
         isEnvManaged={isEnvManaged}
         onOpenChange={setIsPasswordOpen}
+        triggerRef={passwordTrigger}
       />
       <SwitchAccountSection />
 
@@ -187,12 +198,22 @@ const AccountPage = () => {
         email={user?.email ?? ""}
         onOpenChange={setIsPasswordOpen}
         open={isPasswordOpen}
+        returnFocusTo={passwordTrigger}
         username={user?.username}
       />
-    </div>
+    </main>
   );
 };
 
 export const Route = createFileRoute("/_auth/account")({
   component: AccountPage,
+  head: ({ matches }) =>
+    pageSeo({
+      matches,
+      path: "/account",
+      title: "Your account",
+      description:
+        "Your profile, password and the devices signed in to your account.",
+      noindex: true,
+    }),
 });

@@ -18,7 +18,21 @@ type Staff = typeof staff.$inferSelect;
 type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
 
 const handleMutationError = (error: unknown, defaultMsg: string) => {
-  toast.error(error instanceof Error ? error.message : defaultMsg);
+  toast.error(formatApiErrorMessage(error, defaultMsg));
+};
+
+/**
+ * The error a form should show, kept as an `Error` so the form can print it
+ * inline beside the control that caused it.
+ *
+ * The assign and edit dialogs stay open on a failed write, so the message has to
+ * live where the form is: a toast has usually been dismissed by the time
+ * somebody reads the dialog again. Deleting has no form, so that one toasts.
+ */
+const rethrow = (error: unknown, fallback: string): never => {
+  throw error instanceof Error
+    ? error
+    : new Error(formatApiErrorMessage(error, fallback));
 };
 
 export const usePeriodsPage = () => {
@@ -217,6 +231,7 @@ export const usePeriodsPage = () => {
         classId: selectedClass.id,
       } as never);
       downloadExportFile(file);
+      toast.success(`Timetable PDF downloaded for ${selectedClass.name}`);
     } catch (error) {
       handleMutationError(error, "Failed to export timetable");
     }
@@ -231,6 +246,7 @@ export const usePeriodsPage = () => {
         academicYearId: currentYear.id,
       } as never);
       downloadExportFile(file);
+      toast.success("Timetable workbook downloaded, one sheet per teacher");
     } catch (error) {
       handleMutationError(error, "Failed to export timetables");
     }
@@ -261,6 +277,9 @@ export const usePeriodsPage = () => {
       if (!selectedSlot || !selectedClass || !currentYear) {
         return;
       }
+      if (assignMutation.isPending) {
+        return;
+      }
       try {
         await assignMutation.mutateAsync({
           academicYearId: currentYear.id,
@@ -270,26 +289,25 @@ export const usePeriodsPage = () => {
           ...(data as Record<string, unknown>),
         } as never);
         setIsAssignDialogOpen(false);
-        await timetableQuery.refetch();
-        await conflictsQuery.refetch();
+        await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
         toast.success("Period assigned successfully");
       } catch (error) {
-        handleMutationError(error, "Failed to assign period");
+        rethrow(error, "Failed to assign the period");
       }
     },
     [
-      selectedSlot,
-      selectedClass,
-      currentYear,
       assignMutation,
-      timetableQuery,
       conflictsQuery,
+      currentYear,
+      selectedClass,
+      selectedSlot,
+      timetableQuery,
     ]
   );
 
   const handleEditSubmit = useCallback(
     async (data: unknown) => {
-      if (!selectedAssignment) {
+      if (!selectedAssignment || updateMutation.isPending) {
         return;
       }
       try {
@@ -298,30 +316,29 @@ export const usePeriodsPage = () => {
           ...(data as Record<string, unknown>),
         } as never);
         setIsEditDialogOpen(false);
-        await timetableQuery.refetch();
-        await conflictsQuery.refetch();
+        await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
         toast.success("Assignment updated successfully");
       } catch (error) {
-        handleMutationError(error, "Failed to update assignment");
+        rethrow(error, "Failed to update the assignment");
       }
     },
-    [selectedAssignment, updateMutation, timetableQuery, conflictsQuery]
+    [conflictsQuery, selectedAssignment, timetableQuery, updateMutation]
   );
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!selectedAssignment) {
+    if (!selectedAssignment || deleteMutation.isPending) {
       return;
     }
     try {
       await deleteMutation.mutateAsync({ id: selectedAssignment.id } as never);
       setIsDeleteDialogOpen(false);
-      await timetableQuery.refetch();
-      await conflictsQuery.refetch();
-      toast.success("Assignment deleted successfully");
+      setSelectedAssignment(null);
+      await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
+      toast.success("Assignment removed successfully");
     } catch (error) {
-      handleMutationError(error, "Failed to delete assignment");
+      handleMutationError(error, "Failed to remove the assignment");
     }
-  }, [selectedAssignment, deleteMutation, timetableQuery, conflictsQuery]);
+  }, [conflictsQuery, deleteMutation, selectedAssignment, timetableQuery]);
 
   const timetableData = useMemo(() => {
     const data = timetableQuery.data as unknown[] | undefined;

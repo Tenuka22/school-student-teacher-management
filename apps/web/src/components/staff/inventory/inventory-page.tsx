@@ -4,6 +4,7 @@ import type { InferRouterInputs } from "@orpc/server";
 import type { AppRouter } from "@school-student-teacher-management/api/routers/index";
 import {
   inventoryTransferReasonSchema,
+  itemConditionLabel,
   itemConditionSchema,
 } from "@school-student-teacher-management/db/constants/inventory";
 import { inventoryItemIdSchema } from "@school-student-teacher-management/db/schema/inventory";
@@ -18,7 +19,7 @@ import {
 import {
   IconCategory,
   IconPlus,
-  IconQrcode,
+  IconRefresh,
   IconUserOff,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ import * as v from "valibot";
 import { CategoryPanel } from "@/components/staff/inventory/category-panel";
 import type { CustodyHoldMode } from "@/components/staff/inventory/custody-dialogs";
 import { CustodyDialogs } from "@/components/staff/inventory/custody-dialogs";
+import { RegisterSelectionBar } from "@/components/staff/inventory/inventory-register-states";
 import { InventoryTable } from "@/components/staff/inventory/inventory-table";
 import type {
   CategoryOption,
@@ -41,7 +43,10 @@ import {
   hasActiveInventoryFilters,
 } from "@/components/staff/inventory/inventory-types";
 import { InventoryItemDialogs } from "@/components/staff/inventory/item-dialogs";
-import { InventoryLifecycleTabs } from "@/components/staff/inventory/lifecycle-tabs";
+import {
+  InventoryLifecycleTabs,
+  LIFECYCLE_HEADING_ID,
+} from "@/components/staff/inventory/lifecycle-tabs";
 import type { QrSheetSelection } from "@/components/staff/inventory/qr-sheet-dialog";
 import { QrSheetDialog } from "@/components/staff/inventory/qr-sheet-dialog";
 import {
@@ -49,6 +54,7 @@ import {
   InventoryFilterBar,
   InventoryInlineNotice,
   InventoryStatCards,
+  itemStatusLabel,
 } from "@/components/staff/inventory/shared";
 import type {
   InventoryMutationScope,
@@ -211,18 +217,32 @@ const DEFAULT_REGISTER_FILTERS: RegisterFilters = {
  * One memo, because the count and the list have to be derived from the same array:
  * a card that counted the page before it was filtered, beside a table showing the
  * page after, would be two numbers about the same question.
+ *
+ * ## `rows` is `undefined` until a request has answered, and that is the point
+ *
+ * It used to coalesce "the request has never come back" into `[]`, and the two
+ * are not the same fact: one is *we do not know* and the other is *there is
+ * nothing there*. Coalescing them is what made a failed first load reachable as an
+ * empty register — the table's "no items in the register yet" state, with its
+ * "Register the first item" button, printed to a storekeeper whose request had
+ * simply timed out. The table branches on `items === undefined` to tell the
+ * skeleton, the error panel and the two empty states apart, and that branch is only
+ * as good as what this hook hands it.
  */
 const useRegisterRows = (
   items: InventoryItemView[] | undefined,
   unassignedOnly: boolean
 ) => {
   const rows = useMemo(() => {
-    const list = items ?? [];
-    if (!unassignedOnly) {
-      return list;
+    if (items === undefined) {
+      return;
     }
 
-    return list.filter((row) => row.managerStaffId === null);
+    if (!unassignedOnly) {
+      return items;
+    }
+
+    return items.filter((row) => row.managerStaffId === null);
   }, [items, unassignedOnly]);
 
   /**
@@ -276,6 +296,80 @@ const buildUnassignedScopeNote = (
 };
 
 /**
+ * The filters in force, as one clause a caption and an empty state can both read.
+ *
+ * ## Why the register says this out loud
+ *
+ * A filtered register is a *different table* from an unfiltered one: the same
+ * columns over a subset of the school. Nothing on screen said so. The "Showing N
+ * of M" line in the filter bar reports two numbers, and a number is not a
+ * statement about which filters produced it — so a screen-reader user reading
+ * "3 items" in the table's caption had no way to know that a search for
+ * "projector" was the reason, and a sighted user had to read back up the page to
+ * find out. The caption is where a table names itself, and this is that sentence.
+ *
+ * **Every label is read from the server's own vocabulary** — `itemStatusLabel` for
+ * the derived status, `itemConditionLabel` for the condition, the category's own
+ * `name` — for the reason `UI.md` gives for every other label in this feature: a
+ * component that spelled one of them out would be a second place for the same
+ * words to drift, and a printed report that says `damaged` beside a screen that
+ * says "Damaged" is the same bug in a different file.
+ *
+ * **The custodian is the one filter named rather than spelled**, and the wording is
+ * deliberate. The resolved person's name lives in `InventoryFilterBar`'s combobox,
+ * which owns `useAssignableStaffOptions`; this builder holds a `staffId` and
+ * nothing else, and a raw uuid in a caption is noise rather than information. So
+ * it says *one custodian's items*, which is true, is the fact a reader needs, and
+ * does not pretend to a resolution this file does not have. The name is one line
+ * above on screen, in the filter bar, for a reader who wants it.
+ */
+const describeRegisterFilters = (
+  filters: RegisterFilters,
+  categories: CategoryOption[]
+): string => {
+  const parts: string[] = [];
+
+  if (filters.search.trim()) {
+    parts.push(`search “${filters.search.trim()}”`);
+  }
+
+  if (filters.status !== "all") {
+    parts.push(`status ${itemStatusLabel(filters.status)}`);
+  }
+
+  if (filters.categoryId) {
+    const name = categories.find(
+      (category) => category.id === filters.categoryId
+    )?.name;
+    parts.push(name ? `category ${name}` : "a category");
+  }
+
+  if (filters.condition) {
+    parts.push(`condition ${itemConditionLabel(filters.condition)}`);
+  }
+
+  if (filters.custodianStaffId) {
+    parts.push("one custodian's items");
+  }
+
+  if (filters.lowStockOnly) {
+    parts.push("at or below the reorder level");
+  }
+
+  if (filters.unassignedOnly) {
+    parts.push("no manager only");
+  }
+
+  if (filters.includeDeleted) {
+    parts.push("including retired items");
+  }
+
+  return parts.length === 0
+    ? "No filters are applied."
+    : `Filtered by ${parts.join(", ")}.`;
+};
+
+/**
  * What an `assignManager` call did, in one sentence.
  *
  * Three outcomes and three sentences, because the questions they answer are three:
@@ -317,6 +411,26 @@ export const useInventoryPage = () => {
   const [selectedItem, setSelectedItem] = useState<InventoryItemView | null>(
     null
   );
+
+  /**
+   * The name of the row the current retirement is about, and **it is not
+   * `selectedItem`.**
+   *
+   * The retire confirm is raised from the register's own row menu, which keeps its
+   * own target (`useRegisterDialogs` in `inventory-table.tsx`) rather than going
+   * through the page's selection — deliberately, because a dialog opened from a row
+   * has to be about *that* row. So the success toast used to read `selectedItem`,
+   * which any other row action can change in between: open the history for the
+   * projector, then retire a laptop from its own menu, and the toast congratulated
+   * the reader on retiring the projector. A confirmation whose outcome names the
+   * wrong row is worse than one that names no row at all.
+   *
+   * A piece of state rather than a ref because it is written in a handler and read
+   * in a mutation observer, and both are on the same tick as the write — a ref
+   * would work and would make the "why not `selectedItem`" argument a question
+   * about hooks rather than about the bug.
+   */
+  const [retiringItemName, setRetiringItemName] = useState<string | null>(null);
 
   /**
    * Which live rows are ticked, for the one bulk action this register offers:
@@ -434,8 +548,34 @@ export const useInventoryPage = () => {
    * `borrowsQuery.isLoading` is load-bearing, and adding a fourth query to this row
    * of figures cannot be half-remembered.
    */
-  const { stats, isStatsLoading } = useMemo(() => {
+  const { stats, isStatsLoading, statsProblem } = useMemo(() => {
     const rows = items ?? [];
+
+    /**
+     * Which of the seven figures could not be read, and why that is not a `0`.
+     *
+     * `borrowedUnits` and `lowStockItems` are the two figures that come from their
+     * own query rather than from the loaded page, and a failed query left them at
+     * `0` — printed as a confident figure on a card whose whole job is to be acted
+     * on. "Borrowed: 0" and "Low stock: 0" are not neutral readings of a failure;
+     * they are the two numbers a storekeeper would most believe, and the two most
+     * expensive to be wrong about. So the figures are **not** rendered at all when
+     * their query failed, and a notice names which ones are missing and why.
+     *
+     * Both of them are named in one string rather than one notice each: they fail
+     * together on a dropped connection, and two stacked banners over a card row is a
+     * worse read than one that lists both.
+     */
+    const missing: string[] = [];
+    if (borrowsQuery.isError) {
+      missing.push("Borrowed");
+    }
+    if (lowStockQuery.isError) {
+      missing.push("Low stock");
+    }
+    if (itemsQuery.isError) {
+      missing.push("Items, Units, Available and Out of stock");
+    }
 
     return {
       stats: {
@@ -451,21 +591,62 @@ export const useInventoryPage = () => {
         lowStockItems: lowStockQuery.data?.total ?? 0,
         unassignedItems: unassignedCount,
       } satisfies InventoryStats,
+      /**
+       * A query that has failed keeps `isLoading` false forever, so a card row
+       * would sit at its last value for the rest of the session. Treating an error
+       * as "not a figure yet" puts the skeleton back — which is why `statsProblem`
+       * below is what actually decides whether a `0` is a fact or a hole.
+       */
       isStatsLoading:
         itemsQuery.isLoading ||
         borrowsQuery.isLoading ||
-        lowStockQuery.isLoading,
+        lowStockQuery.isLoading ||
+        missing.length > 0,
+      /** The figures the cards must not print a number for, or `null`. */
+      statsProblem: missing.length > 0 ? missing.join(" and ") : null,
     };
   }, [
     borrowsQuery.data,
+    borrowsQuery.isError,
     borrowsQuery.isLoading,
     items,
+    itemsQuery.isError,
     itemsQuery.isLoading,
     lowStockQuery.data,
+    lowStockQuery.isError,
     lowStockQuery.isLoading,
     totalCount,
     unassignedCount,
   ]);
+
+  /**
+   * The server's own sentence for whichever of the three stat queries failed, and
+   * a retry for all three — they are independent round trips and a retry that
+   * re-requests only one of them would leave the notice naming figures the reader
+   * still cannot see.
+   */
+  const statsError = useMemo(() => {
+    const failures = [
+      borrowsQuery.error,
+      lowStockQuery.error,
+      itemsQuery.error,
+    ].filter((failure): failure is NonNullable<typeof failure> =>
+      Boolean(failure)
+    );
+
+    return failures.length > 0
+      ? formatApiErrorMessage(
+          failures[0],
+          "The register's summary figures could not be read"
+        )
+      : null;
+  }, [borrowsQuery.error, itemsQuery.error, lowStockQuery.error]);
+
+  const handleRetryStats = useCallback(() => {
+    void borrowsQuery.refetch();
+    void lowStockQuery.refetch();
+    void itemsQuery.refetch();
+  }, [borrowsQuery, itemsQuery, lowStockQuery]);
 
   // ─── Invalidation ────────────────────────────────────────────────────────
 
@@ -532,15 +713,17 @@ export const useInventoryPage = () => {
     orpc.inventory.items.remove.mutationOptions({
       onSuccess: async () => {
         toast.success(
-          selectedItem
-            ? `"${selectedItem.name}" retired — its ledger and custody history are still on file`
+          retiringItemName
+            ? `"${retiringItemName}" retired — its ledger and custody history are still on file`
             : "Item retired"
         );
+        setRetiringItemName(null);
         setSelectedItem(null);
         await invalidate("item");
       },
       onError: (error) => {
         toast.error(formatApiErrorMessage(error, "Could not retire this item"));
+        setRetiringItemName(null);
       },
     })
   );
@@ -720,24 +903,86 @@ export const useInventoryPage = () => {
   }, []);
 
   /**
-   * The ids the table's "select all" may tick, and the full rows behind
-   * `selectedIds` for the QR sheet dialog's per-item copy count fields \u2014
-   * one pass over `visibleItems`, because both answers are about the same
-   * page of rows and a second pass would only recompute it.
+   * The ids the table's "select all" may tick, and the four numbers the selection
+   * bar has to be honest about — one pass over `visibleItems`, because every answer
+   * is about the same page of rows and a second pass would only recompute it.
+   *
+   * ## The reconciliation, and why a tick is allowed to stop counting
+   *
+   * `selectedIds` is keyed by id, so a refetch that replaces the array does not
+   * un-tick anything the reader just selected — which is the property the
+   * selection has to have. But "the selection survives" is not the same as "the
+   * selection is still meaningful", and two things quietly break it:
+   *
+   * - **A filter narrows the page.** Ticking five rows, then typing `projector`,
+   *   moves four of them out of `visibleItems`. The bar still said "5 items
+   *   selected", the button still said "Download QR sheet", and the sheet came back
+   *   with one label on it. A short QR sheet is a physical job somebody has to
+   *   notice and finish by hand, so the button now carries the number it will
+   *   produce and the bar names where the rest went.
+   * - **A row is retired** — by this register's own retire dialog, or by another
+   *   clerk on another machine. Its checkbox is disabled, `selectableIds` has
+   *   dropped it, and the old `selectedItemsForQrSheet` was still collecting it
+   *   because it only tested `selectedIds.has(...)`. A label for a retired item is
+   *   a label for a row that is not on the register, and `UI.md` records why retired
+   *   rows are excluded from selection in the first place: there is nothing left to
+   *   scan into them.
+   *
+   * Both are *reported* rather than silently corrected. Dropping a tick the reader
+   * did not ask to drop is its own kind of lie — the count would go down without
+   * anybody having done anything — so the tick stays held, the button's number is
+   * the number that will actually be labelled, and the two reasons are named
+   * separately because they need different fixes: a retired row is never labelable
+   * again, a hidden one only needs the filter widened.
+   *
+   * `selectedIds.size` is the number the *reader* chose, so it is the number the
+   * bar leads with; `labelableCount` is the number the *action* will touch, so it
+   * is the number on the button. The two are equal whenever the reader has not
+   * narrowed anything, and the bar says so rather than staying silent about it.
    */
-  const { selectableIds, selectedItemsForQrSheet } = useMemo(() => {
+  const { selectableIds, selectedItemsForQrSheet, selection } = useMemo(() => {
     const ids: string[] = [];
-    const selected: InventoryItemView[] = [];
-    for (const item of visibleItems) {
+    const onScreenSelected: InventoryItemView[] = [];
+    for (const item of visibleItems ?? []) {
       if (!item.deletedAt) {
         ids.push(item.id);
       }
       if (selectedIds.has(item.id)) {
-        selected.push(item);
+        onScreenSelected.push(item);
       }
     }
-    return { selectableIds: ids, selectedItemsForQrSheet: selected };
-  }, [visibleItems, selectedIds]);
+
+    /**
+     * Four buckets, and they are exhaustive on purpose.
+     *
+     * `onPageSelected` is the whole set of ticks the server's page still holds;
+     * `onScreenSelected` is the subset this browser's "no manager only" predicate
+     * kept. The difference is hidden, and what is left over — a tick whose row is
+     * not in the loaded results at all, because another clerk retired it or the
+     * refetch brought a different page — is the fourth bucket. A three-bucket split
+     * would leave those ticks in no bucket and the sentence below would add to
+     * fewer than the total, which is the one arithmetic a reader will check.
+     */
+    const labelable = onScreenSelected.filter((item) => !item.deletedAt);
+    const retired = onScreenSelected.filter((item) => item.deletedAt);
+    const onPageCount = (items ?? []).filter((item) =>
+      selectedIds.has(item.id)
+    ).length;
+    const hidden = Math.max(onPageCount - onScreenSelected.length, 0);
+    const missing = Math.max(selectedIds.size - onPageCount, 0);
+
+    return {
+      selectableIds: ids,
+      selectedItemsForQrSheet: labelable,
+      selection: {
+        selectedCount: selectedIds.size,
+        labelableCount: labelable.length,
+        retiredCount: retired.length,
+        hiddenCount: hidden,
+        missingCount: missing,
+      },
+    };
+  }, [visibleItems, items, selectedIds]);
 
   const handleToggleSelectAll = useCallback(() => {
     setSelectedIds((previous) =>
@@ -748,20 +993,20 @@ export const useInventoryPage = () => {
   }, [selectableIds]);
 
   const handleDownloadQrSheet = useCallback(() => {
-    if (selectedIds.size === 0) {
+    if (selection.labelableCount === 0) {
       return;
     }
     setIsQrSheetOpen(true);
-  }, [selectedIds]);
+  }, [selection.labelableCount]);
 
   const handleQrSheetOpenChange = useCallback((open: boolean) => {
     setIsQrSheetOpen(open);
   }, []);
 
   const handleQrSheetSubmit = useCallback(
-    (selection: QrSheetSelection[]) => {
+    (labelPlan: QrSheetSelection[]) => {
       exportQrSheetMutation.mutate({
-        items: selection as never,
+        items: labelPlan as never,
         origin: window.location.origin,
       });
     },
@@ -804,13 +1049,23 @@ export const useInventoryPage = () => {
     setFilters(DEFAULT_REGISTER_FILTERS);
   }, []);
 
-  const handleRetryItems = useCallback(() => {
-    void itemsQuery.refetch();
-  }, [itemsQuery]);
+  const handleRetryItems = useCallback(
+    () =>
+      /**
+       * The promise is returned rather than swallowed, and that is what makes
+       * `QueryErrorPanel`'s retry button honest: it awaits the caller's return and
+       * holds its own busy state for the length of the request. A handler that
+       * returns `void` gives the button a microtask of "Trying again…" and then
+       * lets the reader click again while the first request is still in flight.
+       */
+      itemsQuery.refetch(),
+    [itemsQuery]
+  );
 
-  const handleRetryCategories = useCallback(() => {
-    void categoriesQuery.refetch();
-  }, [categoriesQuery]);
+  const handleRetryCategories = useCallback(
+    () => categoriesQuery.refetch(),
+    [categoriesQuery]
+  );
 
   // ─── Row actions ─────────────────────────────────────────────────────────
 
@@ -994,6 +1249,9 @@ export const useInventoryPage = () => {
 
   const handleRetireItem = useCallback(
     async (item: InventoryItemView) => {
+      // Named before the write, so the toast is about this row and not about
+      // whatever else the reader has touched since the menu was opened.
+      setRetiringItemName(item.name);
       await removeItemMutation.mutateAsync({
         itemId: v.parse(inventoryItemIdSchema, item.id),
       } as RemoveItemInput);
@@ -1113,13 +1371,28 @@ export const useInventoryPage = () => {
      * The rows the table draws — the loaded page, with the client-side "no manager"
      * filter already applied. The table must never be handed the unfiltered page
      * while the filter is on, or the toggle would appear to do nothing.
+     *
+     * **`undefined` until a request has answered**, and the table reads that
+     * difference: see `useRegisterRows`.
      */
     items: visibleItems,
     totalCount,
     itemsError: itemsQuery.error,
     isItemsLoading: itemsQuery.isLoading,
+    /**
+     * Whether a retry of the register's own read is in flight, so the table's
+     * error panel and its stale-rows notice can both report progress rather than
+     * inviting a second click on a request that is already running.
+     */
+    isItemsRetrying: itemsQuery.isFetching && items !== undefined,
     stats,
     isStatsLoading,
+    /** The figures the cards must not print a number for, or `null`. */
+    statsProblem,
+    /** The server's sentence for the stat failure, or `null`. */
+    statsError,
+    /** Retries all three stat reads, because any of them can be the one that failed. */
+    handleRetryStats,
     /**
      * The same predicate the filter bar's own "Clear filters" button uses, plus the
      * one filter the predicate cannot see. They must be one predicate: the button
@@ -1129,6 +1402,12 @@ export const useInventoryPage = () => {
      * done.
      */
     isFiltered: hasActiveInventoryFilters(filters) || filters.unassignedOnly,
+    /**
+     * The filters in force, as one clause, for the table's `<caption>` and its
+     * no-results state. Built here because this is the only place that holds both
+     * the filter state and the category list needed to name a category.
+     */
+    filterSummary: describeRegisterFilters(filters, categories),
 
     // Filters
     filters,
@@ -1152,8 +1431,12 @@ export const useInventoryPage = () => {
      * and truncation check read the same pair, so the sighted and the non-visual
      * reading cannot disagree either.
      */
-    resultCount: filters.unassignedOnly ? visibleItems.length : items?.length,
-    registerTotal: filters.unassignedOnly ? visibleItems.length : totalCount,
+    resultCount: filters.unassignedOnly
+      ? (visibleItems?.length ?? 0)
+      : items?.length,
+    registerTotal: filters.unassignedOnly
+      ? (visibleItems?.length ?? 0)
+      : totalCount,
     /**
      * The page the server returned, before the client-side predicate. It is the only
      * one of the three counts that can answer "is the register truncated?", because
@@ -1212,6 +1495,8 @@ export const useInventoryPage = () => {
     handleQrSheetOpenChange,
     handleQrSheetSubmit,
     selectedItemsForQrSheet,
+    /** The four numbers the selection bar is built from. */
+    selection,
 
     // The two stock movements, owned by `stock-dialogs.tsx` and opened from the edit
     // form's note about what it cannot change.
@@ -1323,69 +1608,84 @@ const LIFECYCLE_SUBTAB_OF: Record<
 type InventoryPageState = ReturnType<typeof useInventoryPage>;
 
 /**
- * The Register pane — the catalog, its filters, its table and every dialog the
- * table's row actions open.
+ * The pane's name and its two page actions.
  *
- * Split out of `InventoryPage` because it is one self-contained half of that
- * page: it reads the hook's result and nothing else, and the page above it adds
- * only the tab bar, the heading and the Records pane. It is a component and not
- * a chunk of markup inlined in the parent for the same reason the two panes are
- * two components — a 300-line function is a page and its half at once, and
- * neither can be read without the other in the way.
+ * Its own component because the pane is a stack of five concerns and this is the
+ * one that is not a filter, a notice or a dialog: it is the pane's identity, and
+ * it is the only place on the page that names what the reader is looking at.
  */
-const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
-  <section
-    aria-labelledby="inventory-register-heading"
-    className="flex flex-col gap-4"
-  >
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div>
-        {/*
-          The pane's name, and an `h2` rather than the `h1` this used to be.
-          The page's own `h1` sits above the tab bar, so it survives a change
-          of pane, and the heading a screen-reader user hears on entering this
-          pane is "Register" — which is what the tab they just activated is
-          called, rather than the name of a sibling screen.
-        */}
-        <h2
-          id="inventory-register-heading"
-          className="font-heading text-2xl font-semibold"
-        >
-          Register
-        </h2>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {/*
-          "Categories", not "Store categories". The empty-state copy below tells
-          the user to look for "Seed categories", and the button beside it used
-          to be called "Store categories" — a fourth name for the same thing,
-          and a verb phrase that reads as an action on the categories rather
-          than a way in to them. This opens the panel that seeds, renames and
-          removes them; the seed action inside it says what it does.
-        */}
-        <Button
-          variant="outline"
-          onClick={() => page.handleCategoriesOpenChange(true)}
-          data-icon="inline-start"
-        >
-          <IconCategory data-icon="inline-start" />
-          Categories
-        </Button>
-        <Button onClick={page.handleCreateItem} data-icon="inline-start">
-          <IconPlus data-icon="inline-start" />
-          Register item
-        </Button>
-      </div>
+const RegisterPaneHeader = ({ page }: { page: InventoryPageState }) => (
+  <div className="flex flex-wrap items-start justify-between gap-2">
+    <div>
+      {/*
+        The pane's name, and an `h2` rather than the `h1` this used to be.
+        The page's own `h1` sits above the tab bar, so it survives a change
+        of pane, and the heading a screen-reader user hears on entering this
+        pane is "Register" — which is what the tab they just activated is
+        called, rather than the name of a sibling screen.
+      */}
+      <h2
+        id="inventory-register-heading"
+        className="font-heading text-2xl font-semibold"
+      >
+        Register
+      </h2>
     </div>
+    <div className="flex flex-wrap gap-2">
+      {/*
+        "Categories", not "Store categories". The empty-state copy below tells
+        the user to look for "Seed categories", and the button beside it used
+        to be called "Store categories" — a fourth name for the same thing,
+        and a verb phrase that reads as an action on the categories rather
+        than a way in to them. This opens the panel that seeds, renames and
+        removes them; the seed action inside it says what it does.
+      */}
+      <Button
+        variant="outline"
+        onClick={() => page.handleCategoriesOpenChange(true)}
+        data-icon="inline-start"
+      >
+        <IconCategory data-icon="inline-start" />
+        Categories
+      </Button>
+      <Button onClick={page.handleCreateItem} data-icon="inline-start">
+        <IconPlus data-icon="inline-start" />
+        Register item
+      </Button>
+    </div>
+  </div>
+);
 
+/**
+ * The two things this screen can know and not know, side by side.
+ *
+ * They are one component because they are one pair of questions, and the answer to
+ * each is the *absence* of the other: a store with no categories cannot have an
+ * item created, and a store whose categories could not be read is in a completely
+ * different position from one that has none. Rendering them in one place is what
+ * makes it obvious that the first is a rule and the second is a failure, and it is
+ * why the first is suppressed when the second is true.
+ */
+const RegisterPaneNotices = ({ page }: { page: InventoryPageState }) => (
+  <>
     {/*
       The one standing condition this screen can be in, stated as a rule rather
       than as a failure. A store with no categories cannot have an item created
       at all — `createItem` requires a `categoryId` behind a `restrict` foreign
       key — so this is not decoration: it names the blocker, and it disappears
       on its own once the categories exist rather than needing to be dismissed.
+
+      **And it is not shown when the categories could not be *read*.** An empty
+      response and a failed response are the same `[]` in this component's hands,
+      and this notice is a confident sentence about the school: "this store has
+      no categories yet". Printing it because a request timed out tells a
+      storekeeper with a full taxonomy to open a panel and seed eight categories
+      that are already there. The failure gets its own notice below, which says
+      what it does not know rather than what it does.
     */}
-    {page.categories.length === 0 && !page.isCategoriesLoading ? (
+    {page.categories.length === 0 &&
+    !page.isCategoriesLoading &&
+    !page.categoriesError ? (
       <InventoryInlineNotice
         tone="warning"
         title="This store has no categories yet"
@@ -1393,117 +1693,66 @@ const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
       />
     ) : null}
 
-    <InventoryStatCards stats={page.stats} isLoading={page.isStatsLoading} />
+    {/*
+      The partial case, and it is the one this screen can be in that is not a
+      *state* of the store. `categories.list` failed while the register itself
+      loaded perfectly, so the table below is complete and correct while every
+      category picker, the category filter and the item form's category field are
+      reading an empty list. A notice that names the failure and says what is
+      affected is the difference between "the register is broken" and "the filter
+      above the table is not showing you its options".
+    */}
+    {page.categoriesError ? (
+      <InventoryInlineNotice
+        tone="danger"
+        title="The store's categories could not be read"
+        description={`${formatApiErrorMessage(page.categoriesError, "The category list could not be loaded")} The items below are unaffected, but the category filter, the Categories panel and the category field on the item form have nothing to show until this is retried.`}
+      />
+    ) : null}
 
     {/*
-      The "No manager" card's way in — see the note beside the button.
-
-      It is a toggle rather than a one-shot "show me" for the same reason the
-      filter bar's "Low stock only" is a toggle: it is a *filter*, so it needs
-      an off that the user can see and press, and `aria-pressed` states that
-      without borrowing a checkbox for the state. The icon is the card's own
-      (`IconUserOff` in `shared/inventory-stats.tsx`), so the association
-      between this control and the figure above it is by picture as well as by
-      position.
+      The summary row's holes, named. `InventoryStatCards` takes one `isLoading`
+      for seven figures, so a single failed query blanks all seven rather than
+      printing a `0` for the two it could not read — and this notice is what says
+      **which** figures are missing, so a skeleton is never mistaken for a
+      register that is merely busy. The retry re-requests all three, because
+      `Borrowed` and `Low stock` come from their own round trips and either can
+      be the one that failed.
     */}
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <Button
-        type="button"
-        variant={page.filters.unassignedOnly ? "default" : "outline"}
-        aria-pressed={page.filters.unassignedOnly}
-        onClick={() =>
-          page.handleUnassignedOnlyChange(!page.filters.unassignedOnly)
-        }
-        data-icon="inline-start"
-      >
-        <IconUserOff data-icon="inline-start" />
-        No manager only
-      </Button>
-      {page.filters.unassignedOnly ? (
-        <p className="text-muted-foreground text-sm">
-          {buildUnassignedScopeNote(
-            page.resultCount ?? 0,
-            page.loadedCount !== undefined &&
-              page.totalCount !== undefined &&
-              page.loadedCount < page.totalCount
-          )}
-        </p>
-      ) : null}
-    </div>
-
-    <InventoryFilterBar
-      {...page.filters}
-      onChange={page.handleFiltersChange}
-      onReset={page.handleFiltersReset}
-      categories={page.categories}
-      resultCount={page.resultCount}
-      totalCount={page.registerTotal}
-    />
-
-    {/*
-      The one bulk action a ticked row offers, and it only appears once
-      something is ticked — an always-visible "Download QR sheet" button
-      that does nothing until a row is selected is a control offered to
-      somebody who has not yet done the thing it needs.
-    */}
-    {page.selectedIds.size > 0 ? (
-      <div className="bg-primary/8 border-primary/20 flex flex-wrap items-center gap-3 border p-3">
-        <p className="text-sm font-medium">
-          {page.selectedIds.size} item{page.selectedIds.size === 1 ? "" : "s"}{" "}
-          selected
-        </p>
+    {page.statsProblem ? (
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <InventoryInlineNotice
+            tone="danger"
+            title={`The register's summary could not be read: ${page.statsProblem}`}
+            description={`${page.statsError ?? ""} Those figures are left blank rather than shown as zero. The items in the table below are unaffected.`}
+          />
+        </div>
         <Button
           type="button"
+          variant="outline"
           size="sm"
-          onClick={page.handleDownloadQrSheet}
-          disabled={page.isExportingQrSheet}
+          onClick={page.handleRetryStats}
           data-icon="inline-start"
         >
-          <IconQrcode data-icon="inline-start" />
-          {page.isExportingQrSheet ? "Building sheet…" : "Download QR sheet"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={page.handleClearSelection}
-        >
-          Clear selection
+          <IconRefresh data-icon="inline-start" />
+          Try the summary again
         </Button>
       </div>
     ) : null}
+  </>
+);
 
-    <InventoryTable
-      items={page.items}
-      totalCount={page.registerTotal}
-      isLoading={page.isItemsLoading}
-      isFiltered={page.isFiltered}
-      error={page.itemsError}
-      onRetry={page.handleRetryItems}
-      onClearFilters={page.handleFiltersReset}
-      hasCategories={page.categories.length > 0}
-      isSeedPending={page.isSeedPending}
-      onSeedCategories={page.handleSeedCategories}
-      onCreateItem={page.handleCreateItem}
-      onOpenItem={page.handleOpenItem}
-      onViewCustody={page.handleOpenItem}
-      onTransferCustody={page.handleTransferCustody}
-      onAssignManager={page.handleAssignManager}
-      onTransferOwnership={page.handleTransferOwnership}
-      onReclaimCustody={page.handleReclaimCustody}
-      onTakeItem={page.handleTakeItem}
-      onReleaseCustody={page.handleReleaseCustody}
-      onEditItem={page.handleEditItem}
-      onRetireItem={page.handleRetireItem}
-      isRetirePending={page.isRetirePending}
-      onRestoreItem={page.handleRestoreItem}
-      isRestorePending={page.isRestorePending}
-      selectedIds={page.selectedIds}
-      selectableIds={page.selectableIds}
-      onToggleSelect={page.handleToggleSelect}
-      onToggleSelectAll={page.handleToggleSelectAll}
-    />
-
+/**
+ * Every dialog the register's row actions open, in one place.
+ *
+ * Its own component for the same reason the table mounts its four dialogs beside
+ * itself: a dialog is state, state is not markup, and a pane whose body is half
+ * dialog props cannot be read as a layout. It reads the hook's result and nothing
+ * else, exactly like the pane.
+ */
+const RegisterPaneDialogs = ({ page }: { page: InventoryPageState }) => (
+  <>
     <InventoryItemDialogs
       categories={page.categories}
       selectedItem={page.selectedItem}
@@ -1570,6 +1819,163 @@ const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
       isSubmitting={page.isExportingQrSheet}
       onSubmit={page.handleQrSheetSubmit}
     />
+  </>
+);
+
+/**
+ * The Register pane — the catalog, its filters, its table and every dialog the
+ * table's row actions open.
+ *
+ * Split out of `InventoryPage` because it is one self-contained half of that
+ * page: it reads the hook's result and nothing else, and the page above it adds
+ * only the tab bar, the heading and the Records pane. It is a component and not
+ * a chunk of markup inlined in the parent for the same reason the two panes are
+ * two components — a 300-line function is a page and its half at once, and
+ * neither can be read without the other in the way.
+ *
+ * **And it is four components, because it grew to one too many.** The header, the
+ * notices, the filter row and the dialogs are four different reasons for markup to
+ * exist on this page, and a reader looking for "which query failed" should not have
+ * to read past a form's prop list to find it. `registerLabel` comes in as a prop
+ * rather than being built from the hook because it needs the academic year, which
+ * `InventoryPage` reads from the route and `useInventoryPage` does not: the year is
+ * the spine of this app's navigation and a hook that reached for it would be a
+ * second address for the same fact.
+ */
+const InventoryRegisterPane = ({
+  page,
+  registerLabel,
+}: {
+  page: InventoryPageState;
+  registerLabel: string;
+}) => (
+  <section
+    aria-labelledby="inventory-register-heading"
+    className="flex flex-col gap-4"
+  >
+    <RegisterPaneHeader page={page} />
+
+    <RegisterPaneNotices page={page} />
+
+    <InventoryStatCards stats={page.stats} isLoading={page.isStatsLoading} />
+
+    {/*
+      The "No manager" card's way in — see the note beside the button.
+
+      It is a toggle rather than a one-shot "show me" for the same reason the
+      filter bar's "Low stock only" is a toggle: it is a *filter*, so it needs
+      an off that the user can see and press, and `aria-pressed` states that
+      without borrowing a checkbox for the state. The icon is the card's own
+      (`IconUserOff` in `shared/inventory-stats.tsx`), so the association
+      between this control and the figure above it is by picture as well as by
+      position.
+    */}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <Button
+        type="button"
+        variant={page.filters.unassignedOnly ? "default" : "outline"}
+        aria-pressed={page.filters.unassignedOnly}
+        onClick={() =>
+          page.handleUnassignedOnlyChange(!page.filters.unassignedOnly)
+        }
+        data-icon="inline-start"
+      >
+        <IconUserOff data-icon="inline-start" />
+        No manager only
+      </Button>
+      {page.filters.unassignedOnly ? (
+        <p className="text-muted-foreground text-sm">
+          {buildUnassignedScopeNote(
+            page.resultCount ?? 0,
+            page.loadedCount !== undefined &&
+              page.totalCount !== undefined &&
+              page.loadedCount < page.totalCount
+          )}
+        </p>
+      ) : null}
+    </div>
+
+    <InventoryFilterBar
+      {...page.filters}
+      onChange={page.handleFiltersChange}
+      onReset={page.handleFiltersReset}
+      categories={page.categories}
+      resultCount={page.resultCount}
+      totalCount={page.registerTotal}
+    />
+
+    {/*
+      The one bulk action a ticked row offers, and it only appears once something is
+      ticked — an always-visible download button that does nothing until a row is
+      selected is a control offered to somebody who has not yet done the thing it
+      needs.
+
+      **It is its own component, and it states the number of rows the action will
+      touch.** The markup that was here said "5 items selected" beside a button that
+      said "Download QR sheet", and both numbers were the reader's *ticks* — so a
+      filter that had moved four of them off the page, or a row that another clerk
+      had retired, produced a sheet with fewer labels than the count beside the
+      button promised. See `RegisterSelectionBar` for the full reconciliation; the
+      short form is that the button's label is the number of labels that will be on
+      the sheet, and it cannot be read past.
+    */}
+    {page.selectedIds.size > 0 ? (
+      <RegisterSelectionBar
+        selectedCount={page.selection.selectedCount}
+        labelableCount={page.selection.labelableCount}
+        retiredCount={page.selection.retiredCount}
+        hiddenCount={page.selection.hiddenCount}
+        missingCount={page.selection.missingCount}
+        isPending={page.isExportingQrSheet}
+        onDownload={page.handleDownloadQrSheet}
+        onClear={page.handleClearSelection}
+      />
+    ) : null}
+
+    {/*
+      Whether the store *has* categories is the only question the seeder needs, and
+      a failed `categories.list` must not be read as "it has none": seeding on top
+      of a timed-out read is a write offered because a read failed, and the
+      register's own empty state would be explaining a first-run problem to a school
+      that has been running for years.
+    */}
+    <InventoryTable
+      items={page.items}
+      totalCount={page.registerTotal}
+      isLoading={page.isItemsLoading}
+      isFiltered={page.isFiltered}
+      error={page.itemsError}
+      isRetrying={page.isItemsRetrying}
+      onRetry={page.handleRetryItems}
+      onClearFilters={page.handleFiltersReset}
+      hasCategories={
+        page.categories.length > 0 || Boolean(page.categoriesError)
+      }
+      isSeedPending={page.isSeedPending}
+      onSeedCategories={page.handleSeedCategories}
+      onCreateItem={page.handleCreateItem}
+      registerLabel={registerLabel}
+      filterSummary={page.filterSummary}
+      onOpenItem={page.handleOpenItem}
+      onViewCustody={page.handleOpenItem}
+      onTransferCustody={page.handleTransferCustody}
+      onAssignManager={page.handleAssignManager}
+      onTransferOwnership={page.handleTransferOwnership}
+      onReclaimCustody={page.handleReclaimCustody}
+      onTakeItem={page.handleTakeItem}
+      onReleaseCustody={page.handleReleaseCustody}
+      onEditItem={page.handleEditItem}
+      onRetireItem={page.handleRetireItem}
+      isRetirePending={page.isRetirePending}
+      onRestoreItem={page.handleRestoreItem}
+      isRestorePending={page.isRestorePending}
+      selectedIds={page.selectedIds}
+      selectableIds={page.selectableIds}
+      onToggleSelect={page.handleToggleSelect}
+      onToggleSelectAll={page.handleToggleSelectAll}
+    />
+
+    <RegisterPaneDialogs page={page} />
   </section>
 );
 
@@ -1578,6 +1984,18 @@ export const InventoryPage = ({ section }: { section: InventorySection }) => {
   const year = useActiveYear();
   const tab = section === "register" ? "register" : "records";
   const page = useInventoryPage();
+
+  /**
+   * The table's own name, and it carries the year.
+   *
+   * The page's `<h1>` says "Inventory" and the pane's `<h2>` says "Register", and
+   * neither of them is available to a screen reader reading the table cell by cell —
+   * both are outside the table, and both are landmarks rather than names. This is
+   * the string the table's `<caption>` is built from, and the year is in it because
+   * the academic year is the spine of this app's navigation: two registers, two
+   * years, one route, and a table whose name does not say which one it is.
+   */
+  const registerLabel = `Inventory register, academic year ${year}`;
 
   const goToTab = useCallback(
     (next: unknown) => {
@@ -1642,7 +2060,7 @@ export const InventoryPage = ({ section }: { section: InventorySection }) => {
         it did before it was mounted inside a tab.
       */}
       <TabsContent value="register" className="text-base/relaxed">
-        <InventoryRegisterPane page={page} />
+        <InventoryRegisterPane page={page} registerLabel={registerLabel} />
       </TabsContent>
 
       {/**
@@ -1655,15 +2073,18 @@ export const InventoryPage = ({ section }: { section: InventorySection }) => {
        * opened — which is also why the register's first paint is not paying
        * for them.
        *
-       * `aria-label` rather than `aria-labelledby`: the pane's own heading is "Stock
-       * movements" and it is rendered by `lifecycle-tabs.tsx`, one layer down and
-       * in a file this wave does not own. Labelling the section by string keeps the
-       * landmark name correct today; the day that heading is demoted from `<h1>` to
-       * `<h2>` (which is the other half of the heading fix, and the same edit) the
-       * label should point at its id instead.
+       * `aria-labelledby`, pointing at the pane's own heading, and this is the
+       * other half of a fix that used to be split across two files. The heading was
+       * an `<h1>` and the section was labelled by the string "Records", so a
+       * screen reader was given a landmark called "Records" containing a
+       * level-one heading called "Stock movements", inside a page whose own
+       * level-one heading is "Inventory": two `h1`s and a landmark name that
+       * matched neither. The heading is now an `<h2>` (see the outline argument in
+       * `lifecycle-tabs.tsx`) and carries an id, so the section can be named by the
+       * element that names itself and the string can go.
        */}
       <TabsContent value="records" className="text-base/relaxed">
-        <section aria-label="Records">
+        <section aria-labelledby={LIFECYCLE_HEADING_ID}>
           <InventoryLifecycleTabs
             activeSubtab={
               section === "register" ? "loans" : LIFECYCLE_SUBTAB_OF[section]

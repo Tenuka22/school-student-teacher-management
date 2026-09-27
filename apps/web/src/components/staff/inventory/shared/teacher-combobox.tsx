@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
+import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Combobox,
   ComboboxContent,
@@ -15,57 +16,258 @@ import {
   FieldError,
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
-import { IconIdBadge } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconIdBadge,
+  IconRefresh,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import type * as React from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import type { AssignableStaffOption } from "@/components/staff/inventory/inventory-types";
+import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
+
+/*
+ * Three of this file's exports are not components: `useAssignableStaffOptions` is
+ * a hook (Fast Refresh tolerates those), and `nameCollisions` and
+ * `PickerListStatus`'s supporting vocabulary are pure functions. The rule exists
+ * to stop a module holding component state *and* a changing export, because
+ * editing the second then throws the first away. `nameCollisions` is a pure
+ * function over a list — there is no state in this module to lose — and it is
+ * exported rather than inlined because three surfaces in this folder have to
+ * count duplicate names the same way. See the note above `nameCollisions`.
+ */
+/* oxlint-disable react-doctor/only-export-components -- pure name-counting vocabulary shared with the filter bar and the borrower picker; no module state */
 
 const DEBOUNCE_MS = 250;
 
 /**
  * A stand-in row for a selected member of staff who is not on the loaded page.
  *
- * Built as a whole `AssignableStaffOption` rather than cast into one, so the
- * fields the option carries and this component does not read — `staffCategory`,
- * `employmentStatus`, `currentRole` — cannot drift away from the router's
- * projection the way a partial object with a cast would.
+ * Built as a **whole** `AssignableStaffOption` — no cast, no partial — so it
+ * cannot drift away from the router's projection the way a partial object with an
+ * `as` would. It is also, now, *two fields*: `orpc.inventory.options.assignableStaff`
+ * selects `id` and `name` off the `user` table and nothing else, so an option has
+ * no room for anything else and this object has nothing to invent.
  *
- * `staffCategory` is a placeholder and nothing here reads it: the column is
- * `notNull` and its type is the closed `StaffCategory` pair, so there is no
- * "unknown" to put in it, and the row is labelled as not-loaded rather than
- * pretending the category is known. `employmentStatus` and `currentRole` *are*
- * nullable, and are null because they are genuinely unknown.
+ * The name says the two true things and neither of the untrue one: the id is
+ * real, and the name is not loaded. It does not print a plausible colleague's
+ * name, and it does not print an empty field.
  */
+const STAND_IN_NAME = "Chosen — not on this page of names";
+
 const unlistedStaff = (id: string): AssignableStaffOption => ({
   id,
-  name: "Selected member of staff",
-  serviceNo: null,
-  staffCategory: "teacher",
-  employmentStatus: null,
-  currentRole: null,
+  name: STAND_IN_NAME,
 });
+
+/** Whether a name is the stand-in's, which the row styles differently. */
+const isStandInName = (name: string): boolean => name === STAND_IN_NAME;
+
+/**
+ * How many of the loaded people answer to one name, for the names more than one
+ * answers to.
+ *
+ * ## This exists because the badge number is not on the wire
+ *
+ * `orpc.inventory.options.assignableStaff` used to project
+ * `serviceNo` — the badge number off `staff.teacherServiceNo` — and these rows
+ * printed it precisely because a school reliably has several staff with similar
+ * names: "Mrs. Perera" is not a disambiguator when there are three of them, and
+ * `EMP-0417` is. **The commit that moved inventory identity from `staff` rows to
+ * `user` login rows dropped it from the projection**, and it is no longer on the
+ * response: the procedure selects `id` and `name` off `user` and returns.
+ *
+ * So the disambiguation the badge number used to carry has to come from the two
+ * fields that *are* on the wire. Counting the loaded options by name gives the
+ * one answer that is both true and useful — **"three people on this list answer
+ * to this name"** — and, unlike a hardcoded placeholder value, it is a fact
+ * about the response in front of the user rather than a guess about the column
+ * the response used to have.
+ *
+ * Normalized on `trim().toLowerCase()` because the same person is written
+ * "Perera" and "perera" in two places in a school's data, and a collision count
+ * that misses those is a count that is wrong in the safe-looking direction.
+ *
+ * Exported because three surfaces in this folder have to answer the same
+ * question — the combobox row, the filter bar's custodian select and the
+ * borrower's staff mode — and three copies of the grouping is three places for
+ * them to disagree about how a name is normalized.
+ */
+export const nameCollisions = (
+  options: readonly AssignableStaffOption[]
+): ReadonlyMap<string, number> => {
+  const counts = new Map<string, number>();
+
+  for (const option of options) {
+    const key = option.name.trim().toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return new Map(
+    [...counts].filter(([, count]) => count > 1) as [string, number][]
+  );
+};
+
+/**
+ * The sentence under a name that is not unique, and nothing at all for one that
+ * is.
+ *
+ * A row with no second line is a normal row; a row that always carries one would
+ * be a form to fill in, and "no service number on record" on all forty rows was
+ * noise that said nothing about any of them. The second line appears exactly when
+ * it has something to say, which is when the name alone is not enough to pick
+ * somebody out.
+ */
+const collisionNote = (count: number): string =>
+  `${count} people on this list share this name`;
+
+/**
+ * The second line under a row, and nothing at all when there is nothing to say.
+ *
+ * Its own function rather than a nested ternary at the call site, because the
+ * three cases are genuinely three and reading them inline is how the stand-in
+ * row ends up wearing a collision count it did not earn.
+ */
+const staffRowNote = (isStandIn: boolean, shared: number): string | null => {
+  if (isStandIn) {
+    return "Kept from an earlier edit — its name is not on this page";
+  }
+
+  return shared > 1 ? collisionNote(shared) : null;
+};
+
+/**
+ * What a picker's list says when it has nothing to list.
+ *
+ * ## The three states, and why they cannot be collapsed into two
+ *
+ * A combobox whose popup reads "No members of staff found" is making a claim
+ * about the College's staff roll. **A request that timed out, was refused or hit
+ * a dropped LAN connection produces the same empty list**, so the two are
+ * indistinguishable at the point of use, and the empty branch is the one that
+ * gets believed: a clerk who cannot load the custodian list concludes that no
+ * member of staff can be a custodian, and either picks a wrong name or gives up.
+ *
+ * So this component names all three:
+ *
+ * - **loading** — a sentence, not a spinner and not the empty claim;
+ * - **failed** — what could not be read, through `formatApiErrorMessage` rather
+ *   than `error.message`, plus a real retry. A failed read is the one case where
+ *   a button is genuinely the right control: the overwhelmingly common cause is
+ *   a dropped connection on a school LAN and the correct response is to try again;
+ * - **genuinely empty** — only reached on a request that succeeded and returned
+ *   nothing, which is the one time "no … found" is a fact.
+ *
+ * `subject` is what the read was *of*, so the failure sentence names the thing
+ * rather than the symptom: "Could not load the list of staff who may hold school
+ * property" tells a clerk which of four identical-looking pickers on the dialog
+ * is broken.
+ */
+export const PickerListStatus: React.FC<{
+  isFetching: boolean;
+  error: unknown;
+  onRetry: () => void;
+  /** The genuinely-empty sentence, which is only ever true on a resolved read. */
+  empty: string;
+  /** What the list is of, for the failure sentence. */
+  subject: string;
+  loading?: string;
+}> = ({ isFetching, error, onRetry, empty, subject, loading = "Loading…" }) => {
+  if (error) {
+    return (
+      <div
+        className="text-destructive flex flex-col items-start gap-2 px-3 py-4 text-xs"
+        role="alert"
+      >
+        <span className="flex items-start gap-1.5">
+          <IconAlertTriangle
+            aria-hidden="true"
+            className="mt-px size-3.5 shrink-0"
+          />
+          {formatApiErrorMessage(error, `Could not load ${subject}`)}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onRetry}
+          data-icon="inline-start"
+        >
+          <IconRefresh aria-hidden="true" data-icon="inline-start" />
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (isFetching) {
+    /*
+     * `<output>`, not `<p role="status">`. `output` is the semantic element for a
+     * region of a form that is a *result*, which is exactly what "still searching"
+     * is, and it carries the live-region behaviour without the role — so the
+     * announcement is the element's rather than an attribute bolted onto a
+     * paragraph that means something else.
+     */
+    return (
+      <output
+        className="text-muted-foreground block px-3 py-4 text-xs"
+        aria-live="polite"
+      >
+        {loading}
+      </output>
+    );
+  }
+
+  return <p className="text-muted-foreground px-3 py-4 text-xs">{empty}</p>;
+};
 
 /**
  * The people a school property may be given to.
  *
  * `orpc.inventory.options.assignableStaff` is a **security surface, not a display
  * filter** — it is the source for every manager, custodian and borrower field in
- * the feature, so its rows are exactly the staff a procedure would accept
- * (`assertStaffIsAssignable` enforces the same predicate on the write path:
- * employment `active` or unset, with no restriction on `staffCategory`, so the
- * bursar and the lab attendant are in it alongside the teaching staff). Reading
- * it in one place means the pickers cannot drift apart from what the server will
- * allow.
+ * the feature, so its rows are exactly the staff a procedure would accept. The
+ * gate is `adminProcedure` and the predicate is the one `assertStaffIsAssignable`
+ * enforces on the write path, so the two cannot offer and accept different sets.
+ *
+ * ## It is an identity list, and the row is `{ id, name }`
+ *
+ * It used to be a *staff* list — joined to `staff`, carrying `staffCategory`,
+ * `employmentStatus`, `serviceNo` and the login `currentRole`, and filtered on
+ * employment. It is now a list of **login accounts** off the `user` table: the
+ * four `*_staff_id` columns on the inventory tables hold a `user.id`, the
+ * procedures take a `userId`, and the write guard (`assertStaffIsAssignable`)
+ * reads `user` too. Two fields come back, and the components in this folder read
+ * both of them.
+ *
+ * The consequence a reader of this folder should hold onto: **`name` is the only
+ * thing that distinguishes two people on this list**, because the badge number
+ * is not on the response any more. `nameCollisions` above is what stands in its
+ * place.
+ *
+ * ## `isLoading` versus `isFetching`, and both against `error`
+ *
+ * All three are handed back because the three states are not the same state:
+ * `isLoading` is the first page, `isFetching` is *any* request including the one
+ * behind the next keystroke, and `error` is the one that must never be allowed
+ * to render as "no members of staff found". `error` is truthy only until a
+ * successful refetch replaces it, which is what `refetch` is for.
  *
  * The query is left enabled for an empty search so the combobox opens with the
- * alphabetically-first page rather than an empty box that looks broken.
+ * first page rather than an empty box that looks broken.
  */
 export const useAssignableStaffOptions = (
   search?: string
-): { options: AssignableStaffOption[]; isLoading: boolean } => {
+): {
+  options: AssignableStaffOption[];
+  isLoading: boolean;
+  isFetching: boolean;
+  error: unknown;
+  refetch: () => void;
+} => {
   const query = useQuery(
     orpc.inventory.options.assignableStaff.queryOptions({
       input: { search: search || undefined },
@@ -74,17 +276,18 @@ export const useAssignableStaffOptions = (
 
   const options = useMemo(() => query.data ?? [], [query.data]);
 
-  return { options, isLoading: query.isLoading };
-};
+  const refetch = useCallback(() => {
+    void query.refetch();
+  }, [query]);
 
-/** The badge number beside the name, or nothing at all when the record has none. */
-const ServiceNoLine: React.FC<{ serviceNo: string | null }> = ({
-  serviceNo,
-}) => (
-  <span className="text-muted-foreground truncate text-xs">
-    {serviceNo ? `Service no. ${serviceNo}` : "No service number on record"}
-  </span>
-);
+  return {
+    options,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error,
+    refetch,
+  };
+};
 
 export const StaffComboboxField: React.FC<{
   value: string | null;
@@ -142,7 +345,20 @@ export const StaffComboboxField: React.FC<{
     return () => clearTimeout(timeout);
   }, [query]);
 
-  const { options, isLoading } = useAssignableStaffOptions(debouncedQuery);
+  const {
+    options,
+    isLoading,
+    isFetching,
+    error: loadError,
+    refetch,
+  } = useAssignableStaffOptions(debouncedQuery);
+
+  /**
+   * Names more than one loaded person answers to, and nothing for a name that is
+   * unique. Built over `options` rather than over `items` so the stand-in row
+   * below is never counted as a colleague.
+   */
+  const collisions = useMemo(() => nameCollisions(options), [options]);
 
   const selected = useMemo(
     () => options.find((option) => option.id === value) ?? null,
@@ -152,9 +368,9 @@ export const StaffComboboxField: React.FC<{
   /**
    * The selected member of staff can be outside the current page — the search box
    * holds a term, the page holds fifty names, and an item edited months later
-   * still has its manager. Injecting a placeholder row is what keeps the field
-   * from rendering as *empty* while a value is set, which reads as "nobody is
-   * assigned" and is the single most damaging thing this component could do.
+   * still has its manager. Injecting a stand-in row is what keeps the field from
+   * rendering as *empty* while a value is set, which reads as "nobody is assigned"
+   * and is the single most damaging thing this component could do.
    */
   const items = useMemo(
     () => (value && !selected ? [unlistedStaff(value), ...options] : options),
@@ -166,6 +382,16 @@ export const StaffComboboxField: React.FC<{
     [items, value]
   );
 
+  /**
+   * Placeholder shown in the box while a search is in flight, so the settled name
+   * does not vanish the moment a keystroke lands.
+   */
+  const searching = isLoading || isFetching;
+
+  const handleRetry = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
   return (
     <Field data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
@@ -176,9 +402,13 @@ export const StaffComboboxField: React.FC<{
         onInputValueChange={setQuery}
         itemToStringLabel={(item) => item?.name ?? ""}
         isItemEqualToValue={(a, b) => a?.id === b?.id}
-        // Filtering is the server's job: it matches name *and* service number
-        // and escapes LIKE wildcards, which a client-side filter over the
-        // current page would not.
+        /*
+         * Filtering is the server's job, and the reason it matters is the LIKE
+         * escape: `options.assignableStaff` matches `user.name` case-insensitively
+         * with `%` and `_` escaped, so a storekeeper typing an underscore into a
+         * name is not shown the whole establishment. A client-side filter over the
+         * current page would not do that.
+         */
         filter={null}
       >
         <ComboboxInput
@@ -188,20 +418,45 @@ export const StaffComboboxField: React.FC<{
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
+          aria-busy={searching || undefined}
         />
         <ComboboxContent>
           <ComboboxEmpty>
-            {isLoading ? "Searching..." : "No members of staff found"}
+            <PickerListStatus
+              isFetching={isFetching}
+              error={loadError}
+              onRetry={handleRetry}
+              empty="No members of staff found"
+              subject="the list of staff who may hold school property"
+              loading="Searching the staff list…"
+            />
           </ComboboxEmpty>
           <ComboboxList>
-            {items.map((option) => (
-              <ComboboxItem key={option.id} value={option}>
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate font-medium">{option.name}</span>
-                  <ServiceNoLine serviceNo={option.serviceNo} />
-                </div>
-              </ComboboxItem>
-            ))}
+            {items.map((option) => {
+              const standIn = isStandInName(option.name);
+              const shared =
+                collisions.get(option.name.trim().toLowerCase()) ?? 0;
+              const note = staffRowNote(standIn, shared);
+
+              return (
+                <ComboboxItem key={option.id} value={option}>
+                  <div className="flex min-w-0 flex-col">
+                    <span
+                      className={`truncate font-medium${
+                        standIn ? " text-muted-foreground italic" : ""
+                      }`}
+                    >
+                      {option.name}
+                    </span>
+                    {note ? (
+                      <span className="text-muted-foreground truncate text-xs">
+                        {note}
+                      </span>
+                    ) : null}
+                  </div>
+                </ComboboxItem>
+              );
+            })}
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
@@ -211,14 +466,18 @@ export const StaffComboboxField: React.FC<{
         manager, which is a real and audited change; a field that simply looked
         blank would make the difference between "leave it alone" and "remove the
         current manager" invisible, and the form could not tell which one the
-        user meant. So the cleared state is stated on the face of the field.
+        user meant. So the cleared state is stated on the face of the field — and
+        it is a live region, because a cleared field is a change the user made
+        with the mouse and is otherwise the one edit on this control that is
+        never spoken.
       */}
       {allowClear && !value ? (
         <Badge
           variant="outline"
           className="text-muted-foreground w-fit border-dashed"
+          aria-live="polite"
         >
-          <IconIdBadge />
+          <IconIdBadge aria-hidden="true" />
           None selected
         </Badge>
       ) : null}

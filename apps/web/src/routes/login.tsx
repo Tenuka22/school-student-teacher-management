@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import Loader from "@/components/loader";
-import { LoginForm } from "@/components/login-form";
+import { LoginForm, LoginSkeleton } from "@/components/login-form";
+import { SITE_NAME, SITE_TAGLINE, pageSeo } from "@/functions/get-site-origin";
 import { getUser } from "@/functions/get-user";
 import { redirectAwayFromSelf } from "@/lib/away-from-self";
 
@@ -15,7 +15,7 @@ const validateSearch = (search: Record<string, unknown>) =>
 
 export const Route = createFileRoute("/login")({
   component: LoginForm,
-  pendingComponent: Loader,
+  pendingComponent: LoginSkeleton,
   validateSearch,
   beforeLoad: async ({ location, search }) => {
     const session = await getUser();
@@ -24,4 +24,11 @@ export const Route = createFileRoute("/login")({
       await redirectAwayFromSelf(location.pathname);
     }
   },
+  head: ({ matches }) =>
+    pageSeo({
+      matches,
+      path: "/login",
+      title: `Sign in — ${SITE_NAME}`,
+      description: `Sign in to the ${SITE_TAGLINE} for ${SITE_NAME}, Galle. Teachers use their NIC number as the username; office staff use the username issued with their account.`,
+    }),
 });

@@ -96,6 +96,16 @@ const badgeCount = (count: number | undefined): string | undefined =>
 const ADMIN_SELF_NAV: NavItem[] = [];
 
 /**
+ * A four-digit year, and nothing else.
+ *
+ * The `$year` segment is a route param, so it arrives as whatever the address
+ * bar held. `useActiveYear` hands it over untyped, and `Number("2026a")` is
+ * `NaN` — which then went straight into the leave-queue read as a year to ask
+ * for. The `replaceYearInPath` guard in `lib/paths.ts` is the same test.
+ */
+const YEAR_SEGMENT = /^\d{4}$/u;
+
+/**
  * The three year facts every nav link and badge below is built from, resolved
  * once.
  *
@@ -107,6 +117,10 @@ const ADMIN_SELF_NAV: NavItem[] = [];
  * what the year-scoped roster reads take, blank rather than a wrong id when
  * there is no current year (which also disables those queries).
  *
+ * A year that is not a year is treated as no year at all, which lands the
+ * caller on the same path a page with no year in it takes: the workspace root
+ * the guard forwards. Silently building links from `NaN` was the alternative.
+ *
  * Three names in one return rather than three expressions in the component: this
  * is the shell's only year logic, and leaving it inline put six conditionals in
  * the one function that has to stay readable.
@@ -115,11 +129,14 @@ const resolveSidebarYear = (
   activeYear: string | undefined,
   currentYear: AcademicYear | undefined
 ) => {
-  const year =
-    activeYear ?? (currentYear ? String(currentYear.year) : undefined);
+  const urlYear =
+    activeYear !== undefined && YEAR_SEGMENT.test(activeYear)
+      ? activeYear
+      : undefined;
+  const year = urlYear ?? (currentYear ? String(currentYear.year) : undefined);
   return {
     year,
-    selectedYear: year === undefined ? currentYear?.year : Number(year),
+    selectedYear: urlYear === undefined ? currentYear?.year : Number(urlYear),
     currentYearId: currentYear?.id ?? "",
   };
 };
@@ -162,7 +179,56 @@ const useSidebarRole = (user: AppSidebarProps["user"]) => {
     isPrincipal: role === "principal",
     isLeader: role === "principal" || role === "vicePrincipal",
     currentYear,
+    // Every workspace link below is built from the active year, so until this
+    // read lands the links are not yet the ones that will be rendered. The
+    // navigation region says so rather than presenting a half-resolved set of
+    // destinations as if it were the real one.
+    yearsPending: yearsQuery.isPending,
   };
+};
+
+/**
+ * The year every link in the sidebar is scoped to, and the one function that
+ * turns a workspace plus a tail into an address.
+ *
+ * Both halves live together because the second one is meaningless without the
+ * first, and the failure they guard against is the same one: a link built
+ * without a year, or with one that is not a year.
+ */
+const useSidebarYear = (currentYear: AcademicYear | undefined) => {
+  // Read from the URL so the switcher and the nav never disagree mid-navigation.
+  const activeYear = useActiveYear();
+  const { year, selectedYear, currentYearId } = resolveSidebarYear(
+    activeYear,
+    currentYear
+  );
+
+  /**
+   * A workspace link that cannot address a route which does not exist.
+   *
+   * `yearPath` drops the year segment when there is none, which is exactly right
+   * for a workspace *root* — `/admin` is a real route and the `$year` guard
+   * forwards it to the active year — and wrong for anything below it.
+   * `/admin/users` matches no route, so a sidebar built that way offers a 404.
+   *
+   * That is not a hypothetical. `/account` is the one authenticated page with no
+   * year in its address, and the years read is still in flight (or has failed)
+   * on the first paint of it, so `year` is `undefined` and every link below is
+   * built without one. Dropping the sub-path instead degrades the link to the
+   * workspace root: a member clicks "Teachers", lands on the dashboard for the
+   * current year, and clicks again. What they must never be able to do is click
+   * a link that 404s — and the guard the switcher also depends on stays the one
+   * authority on which year is current, so this never fights it.
+   */
+  const workspaceLink = (base: HomeBase, ...rest: string[]): string => {
+    if (year === undefined) {
+      return yearPath(base, year);
+    }
+
+    return yearPath(base, year, ...rest);
+  };
+
+  return { year, selectedYear, currentYearId, workspaceLink };
 };
 
 interface SidebarGroupsProps {
@@ -285,17 +351,17 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   // and is confined to its own workspace, so `isAdmin` here means strictly
   // the non-leadership admin account — which is also exactly the tier the
   // academic-year writes sit on (`adminOnlyProcedure` is `requireRole("admin")`).
-  const { isAdmin, isDeputy, isLeader, isPrincipal, currentYear } =
-    useSidebarRole(user);
+  const {
+    isAdmin,
+    isDeputy,
+    isLeader,
+    isPrincipal,
+    currentYear,
+    yearsPending,
+  } = useSidebarRole(user);
 
-  // The academic year is a path segment on every workspace link, so a
-  // bookmarked page keeps its year across a refresh. Read it from the URL
-  // so the switcher and the nav never disagree mid-navigation.
-  const activeYear = useActiveYear();
-  const { year, selectedYear, currentYearId } = resolveSidebarYear(
-    activeYear,
-    currentYear
-  );
+  const { year, selectedYear, currentYearId, workspaceLink } =
+    useSidebarYear(currentYear);
 
   // The sidebar badge and the Teachers page must count the same people, so the
   // sidebar asks for the same year roster rather than the unscoped establishment.
@@ -323,12 +389,11 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     ...orpc.staff.listTeacherRequests.queryOptions(),
     enabled: isAdmin,
   });
-  const admin = (...rest: string[]) => yearPath("/admin", year, ...rest);
-  const teacher = (...rest: string[]) => yearPath("/teacher", year, ...rest);
-  const principal = (...rest: string[]) =>
-    yearPath("/principal", year, ...rest);
+  const admin = (...rest: string[]) => workspaceLink("/admin", ...rest);
+  const teacher = (...rest: string[]) => workspaceLink("/teacher", ...rest);
+  const principal = (...rest: string[]) => workspaceLink("/principal", ...rest);
   const deputy = (...rest: string[]) =>
-    yearPath("/deputy-principal", year, ...rest);
+    workspaceLink("/deputy-principal", ...rest);
 
   const home = resolveHome(isAdmin, isPrincipal, isDeputy);
 
@@ -344,16 +409,17 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   // from the seat's **own** workspace helper and never from `/admin`, so
   // neither seat can reach the other's area. `isPrincipal` is resolved once
   // here, in the one map below, rather than repeated as a ternary per entry.
+  const leadershipBase: HomeBase = isPrincipal
+    ? "/principal"
+    : "/deputy-principal";
   const leadershipLinks = isPrincipal
     ? {
         leave: principal("leaves"),
         attendance: principal("staff", "attendance"),
-        equipment: principal("equipment"),
       }
     : {
         leave: deputy("leaves"),
         attendance: deputy("staff", "attendance"),
-        equipment: deputy("equipment"),
       };
 
   /**
@@ -463,17 +529,21 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
    * deputy-principal) rather than one URL with a scroll hash: a real path
    * is bookmarkable, shareable and gives each section its own browser-history
    * entry, which a hash on a client-rendered page does not reliably survive
-   * a hard refresh on. All three routes render the identical page — see
-   * `MyEquipmentSection` in `my-equipment.tsx` — and differ only in which
-   * `id` they land already scrolled to.
+   * a hard refresh on. All three render the identical page and differ only in
+   * which `id` they land already scrolled to.
+   *
+   * Built through `workspaceLink` with the whole tail at once, never by
+   * appending to an already-built `equipment` URL: `${url}/in-charge` on a
+   * year-less `url` is `/teacher/in-charge`, which matches no route.
    */
-  const equipmentUrl = isLeader
-    ? leadershipLinks.equipment
-    : teacher("equipment");
+  const equipmentSection = (...section: string[]): string =>
+    isLeader
+      ? workspaceLink(leadershipBase, "equipment", ...section)
+      : workspaceLink("/teacher", "equipment", ...section);
   const inventoryNav: NavItem[] = [
-    { title: "Owned", url: `${equipmentUrl}/in-charge` },
-    { title: "Borrowed", url: `${equipmentUrl}/in-hands` },
-    { title: "Lent Out", url: `${equipmentUrl}/lent-out` },
+    { title: "Owned", url: equipmentSection("in-charge") },
+    { title: "Borrowed", url: equipmentSection("in-hands") },
+    { title: "Lent Out", url: equipmentSection("lent-out") },
   ];
 
   const academicNav: NavItem[] = [
@@ -485,10 +555,16 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     <Sidebar variant="inset" {...props}>
       <SidebarHeader className="gap-0 p-0">
         <div className="border-sidebar-primary/16 flex items-center gap-3 border-b px-4.5 py-4">
+          {/*
+            Decorative. The wordmark beside it already names the College in
+            text, so an `alt` here made a screen reader say it twice on every
+            page; `alt=""` keeps the image in the document and out of the
+            accessibility tree.
+          */}
           <img
-            src="/uploads/college-crest.png"
-            alt="St. Aloysius' College crest"
+            alt=""
             className="h-9.5 w-auto"
+            src="/uploads/college-crest.png"
           />
           <div className="min-w-0 leading-tight">
             <div className="text-sidebar-foreground truncate text-xs font-extrabold tracking-[0.04em]">
@@ -501,7 +577,12 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
         </div>
 
         <div className="border-sidebar-foreground/10 border-b px-3.5 pt-3.5 pb-3">
-          <div className="text-sidebar-foreground/50 mb-2 text-xs font-extrabold tracking-[0.18em]">
+          {/*
+            `/60` rather than `/50`: 12px extrabold is not large text under
+            WCAG, so it needs 4.5:1, and cream at half strength over the deep
+            green is 4.38:1. At 60% it is 5.66:1.
+          */}
+          <div className="text-sidebar-foreground/60 mb-2 text-xs font-extrabold tracking-[0.18em]">
             ACADEMIC YEAR
           </div>
           {/* The switcher's "set current" and "add year" are both
@@ -512,30 +593,40 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="gap-0 overflow-y-auto">
-        <SidebarGroups
-          isAdmin={isAdmin}
-          isLeader={isLeader}
-          usersUrl={admin("users")}
-          staffRequestsUrl={admin("teacher-requests")}
-          staffRequestsCount={
-            staffRequestsQuery.data
-              ? String(
-                  staffRequestsQuery.data.filter(
-                    (request) => request.emailVerified
-                  ).length
-                )
-              : undefined
-          }
-          platformNav={platformNav}
-          leadershipNav={leadershipNav}
-          staffNav={staffNav}
-          teacherNav={teacherNav}
-          inventoryNav={inventoryNav}
-          adminInventoryNav={adminInventoryNav}
-          adminSelfNav={ADMIN_SELF_NAV}
-          academicNav={academicNav}
-        />
+      {/*
+        The navigation landmark, and the only one in the document. It wraps the
+        groups rather than the whole sidebar so the brand block and the account
+        menu stay out of it. `aria-busy` covers the one read every destination
+        below depends on: until the years land, each one is temporarily the
+        workspace root rather than the page it names, and the region says it is
+        still resolving instead of passing that off as the real navigation.
+      */}
+      <SidebarContent className="gap-0">
+        <nav aria-busy={yearsPending} aria-label="Main">
+          <SidebarGroups
+            isAdmin={isAdmin}
+            isLeader={isLeader}
+            usersUrl={admin("users")}
+            staffRequestsUrl={admin("teacher-requests")}
+            staffRequestsCount={
+              staffRequestsQuery.data
+                ? String(
+                    staffRequestsQuery.data.filter(
+                      (request) => request.emailVerified
+                    ).length
+                  )
+                : undefined
+            }
+            platformNav={platformNav}
+            leadershipNav={leadershipNav}
+            staffNav={staffNav}
+            teacherNav={teacherNav}
+            inventoryNav={inventoryNav}
+            adminInventoryNav={adminInventoryNav}
+            adminSelfNav={ADMIN_SELF_NAV}
+            academicNav={academicNav}
+          />
+        </nav>
       </SidebarContent>
 
       <SidebarFooter className="border-sidebar-foreground/10 border-t px-3.5 py-3">
