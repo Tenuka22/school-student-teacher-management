@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { DEFAULT_TITLE, SITE_NAME } from "@/lib/page-title";
 import type { orpc } from "@/utils/orpc";
 
 import appCss from "../index.css?url";
@@ -21,22 +22,20 @@ export interface RouterAppContext {
 }
 
 const NotFound = () => (
-  <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-[#04220A] px-6 text-center text-[#FFF8E7]">
-    <p className="text-xs font-extrabold tracking-[0.46em] text-[#FFB203]">
+  <main className="surface-deep bg-surface-deep text-primary-foreground flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+    <p className="text-accent text-xs font-bold tracking-[0.24em]">
       CERTA VIRILITER
     </p>
-    <h1 className="font-heading m-0 text-[clamp(38px,7vh,72px)] leading-none font-semibold">
-      Page not found
-    </h1>
-    <p className="m-0 max-w-[46ch] text-sm leading-relaxed text-[#FFF8E7]/70">
+    <h1 className="type-display m-0">Page not found</h1>
+    <p className="text-primary-foreground/80 type-body m-0 max-w-[46ch]">
       That address does not match anything in the College system. It may have
       moved, or the link may be out of date.
     </p>
     <Link
       to="/"
-      className="mt-2 bg-[#FFB203] px-7 py-3 text-[13px] font-extrabold tracking-[0.06em] text-[#013405] transition-colors hover:bg-[#FFD45A]"
+      className="bg-accent text-foreground hover:bg-accent-hover mt-2 px-7 py-3 text-[0.9375rem] font-bold transition-colors"
     >
-      GO HOME
+      Go to the home page
     </Link>
   </main>
 );
@@ -59,7 +58,9 @@ const RootDocument = () => (
 );
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
-  head: () => ({
+  // `_notFound` marks the match that renders `notFoundComponent`; for an
+  // unmatched URL that is this root route, so the tab says so (WCAG 2.4.2).
+  head: ({ match }) => ({
     meta: [
       {
         charSet: "utf-8",
@@ -69,7 +70,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "My App",
+        title: match._notFound
+          ? `Page not found · ${SITE_NAME}`
+          : DEFAULT_TITLE,
       },
     ],
     links: [
@@ -78,6 +81,12 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         href: appCss,
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      // The font files themselves are served from gstatic.
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
       {
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400&display=swap",

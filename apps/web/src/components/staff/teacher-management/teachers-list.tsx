@@ -2,7 +2,6 @@ import { EMPLOYMENT_STATUSES } from "@school-student-teacher-management/db/const
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
-import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,11 +29,9 @@ import {
   IconSearch,
   IconFileExport,
   IconPlus,
-  IconAlertCircle,
   IconCalendarTime,
 } from "@tabler/icons-react";
-import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useMemo, useState } from "react";
 
 type Staff = typeof staff.$inferSelect;
 
@@ -58,8 +55,6 @@ interface TeachersListProps {
   onManageTimetableClick: (teacher: Staff) => void;
   onExportClick: () => void;
 }
-
-const getPluralSuffix = (count: number) => (count === 1 ? "" : "s");
 
 const getStatusColor = (
   status: string | null
@@ -90,45 +85,46 @@ const getStatusColor = (
 
 const TeacherRow = ({
   teacher,
-  isSelected,
-  onSelect,
   onEditClick,
   onViewClick,
   onDeleteClick,
   onManageTimetableClick,
 }: {
   teacher: Staff;
-  isSelected: boolean;
-  onSelect: (selected: boolean) => void;
   onEditClick: () => void;
   onViewClick: () => void;
   onDeleteClick: () => void;
   onManageTimetableClick: () => void;
 }) => (
   <TableRow>
-    <TableCell>
-      <Checkbox checked={isSelected} onCheckedChange={onSelect} />
-    </TableCell>
-    <TableCell className="font-medium">
+    <TableCell className="font-semibold">
       <button
         type="button"
-        className="flex items-center gap-3 text-left"
+        className="focus-visible:ring-ring flex items-center gap-3 text-left focus-visible:ring-2 focus-visible:outline-none"
         onClick={onViewClick}
       >
-        <span className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center text-xs font-bold">
+        <span
+          aria-hidden="true"
+          className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center text-xs font-semibold"
+        >
           {getInitials(teacher.name)}
         </span>
-        <span className="hover:underline">{teacher.name}</span>
+        <span className="min-w-0">
+          <span className="block hover:underline">{teacher.name}</span>
+          {/* Below md the Email column is hidden; show it here instead. */}
+          <span className="text-muted-foreground type-caption block max-w-[28ch] truncate font-normal md:hidden">
+            {teacher.email}
+          </span>
+        </span>
       </button>
     </TableCell>
-    <TableCell>{teacher.email}</TableCell>
+    <TableCell className="text-foreground/80 hidden md:table-cell">
+      {teacher.email}
+    </TableCell>
     <TableCell className="hidden sm:table-cell">{teacher.phone}</TableCell>
     <TableCell>
       {teacher.employmentStatus ? (
-        <Badge
-          variant={getStatusColor(teacher.employmentStatus)}
-          className="text-[10px] font-bold tracking-wider uppercase"
-        >
+        <Badge variant={getStatusColor(teacher.employmentStatus)}>
           {EMPLOYMENT_STATUSES[
             teacher.employmentStatus as keyof typeof EMPLOYMENT_STATUSES
           ]?.label || teacher.employmentStatus}
@@ -138,37 +134,43 @@ const TeacherRow = ({
       )}
     </TableCell>
     <TableCell>
-      <div className="flex items-center justify-end gap-4 text-xs font-bold">
+      <div className="flex items-center justify-end gap-1 text-sm font-semibold">
         <button
           type="button"
-          className="text-accent-foreground decoration-accent underline-offset-4 hover:underline"
+          className="text-foreground decoration-accent focus-visible:ring-ring min-h-8 px-2 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
           onClick={onViewClick}
         >
-          View
+          View<span className="sr-only"> {teacher.name}</span>
         </button>
         <button
           type="button"
-          className="text-foreground/70 hover:text-foreground hover:underline"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring min-h-8 px-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
           onClick={onEditClick}
         >
-          Edit
+          Edit<span className="sr-only"> {teacher.name}</span>
         </button>
         <DropdownMenu>
-          <DropdownMenuTrigger>
-            <Button variant="ghost" size="icon" className="size-6">
-              <IconDotsVertical className="size-4" />
-            </Button>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`More actions for ${teacher.name}`}
+              />
+            }
+          >
+            <IconDotsVertical aria-hidden="true" className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onManageTimetableClick}>
-              <IconCalendarTime className="mr-2 size-4" />
-              Manage Timetable
+              <IconCalendarTime aria-hidden="true" className="mr-2 size-4" />
+              Manage timetable
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={onDeleteClick}
               className="text-destructive"
             >
-              Delete
+              Delete teacher
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -187,9 +189,7 @@ export const TeachersList = ({
   onManageTimetableClick,
   onExportClick,
 }: TeachersListProps) => {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
-  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
 
   const filteredTeachers = useMemo(() => {
     if (!teachers) {
@@ -210,38 +210,6 @@ export const TeachersList = ({
     );
   }, [teachers, searchQuery]);
 
-  const handleSelectAll = useCallback(
-    (checked: boolean) => {
-      if (checked) {
-        setSelectedIds(new Set(filteredTeachers.map((t) => t.id)));
-      } else {
-        setSelectedIds(new Set());
-      }
-    },
-    [filteredTeachers]
-  );
-
-  const handleSelectRow = useCallback((teacherId: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(teacherId);
-      } else {
-        next.delete(teacherId);
-      }
-
-      return next;
-    });
-  }, []);
-
-  const handleDeleteClick = useCallback(() => {
-    if (selectedIds.size === 0) {
-      return;
-    }
-
-    setShowDeleteWarning(true);
-  }, [selectedIds.size]);
-
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -261,73 +229,25 @@ export const TeachersList = ({
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onExportClick}>
           <IconFileExport className="mr-2 h-4 w-4" />
-          Export as Excel
+          Export to Excel
         </Button>
         <Button onClick={onCreateClick} size="sm">
           <IconPlus className="mr-2 h-4 w-4" />
-          Add Teacher
+          Add teacher
         </Button>
       </div>
 
-      {/* Bulk selection toolbar */}
-      {selectedIds.size > 0 && (
-        <div className="bg-muted flex items-center justify-between gap-2 rounded-lg p-3">
-          <span className="text-muted-foreground text-sm">
-            {selectedIds.size} item{getPluralSuffix(selectedIds.size)} selected
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onExportClick}>
-              Export Selected
-            </Button>
-            <Button variant="destructive" size="sm" onClick={handleDeleteClick}>
-              Delete
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Delete warning dialog */}
-      {showDeleteWarning && (
-        <div className="border-destructive/30 bg-destructive/10 flex items-center gap-3 rounded-lg border p-3">
-          <IconAlertCircle className="text-destructive h-5 w-5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">
-              Delete {selectedIds.size} teacher
-              {getPluralSuffix(selectedIds.size)}?
-            </p>
-            <p className="text-muted-foreground text-xs">
-              This action cannot be undone.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDeleteWarning(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                toast("Deletion initiated for selected teachers");
-                setShowDeleteWarning(false);
-                setSelectedIds(new Set());
-              }}
-            >
-              Delete
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Table */}
       {hasAnyTeachers ? (
-        <div className="border-primary/14 overflow-hidden border">
-          <div className="border-primary/12 flex items-center gap-2 border-b p-3">
-            <IconSearch className="text-muted-foreground h-4 w-4 shrink-0" />
+        <div className="border-border overflow-hidden border">
+          <div className="border-border focus-within:ring-ring flex items-center gap-2 border-b p-3 focus-within:ring-2 focus-within:ring-inset">
+            <IconSearch
+              aria-hidden="true"
+              className="text-muted-foreground h-4 w-4 shrink-0"
+            />
             <Input
+              type="search"
+              aria-label="Search teachers"
               placeholder="Search by name, email, phone or NIC…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -338,29 +258,21 @@ export const TeachersList = ({
             <Table>
               <TableHeader>
                 <TableRow className="bg-primary hover:bg-primary border-none">
-                  <TableHead className="w-8">
-                    <Checkbox
-                      checked={
-                        selectedIds.size > 0 &&
-                        selectedIds.size === filteredTeachers.length
-                      }
-                      onCheckedChange={handleSelectAll}
-                      className="border-primary-foreground/40 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
-                    />
+                  <TableHead className="text-accent h-11 text-xs font-bold tracking-[0.08em]">
+                    Name
                   </TableHead>
-                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    NAME
+                  <TableHead className="text-accent hidden h-11 text-xs font-bold tracking-[0.08em] md:table-cell">
+                    Email
                   </TableHead>
-                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    EMAIL
+                  <TableHead className="text-accent hidden h-11 text-xs font-bold tracking-[0.08em] sm:table-cell">
+                    Phone
                   </TableHead>
-                  <TableHead className="text-accent hidden h-11 text-xs font-extrabold tracking-[0.16em] sm:table-cell">
-                    PHONE
+                  <TableHead className="text-accent h-11 text-xs font-bold tracking-[0.08em]">
+                    Status
                   </TableHead>
-                  <TableHead className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]">
-                    STATUS
+                  <TableHead className="text-accent h-11 w-10 text-xs font-bold tracking-[0.08em]">
+                    <span className="sr-only">Actions</span>
                   </TableHead>
-                  <TableHead className="text-accent h-11 w-10 text-xs font-extrabold tracking-[0.16em]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -368,10 +280,6 @@ export const TeachersList = ({
                   <TeacherRow
                     key={teacher.id}
                     teacher={teacher}
-                    isSelected={selectedIds.has(teacher.id)}
-                    onSelect={(checked) =>
-                      handleSelectRow(teacher.id, checked as boolean)
-                    }
                     onEditClick={() => onEditClick(teacher)}
                     onViewClick={() => onViewClick(teacher)}
                     onDeleteClick={() => onDeleteClick(teacher)}
@@ -390,16 +298,14 @@ export const TeachersList = ({
         </div>
       ) : (
         <Empty className="border-primary/22 min-h-[50vh] border border-dashed">
-          <EmptyTitle className="font-heading text-2xl">
-            No teachers yet
-          </EmptyTitle>
+          <EmptyTitle className="text-lg">No teachers yet</EmptyTitle>
           <EmptyDescription>
             Create your first teacher record to get started
           </EmptyDescription>
           <EmptyContent>
             <Button onClick={onCreateClick} className="mt-4">
               <IconPlus className="mr-2 h-4 w-4" />
-              Create Teacher
+              Add teacher
             </Button>
           </EmptyContent>
         </Empty>

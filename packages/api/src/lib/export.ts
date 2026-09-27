@@ -2,7 +2,18 @@ import ExcelJS from "exceljs";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
 // pdfmake's top-level entry is a browser-oriented singleton; the server-side
 // PDF generator class lives at this subpath.
-import PdfPrinter from "pdfmake/js/Printer";
+import PdfPrinterModule from "pdfmake/js/Printer";
+import URLResolverModule from "pdfmake/js/URLResolver";
+import virtualFsModule from "pdfmake/js/virtual-fs";
+
+// These subpaths are Babel-compiled CJS (`exports.default = …` with
+// `__esModule`). Node-style ESM interop (Vite SSR) hands back the whole
+// `exports` object as the default import, while bundlers unwrap it — accept both.
+const cjsDefault = <T>(mod: T): T => (mod as { default?: T }).default ?? mod;
+
+const PdfPrinter = cjsDefault(PdfPrinterModule);
+const URLResolver = cjsDefault(URLResolverModule);
+const virtualFs = cjsDefault(virtualFsModule);
 
 export interface ExportFile {
   filename: string;
@@ -62,14 +73,26 @@ const STANDARD_FONTS = {
   },
 };
 
+const STANDARD_FONT_NAMES = new Set(
+  Object.values(STANDARD_FONTS.Roboto) as string[]
+);
+
 /** Builds a real PDF from a pdfmake document definition and returns it base64-encoded. */
-export const buildPdfExport = (
+export const buildPdfExport = async (
   filename: string,
   docDefinition: TDocumentDefinitions
 ): Promise<ExportFile> => {
+  // Exports only use pdfkit's built-in fonts: never fetch URLs or read local files.
+  const urlResolver = new URLResolver(virtualFs);
+  urlResolver.setUrlAccessPolicy(() => false);
+  const printer = new PdfPrinter(
+    STANDARD_FONTS,
+    virtualFs,
+    urlResolver,
+    (path) => STANDARD_FONT_NAMES.has(path)
+  );
+  const doc = await printer.createPdfKitDocument(docDefinition);
   const { promise, resolve, reject } = Promise.withResolvers<ExportFile>();
-  const printer = new PdfPrinter(STANDARD_FONTS);
-  const doc = printer.createPdfKitDocument(docDefinition);
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
   doc.on("end", () => {

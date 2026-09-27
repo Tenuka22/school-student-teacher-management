@@ -16,6 +16,7 @@ import {
 } from "@/components/signup/signup-schema";
 import { SignupSuccess } from "@/components/signup/signup-success";
 import { formatApiErrorMessage, validationFieldErrors } from "@/lib/api-error";
+import { descriptionId, errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
 
 const STAFF_CATEGORY_OPTIONS = [
@@ -46,38 +47,39 @@ const THEMES: Record<
   }
 > = {
   teacher: {
-    panel: "bg-[#04220A]",
-    form: "text-[#FFF8E7]",
-    kicker: "text-[#FFB203]",
-    heading: "text-[#FFF8E7]",
-    intro: "text-[#FFF8E7]/70",
-    submit: "bg-[#FFB203] text-[#04220A] hover:bg-[#FFD45A]",
-    toggleActive: "bg-[#FFB203] text-[#04220A]",
-    toggleIdle: "bg-[#FFF8E7]/8 text-[#FFF8E7]/70 hover:bg-[#FFF8E7]/14",
-    toggleTextActive: "text-[#04220A]",
-    toggleTextIdle: "text-[#FFF8E7]/70",
+    panel: "bg-surface-deep",
+    form: "text-primary-foreground",
+    kicker: "text-accent",
+    heading: "text-primary-foreground",
+    intro: "text-primary-foreground/70",
+    submit: "bg-accent text-surface-deep hover:bg-accent-hover",
+    toggleActive: "bg-accent text-surface-deep",
+    toggleIdle:
+      "bg-primary-foreground/8 text-primary-foreground/70 hover:bg-primary-foreground/14",
+    toggleTextActive: "text-surface-deep",
+    toggleTextIdle: "text-primary-foreground/70",
   },
   user: {
     panel: "bg-[#F4F6F1]",
-    form: "text-[#013405]",
+    form: "text-foreground",
     kicker: "text-[#0B5E1A]",
-    heading: "text-[#013405]",
-    intro: "text-[#013405]/70",
-    submit: "bg-[#0B5E1A] text-[#FFF8E7] hover:bg-[#084512]",
-    toggleActive: "bg-[#013405] text-[#FFF8E7]",
-    toggleIdle: "bg-[#013405]/6 text-[#013405]/70 hover:bg-[#013405]/12",
-    toggleTextActive: "text-[#FFF8E7]",
-    toggleTextIdle: "text-[#013405]/70",
+    heading: "text-foreground",
+    intro: "text-muted-foreground",
+    submit: "bg-[#0B5E1A] text-primary-foreground hover:bg-[#084512]",
+    toggleActive: "bg-primary text-primary-foreground",
+    toggleIdle: "bg-primary/6 text-muted-foreground hover:bg-primary/12",
+    toggleTextActive: "text-primary-foreground",
+    toggleTextIdle: "text-muted-foreground",
   },
 };
 const INPUT_CLASS =
-  "w-full border border-current/22 bg-white/70 px-[15px] py-[13px] text-sm text-[#013405] outline-none placeholder:text-[#013405]/38 focus:border-[#013405] focus:bg-white";
+  "w-full border border-input bg-white/70 px-[15px] py-[13px] text-base text-foreground outline-none placeholder:text-muted-foreground focus:bg-white focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring aria-invalid:border-destructive sm:text-[0.9375rem]";
 
 const getSubmitLabel = (isTeacher: boolean, isSubmitting: boolean) => {
   if (isSubmitting) {
-    return "CREATING ACCOUNT...";
+    return "Creating account…";
   }
-  return isTeacher ? "SIGN UP AS STAFF" : "CREATE ACCOUNT";
+  return isTeacher ? "Sign up as staff" : "Create account";
 };
 
 const AccountTypeToggle = ({
@@ -89,27 +91,23 @@ const AccountTypeToggle = ({
   theme: (typeof THEMES)[AccountType];
   onChange: (next: AccountType) => void;
 }) => (
-  <div
-    role="tablist"
-    aria-label="Account type"
-    className="grid grid-cols-2 gap-2"
-  >
+  <fieldset className="m-0 grid min-w-0 grid-cols-2 gap-2 border-0 p-0">
+    <legend className="sr-only">Account type</legend>
     {(["user", "teacher"] as const).map((type) => {
       const isActive = value === type;
       return (
         <button
           key={type}
           type="button"
-          role="tab"
-          aria-selected={isActive}
+          aria-pressed={isActive}
           onClick={() => onChange(type)}
           className={`px-4 py-3 text-left transition-colors ${isActive ? theme.toggleActive : theme.toggleIdle}`}
         >
-          <span className="block text-[13px] font-extrabold tracking-[0.08em]">
-            {type === "user" ? "USER" : "TEACHER / STAFF"}
+          <span className="block text-sm font-bold">
+            {type === "user" ? "User" : "Teacher / staff"}
           </span>
           <span
-            className={`mt-1 block text-xs leading-tight ${isActive ? theme.toggleTextActive : theme.toggleTextIdle}`}
+            className={`mt-1 block text-[0.8125rem] leading-snug ${isActive ? theme.toggleTextActive : theme.toggleTextIdle}`}
           >
             {type === "user"
               ? "Email sign-in, no staff record"
@@ -118,30 +116,54 @@ const AccountTypeToggle = ({
         </button>
       );
     })}
-  </div>
+  </fieldset>
 );
 
 interface SignupFieldProps {
+  /** `id` of the control rendered in `children`. */
+  id: string;
   label: string;
   error?: string;
   hint?: React.ReactNode;
   children: React.ReactNode;
 }
 
-const SignupField = ({ label, error, hint, children }: SignupFieldProps) => (
-  <label className="mb-[clamp(12px,2vh,18px)] block">
-    <span className="mb-2 block text-xs font-bold tracking-[0.16em]">
+/** Label, control, hint and error. Pair the control with `controlA11y`. */
+const SignupField = ({
+  id,
+  label,
+  error,
+  hint,
+  children,
+}: SignupFieldProps) => (
+  <div className="mb-[clamp(12px,2vh,18px)]">
+    <label htmlFor={id} className="mb-2 block text-sm font-semibold">
       {label}
-    </span>
+    </label>
     {children}
-    {hint && <span className="mt-1.5 block text-xs opacity-60">{hint}</span>}
-    {error && (
-      <span className="mt-1.5 block text-xs text-[#A51919]">{error}</span>
+    {hint && (
+      <p id={descriptionId(id)} className="m-0 mt-1.5 text-sm opacity-80">
+        {hint}
+      </p>
     )}
-  </label>
+    {error && (
+      <p
+        id={errorId(id)}
+        role="alert"
+        className="text-destructive m-0 mt-1.5 text-sm font-medium"
+      >
+        {error}
+      </p>
+    )}
+  </div>
 );
 
+/** `id` / `aria-invalid` / `aria-describedby` for a `SignupField` control. */
+const controlA11y = (id: string, error?: string, hasHint = false) =>
+  fieldA11y(id, { error, hasDescription: hasHint });
+
 const PasswordField = ({
+  id,
   label,
   value,
   onChange,
@@ -153,6 +175,7 @@ const PasswordField = ({
   onToggleShow,
   disabled,
 }: {
+  id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -164,14 +187,15 @@ const PasswordField = ({
   onToggleShow: () => void;
   disabled: boolean;
 }) => (
-  <SignupField label={label} error={error} hint={hint}>
-    <span className="relative block">
+  <SignupField id={id} label={label} error={error} hint={hint}>
+    <div className="relative">
       <input
+        {...controlA11y(id, error, Boolean(hint))}
         type={showPassword ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
-        style={showToggle ? { paddingRight: 70 } : undefined}
+        style={showToggle ? { paddingRight: 76 } : undefined}
         disabled={disabled}
         className={INPUT_CLASS}
       />
@@ -179,12 +203,15 @@ const PasswordField = ({
         <button
           type="button"
           onClick={onToggleShow}
-          className="absolute top-1/2 right-[13px] -translate-y-1/2 border-b border-current/30 text-xs font-extrabold tracking-[0.1em] opacity-60"
+          aria-controls={id}
+          aria-pressed={showPassword}
+          aria-label={showPassword ? "Hide passwords" : "Show passwords"}
+          className="absolute top-1/2 right-1.5 flex min-h-9 min-w-14 -translate-y-1/2 items-center justify-center px-2 text-sm font-semibold underline decoration-current/40 underline-offset-4 opacity-80 hover:opacity-100"
         >
-          {showPassword ? "HIDE" : "SHOW"}
+          {showPassword ? "Hide" : "Show"}
         </button>
       )}
-    </span>
+    </div>
   </SignupField>
 );
 
@@ -260,7 +287,7 @@ export const SignupForm = () => {
 
   return (
     <AuthSplitLayout
-      eyebrow={isTeacher ? "FOR COLLEGE STAFF" : "GET AN ACCOUNT"}
+      eyebrow={isTeacher ? "For College staff" : "Get an account"}
       title={isTeacher ? "Staff registration" : "Create an account"}
       subtitle={
         isTeacher
@@ -279,18 +306,13 @@ export const SignupForm = () => {
           />
 
           <div>
-            <p
-              className={`text-xs font-bold tracking-[0.32em] ${theme.kicker}`}
-            >
-              {isTeacher ? "STAFF SIGN UP" : "SIGN UP"}
+            <p className={`type-eyebrow ${theme.kicker}`}>
+              {isTeacher ? "Staff sign-up" : "Sign up"}
             </p>
-            <h1
-              className={`font-heading m-0 mt-2 text-[clamp(26px,4vh,38px)] leading-[1.05] font-semibold ${theme.heading}`}
-              style={{ fontFamily: "'Cormorant Garamond', serif" }}
-            >
+            <h1 className={`type-page-title m-0 mt-2 ${theme.heading}`}>
               {isTeacher ? "Join the College system" : "Create your account"}
             </h1>
-            <p className={`mt-2 text-[13.5px] leading-[1.55] ${theme.intro}`}>
+            <p className={`type-body mt-2.5 ${theme.intro}`}>
               {isTeacher
                 ? "Teachers and office staff — your username will be your NIC number, so there’s nothing extra to remember."
                 : "Your email address is your username. An administrator can grant staff access later if you need it."}
@@ -298,8 +320,9 @@ export const SignupForm = () => {
           </div>
 
           <form onSubmit={handleSubmit} noValidate>
-            <SignupField label="FULL NAME" error={errors.name}>
+            <SignupField id="signup-name" label="Full name" error={errors.name}>
               <input
+                {...controlA11y("signup-name", errors.name)}
                 type="text"
                 value={form.name}
                 onChange={(e) => setField("name", e.target.value)}
@@ -312,7 +335,8 @@ export const SignupForm = () => {
 
             {isTeacher && (
               <SignupField
-                label="NIC NUMBER"
+                id="signup-nic"
+                label="NIC number"
                 error={errors.nic}
                 hint={
                   <>
@@ -321,10 +345,12 @@ export const SignupForm = () => {
                 }
               >
                 <input
+                  {...controlA11y("signup-nic", errors.nic, true)}
                   type="text"
+                  autoComplete="off"
                   value={form.nic}
                   onChange={(e) => setField("nic", e.target.value)}
-                  placeholder="199912345678 or 991234567V"
+                  placeholder="e.g. 199912345678 or 991234567V"
                   disabled={isSubmitting}
                   className={INPUT_CLASS}
                 />
@@ -332,7 +358,8 @@ export const SignupForm = () => {
             )}
 
             <SignupField
-              label="EMAIL"
+              id="signup-email"
+              label="Email"
               error={errors.email}
               hint={
                 isTeacher ? undefined : (
@@ -343,10 +370,11 @@ export const SignupForm = () => {
               }
             >
               <input
+                {...controlA11y("signup-email", errors.email, !isTeacher)}
                 type="email"
                 value={form.email}
                 onChange={(e) => setField("email", e.target.value)}
-                placeholder="you@example.com"
+                placeholder="e.g. you@example.com"
                 autoComplete="email"
                 disabled={isSubmitting}
                 className={INPUT_CLASS}
@@ -355,12 +383,14 @@ export const SignupForm = () => {
 
             {isTeacher && (
               <>
-                <SignupField label="PHONE (OPTIONAL)">
+                <SignupField id="signup-phone" label="PHONE (OPTIONAL)">
                   <input
+                    {...controlA11y("signup-phone")}
                     type="tel"
+                    inputMode="tel"
                     value={form.phone}
                     onChange={(e) => setField("phone", e.target.value)}
-                    placeholder="07X XXX XXXX"
+                    placeholder="e.g. 071 234 5678"
                     autoComplete="tel"
                     disabled={isSubmitting}
                     className={INPUT_CLASS}
@@ -368,10 +398,12 @@ export const SignupForm = () => {
                 </SignupField>
 
                 <SignupField
-                  label="STAFF CATEGORY"
+                  id="signup-category"
+                  label="Staff category"
                   error={errors.staffCategory}
                 >
                   <select
+                    {...controlA11y("signup-category", errors.staffCategory)}
                     value={form.staffCategory}
                     onChange={(e) => setField("staffCategory", e.target.value)}
                     disabled={isSubmitting}
@@ -391,7 +423,8 @@ export const SignupForm = () => {
             )}
 
             <PasswordField
-              label="PASSWORD"
+              id="signup-password"
+              label="Password"
               value={form.password}
               onChange={(value) => setField("password", value)}
               error={errors.password}
@@ -404,7 +437,8 @@ export const SignupForm = () => {
             />
 
             <PasswordField
-              label="CONFIRM PASSWORD"
+              id="signup-confirm-password"
+              label="Confirm password"
               value={form.confirmPassword}
               onChange={(value) => setField("confirmPassword", value)}
               error={errors.confirmPassword}
@@ -417,13 +451,13 @@ export const SignupForm = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`block w-full py-[15px] text-center text-[13.5px] font-extrabold tracking-[0.08em] transition-colors disabled:opacity-60 ${theme.submit}`}
+              className={`block w-full py-3.5 text-center text-[0.9375rem] font-bold tracking-[0.01em] transition-colors disabled:opacity-60 ${theme.submit}`}
             >
               {getSubmitLabel(isTeacher, isSubmitting)}
             </button>
           </form>
 
-          <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-current/12 pt-[clamp(12px,2vh,20px)] text-[12.5px] opacity-70">
+          <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-current/12 pt-[clamp(12px,2vh,20px)] text-sm opacity-75">
             <span>
               Already have an account?{" "}
               <Link
@@ -434,7 +468,7 @@ export const SignupForm = () => {
                 Sign in
               </Link>
             </span>
-            <span className="font-bold tracking-[0.18em] opacity-60">
+            <span className="text-xs font-bold tracking-[0.2em]">
               CERTA VIRILITER
             </span>
           </div>

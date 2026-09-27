@@ -78,10 +78,10 @@ const getToneClass = (tone: "default" | "good" | "bad"): string => {
   }
 
   if (tone === "bad") {
-    return "text-[#A51919]";
+    return "text-destructive";
   }
 
-  return "text-[#013405]";
+  return "text-foreground";
 };
 
 const getBrowser = (userAgent: string): string => {
@@ -145,13 +145,9 @@ const DetailRow = ({
   value: string;
   tone?: "default" | "good" | "bad";
 }) => (
-  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[#013405]/8 py-2 last:border-b-0">
-    <dt className="text-[12px] font-bold tracking-[0.14em] text-[#013405]/55">
-      {label}
-    </dt>
-    <dd
-      className={`max-w-[60ch] text-right text-[13.5px] ${getToneClass(tone)}`}
-    >
+  <div className="border-border flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b py-2 last:border-b-0">
+    <dt className="text-muted-foreground text-sm font-medium">{label}</dt>
+    <dd className={`max-w-[60ch] text-right text-sm ${getToneClass(tone)}`}>
       {value}
     </dd>
   </div>
@@ -188,10 +184,10 @@ const getVerification = (
 
 const getConfirmLabel = (isPending: boolean, isConfirming: boolean): string => {
   if (isPending) {
-    return "APPROVING…";
+    return "Approving…";
   }
 
-  return isConfirming ? "YES — APPROVE AS TEACHER" : "APPROVE AS TEACHER";
+  return isConfirming ? "Yes — approve as teacher" : "Approve as teacher";
 };
 
 interface ApproveTeacherDialogProps {
@@ -247,10 +243,10 @@ export const ApproveTeacherDialog = ({
     <Dialog onOpenChange={handleOpenChange} open={isOpen}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
-          <div className="text-[12px] font-extrabold tracking-[0.24em] text-[#A51919]">
-            STAFF REGISTRATION REVIEW
+          <div className="text-destructive type-eyebrow">
+            Staff registration review
           </div>
-          <DialogTitle className="font-heading text-[26px] font-semibold text-[#013405]">
+          <DialogTitle className="text-foreground text-xl">
             {request?.name}
           </DialogTitle>
           <DialogDescription>
@@ -261,39 +257,39 @@ export const ApproveTeacherDialog = ({
         </DialogHeader>
 
         {request && (
-          <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-2">
+          <div className="border-border bg-card border px-[22px] py-2">
             <dl>
-              <DetailRow label="FULL NAME" value={request.name} />
-              <DetailRow label="EMAIL ADDRESS" value={request.email} />
-              <DetailRow label="USERNAME" value={request.username ?? "—"} />
+              <DetailRow label="Full name" value={request.name} />
+              <DetailRow label="Email address" value={request.email} />
+              <DetailRow label="Username" value={request.username ?? "—"} />
               <DetailRow
-                label="DISPLAY NAME"
+                label="Display name"
                 value={request.displayUsername ?? request.username ?? "—"}
               />
               <DetailRow
-                label="REGISTERED AS"
+                label="Registered as"
                 value={ROLE_LABELS[request.role] ?? request.role}
               />
               <DetailRow
-                label="EMAIL VERIFIED"
+                label="Email verified"
                 tone={getVerification(request).tone}
                 value={getVerification(request).value}
               />
               <DetailRow
-                label="ACCOUNT STATE"
+                label="Account state"
                 tone={getAccountState(request).tone}
                 value={getAccountState(request).value}
               />
               <DetailRow
-                label="REGISTERED"
+                label="Registered"
                 value={`${formatDateTime(request.createdAt)} · waiting ${getWaitingFor(request.createdAt)}`}
               />
               <DetailRow
-                label="LAST ACTIVE"
+                label="Last active"
                 value={formatDateTime(request.lastSeenAt)}
               />
               <DetailRow
-                label="ACTIVE SESSIONS"
+                label="Active sessions"
                 value={
                   request.sessionCount === 0
                     ? "None — they have not signed in since registering"
@@ -301,7 +297,7 @@ export const ApproveTeacherDialog = ({
                 }
               />
               <DetailRow
-                label="LAST USED FROM"
+                label="Last used from"
                 value={`${getAgentSummary(request.lastSeenAgent)}${request.lastSeenIp ? ` · ${request.lastSeenIp}` : ""}`}
               />
             </dl>
@@ -312,22 +308,22 @@ export const ApproveTeacherDialog = ({
           <button
             type="button"
             onClick={() => handleOpenChange(false)}
-            className="border border-[#013405]/30 px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#013405] transition-colors hover:bg-[#013405]/5"
+            className="border-input text-foreground hover:bg-primary/5 border px-4 py-2 text-sm font-semibold transition-colors"
           >
-            CANCEL
+            Cancel
           </button>
           <button
             type="button"
             disabled={isPending || request?.emailVerified !== true}
             onClick={handlePrimary}
-            className="bg-[#013405] px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
           >
             {getConfirmLabel(isPending, isConfirming)}
           </button>
         </DialogFooter>
 
         {request && !request.emailVerified && (
-          <p className="text-[12.5px] leading-relaxed text-[#A51919]">
+          <p className="text-destructive text-sm font-medium">
             This account has not confirmed its email address. Ask them to enter
             the code already sent to {request.email}, then review again.
           </p>

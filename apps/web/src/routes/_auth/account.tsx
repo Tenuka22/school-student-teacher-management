@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { AccountSessions } from "@/components/account/account-panels";
 import { PasswordDialog } from "@/components/account/password-dialog";
+import { PageHeader } from "@/components/ui-patterns/page-header";
+import { pageHead } from "@/lib/page-title";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Administrator",
@@ -25,11 +27,9 @@ const PasswordSection = ({
   onOpenChange: (open: boolean) => void;
   username?: string | null;
 }) => (
-  <section className="border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-    <h2 className="font-heading text-[23px] font-semibold text-[#013405]">
-      Password
-    </h2>
-    <p className="mt-1.5 max-w-prose text-[13px] text-[#013405]/60">
+  <section className="border-border bg-card border px-5.5 py-5">
+    <h2 className="text-foreground type-section-title">Password</h2>
+    <p className="text-muted-foreground type-body mt-1.5 max-w-prose">
       {isEnvManaged
         ? "This is an institutional login. Its password is set by the College's server configuration and re-applied on every start, so it is managed outside the app."
         : `Change it with your current password, or confirm with a one-time code sent to ${email} if you cannot remember it.`}
@@ -38,65 +38,55 @@ const PasswordSection = ({
       type="button"
       disabled={isEnvManaged}
       onClick={() => onOpenChange(true)}
-      className="mt-4 border border-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#013405] transition-colors hover:bg-[#013405] hover:text-[#FFF8E7] disabled:cursor-not-allowed disabled:border-[#013405]/25 disabled:text-[#013405]/35"
+      className="border-primary text-foreground hover:bg-primary hover:text-primary-foreground disabled:border-input disabled:text-muted-foreground mt-4 border px-5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed"
     >
-      CHANGE PASSWORD
+      Change password
     </button>
   </section>
 );
 
 const ProfileSection = ({ user }: { user: SessionUser | undefined }) => (
-  <section className="border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-    <h2 className="font-heading text-[23px] font-semibold text-[#013405]">
-      Profile
-    </h2>
+  <section className="border-border bg-card border px-5.5 py-5">
+    <h2 className="text-foreground type-section-title">Profile</h2>
 
     <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
-          FULL NAME
-        </dt>
-        <dd className="mt-1 text-[15px] font-semibold text-[#013405]">
+        <dt className="text-muted-foreground text-sm font-medium">Full name</dt>
+        <dd className="text-foreground type-body mt-0.5 font-semibold">
           {user?.name ?? "—"}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
-          EMAIL
-        </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
+        <dt className="text-muted-foreground text-sm font-medium">Email</dt>
+        <dd className="text-foreground type-body mt-0.5">
           {user?.email ?? "—"}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
-          USERNAME
-        </dt>
-        <dd className="mt-1 font-mono text-[14px] text-[#013405]">
+        <dt className="text-muted-foreground text-sm font-medium">Username</dt>
+        <dd className="text-foreground mt-0.5 font-mono text-sm">
           {user?.username ?? "—"}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
-          ROLE
-        </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
+        <dt className="text-muted-foreground text-sm font-medium">Role</dt>
+        <dd className="text-foreground type-body mt-0.5">
           {ROLE_LABELS[user?.role ?? "user"] ?? user?.role}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
-          EMAIL VERIFIED
+        <dt className="text-muted-foreground text-sm font-medium">
+          Email verified
         </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
+        <dd className="text-foreground type-body mt-0.5">
           {user?.emailVerified ? "Yes" : "Not yet"}
         </dd>
       </div>
       <div>
-        <dt className="text-xs font-bold tracking-[0.12em] text-[#013405]/55">
-          DISPLAY NAME
+        <dt className="text-muted-foreground text-sm font-medium">
+          Display name
         </dt>
-        <dd className="mt-1 text-[15px] text-[#013405]">
+        <dd className="text-foreground type-body mt-0.5">
           {user?.displayUsername ?? user?.username ?? "—"}
         </dd>
       </div>
@@ -105,11 +95,11 @@ const ProfileSection = ({ user }: { user: SessionUser | undefined }) => (
 );
 
 const SwitchAccountSection = () => (
-  <section className="border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-    <h2 className="font-heading text-[23px] font-semibold text-[#013405]">
+  <section className="border-border bg-card border px-5.5 py-5">
+    <h2 className="text-foreground type-section-title">
       Add or switch account
     </h2>
-    <p className="mt-1.5 max-w-prose text-[13px] text-[#013405]/60">
+    <p className="text-muted-foreground type-body mt-1.5 max-w-prose">
       Sign in as someone else without signing out of this account — useful for
       checking a teacher&rsquo;s portal or approving a request as a different
       role. Your current session stays active, and the sign-in page lists every
@@ -118,9 +108,9 @@ const SwitchAccountSection = () => (
     <Link
       to="/login"
       search={{ switch: 1 }}
-      className="mt-4 inline-block border border-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#013405] transition-colors hover:bg-[#013405] hover:text-[#FFF8E7]"
+      className="border-primary text-foreground hover:bg-primary hover:text-primary-foreground mt-4 inline-block border px-5 py-2.5 text-sm font-semibold transition-colors"
     >
-      MANAGE ACCOUNTS
+      Manage accounts
     </Link>
   </section>
 );
@@ -136,14 +126,11 @@ const AccountPage = () => {
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
-          Account
-        </h1>
-        <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
-          Your profile, password and signed-in devices.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Your account"
+        title="Account"
+        description={<>Your profile, password and signed-in devices.</>}
+      />
 
       <ProfileSection user={user} />
 
@@ -170,4 +157,5 @@ const AccountPage = () => {
 
 export const Route = createFileRoute("/_auth/account")({
   component: AccountPage,
+  head: () => pageHead("Account"),
 });

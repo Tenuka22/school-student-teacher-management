@@ -2,13 +2,21 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/roboto";
-@import "@fontsource-variable/figtree";
 @source "../../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
+/*
+ * The app ships one light theme (no toggle exists). The variant is kept so
+ * the `dark:` classes inside the shadcn primitives stay inert: without it,
+ * Tailwind would fall back to `prefers-color-scheme` and half-apply them for
+ * anyone whose OS is in dark mode.
+ */
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
+
+  /* Brand palette — College green, gold, cream, crimson. */
   --background: #fdf8ec;
   --foreground: #013405;
   --card: #fffdf6;
@@ -17,68 +25,139 @@
   --popover-foreground: #013405;
   --primary: #013405;
   --primary-foreground: #fff8e7;
+  --primary-hover: #064a12;
   --secondary: #f3f1e9;
   --secondary-foreground: #013405;
   --muted: #f3f1e9;
-  --muted-foreground: color-mix(in oklab, #013405 60%, transparent);
+  /* 70% green on cream ≈ 5.4:1 (AA). 60% measured 4.0:1 and failed. */
+  --muted-foreground: color-mix(in oklab, #013405 70%, transparent);
   --accent: #ffb203;
   --accent-foreground: #013405;
+  --accent-hover: #ffd45a;
+  /* Gold is 1.7:1 on cream, so gold *text* on light surfaces uses this:
+     4.8:1 on cream, 4.5:1 on muted. (The older #A97400 is only 3.8:1.) */
+  --gold-text: #936500;
   --destructive: #a51919;
+  --destructive-foreground: #fff8e7;
+  --success: #2e7d32;
+  --success-foreground: #fff8e7;
+  /* The deep green used behind the landing, 404 and auth brand panels. */
+  --surface-deep: #04220a;
+  --surface-deep-foreground: #fff8e7;
+  /* Decorative dividers only; never the sole boundary of a control. */
   --border: color-mix(in oklab, #013405 16%, transparent);
-  --input: color-mix(in oklab, #013405 22%, transparent);
+  /* Control boundaries: 55% green ≈ 3.4:1 on cream (WCAG 1.4.11). */
+  --input: color-mix(in oklab, #013405 55%, transparent);
   --ring: #013405;
   --chart-1: #013405;
   --chart-2: #ffb203;
   --chart-3: #a51919;
   --chart-4: #7bc67b;
   --chart-5: #e0a33a;
+  /* Timetable subject colours (from timetable-grid). Each measures at least
+     5:1 both behind cream text and as text on the card background. */
+  --subject-1: #013405;
+  --subject-2: #2f6b8f;
+  --subject-3: #8a5a00;
+  --subject-4: #6b3fa0;
+  --subject-5: #1f7a4d;
+  --subject-6: #a51919;
+  --subject-7: #0e5c73;
+  --subject-8: #7a4a16;
   --radius: 0.625rem;
   --sidebar: #013405;
   --sidebar-foreground: #fff8e7;
+  /* Secondary sidebar text: 60% cream on green ≈ 5.7:1. */
+  --sidebar-muted-foreground: color-mix(in oklab, #fff8e7 60%, transparent);
   --sidebar-primary: #ffb203;
   --sidebar-primary-foreground: #013405;
   --sidebar-accent: color-mix(in oklab, #fff8e7 16%, transparent);
   --sidebar-accent-foreground: #fff8e7;
   --sidebar-border: color-mix(in oklab, #ffb203 18%, transparent);
   --sidebar-ring: #ffb203;
+
+  /* Stacking layers. The primitives use `z-10` for the sidebar and `z-50`
+     for every overlay (dialogs, sheets, menus, popovers, tooltips); Base UI
+     orders overlays among themselves by mount order. */
+  --z-sticky: 10;
+  --z-overlay: 50;
+  --z-toast: 100;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+/*
+ * Dark surfaces (sidebar, landing, 404, auth brand panels) swap the focus
+ * colour to gold; a green ring is invisible on green.
+ */
+.surface-deep,
+[data-slot="sidebar-inner"] {
+  --ring: var(--accent);
 }
 
 @theme inline {
-  --font-sans: "Manrope", "Roboto Variable", sans-serif;
+  /* Manrope and Cormorant Garamond come from Google Fonts (see __root.tsx);
+     Roboto is the self-hosted fallback if that request is blocked. Neither
+     brand face has Sinhala or Tamil glyphs, so the system fonts that do
+     (Noto on Android/Linux, Nirmala UI / Iskoola Pota on Windows, Sinhala
+     Sangam on Apple) come next, before the generic family. */
+  --font-sans:
+    "Manrope", "Roboto Variable", "Noto Sans Sinhala", "Noto Sans Tamil",
+    "Nirmala UI", "Iskoola Pota", "Sinhala Sangam MN", ui-sans-serif,
+    system-ui, sans-serif;
+  --color-primary-hover: var(--primary-hover);
+  --color-accent-hover: var(--accent-hover);
+  --color-gold-text: var(--gold-text);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-surface-deep: var(--surface-deep);
+  --color-surface-deep-foreground: var(--surface-deep-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-subject-1: var(--subject-1);
+  --color-subject-2: var(--subject-2);
+  --color-subject-3: var(--subject-3);
+  --color-subject-4: var(--subject-4);
+  --color-subject-5: var(--subject-5);
+  --color-subject-6: var(--subject-6);
+  --color-subject-7: var(--subject-7);
+  --color-subject-8: var(--subject-8);
+
+  /* Type scale (see DESIGN_SYSTEM.md → Type). The functional steps keep
+     Tailwind's names but get line heights tuned for Manrope; the role steps
+     below are consumed through the `type-*` utilities at the end of this
+     file, which also set family, weight and tracking. */
+  --text-xs: 0.75rem; /* 12px — metadata only */
+  --text-xs--line-height: 1.4;
+  --text-caption: 0.8125rem; /* 13px — secondary data in dense grids */
+  --text-caption--line-height: 1.45;
+  --text-sm: 0.875rem; /* 14px — controls, table cells, supporting text */
+  --text-sm--line-height: 1.5;
+  --text-body: 0.9375rem; /* 15px — running text, descriptions */
+  --text-body--line-height: 1.6;
+  --text-base: 1rem; /* 16px — inputs on phones, lead text */
+  --text-base--line-height: 1.55;
+  --text-lg: 1.125rem; /* 18px — dialog titles */
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.35;
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 0.14em;
+  --text-eyebrow--font-weight: 700;
+  --text-card-title: 1.0625rem; /* 17px */
+  --text-card-title--line-height: 1.35;
+  --text-section-title: clamp(1.1875rem, 1.1rem + 0.35vw, 1.375rem); /* 19–22px */
+  --text-section-title--line-height: 1.3;
+  --text-page-title: clamp(1.875rem, 1.5rem + 1.25vw, 2.5rem); /* 30–40px */
+  --text-page-title--line-height: 1.1;
+  --text-display: clamp(2.5rem, 1.75rem + 3vw, 4.5rem); /* 40–72px */
+  --text-display--line-height: 1.02;
+  --text-stat: clamp(1.625rem, 1.45rem + 0.6vw, 2rem); /* 26–32px */
+  --text-stat--line-height: 1.1;
+
+  /* Layout widths: `max-w-content` for app pages; `max-w-prose` (65ch,
+     Tailwind default) for running text. */
+  --container-content: 96rem;
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -117,21 +196,167 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
-  --font-heading: "Cormorant Garamond", serif;
+  --font-heading:
+    "Cormorant Garamond", "Noto Serif Sinhala", "Iskoola Pota",
+    "Sinhala Sangam MN", Georgia, serif;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, #013405 40%, transparent) transparent;
   }
   body {
-    @apply font-sans bg-background text-foreground;
+    @apply font-sans bg-background text-foreground antialiased;
   }
   html {
     @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Cormorant defaults to old-style figures ("2024" bobs up and down), which
+     look broken in years, counts and dates. */
+  .font-heading {
+    font-variant-numeric: lining-nums;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* Reserve the scrollbar's space in the signed-in app so tables and lists
+     don't shift sideways when a page grows long enough to scroll. Public
+     full-bleed pages opt out: a reserved gutter would show as a cream strip
+     beside their deep-green background. */
+  html:has([data-slot="sidebar-wrapper"]) {
+    scrollbar-gutter: stable;
+  }
+  [data-slot="sidebar-inner"] *,
+  .surface-deep * {
+    scrollbar-color: color-mix(in oklab, #fff8e7 35%, transparent) transparent;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+  /* Default keyboard focus for anything that doesn't draw its own: a 2px
+     solid ring, offset so it reads against filled controls. Primitives that
+     render a `focus-visible:ring` set `outline-none`, which wins over this. */
+  :focus-visible {
+    outline-width: 2px;
+    outline-style: solid;
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * Typographic roles. Each sets family, size, leading, weight and tracking
+ * together, so a heading is one class rather than five that drift apart.
+ * They are plain utilities (not `text-*`), which also means tailwind-merge
+ * leaves them alone: a colour class beside them is never dropped by `cn()`.
+ *
+ * Cormorant only appears at display sizes (page titles and up); below ~28px
+ * its thin hairlines stop reading well, so every functional heading is
+ * Manrope.
+ */
+@utility type-display {
+  font-family: var(--font-heading);
+  font-size: var(--text-display);
+  line-height: var(--text-display--line-height);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  font-variant-numeric: lining-nums;
+  text-wrap: balance;
+}
+
+@utility type-page-title {
+  font-family: var(--font-heading);
+  font-size: var(--text-page-title);
+  line-height: var(--text-page-title--line-height);
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  font-variant-numeric: lining-nums;
+  text-wrap: balance;
+}
+
+@utility type-section-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-section-title);
+  line-height: var(--text-section-title--line-height);
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+}
+
+@utility type-card-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-card-title);
+  line-height: var(--text-card-title--line-height);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+@utility type-eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  line-height: var(--text-eyebrow--line-height);
+  font-weight: var(--text-eyebrow--font-weight);
+  letter-spacing: var(--text-eyebrow--letter-spacing);
+  text-transform: uppercase;
+}
+
+/* A big figure on a dashboard: Manrope with tabular figures so columns of
+   numbers line up and don't jiggle as they update. */
+@utility type-stat {
+  font-family: var(--font-sans);
+  font-size: var(--text-stat);
+  line-height: var(--text-stat--line-height);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Running text: descriptions, help and explanatory paragraphs. */
+@utility type-body {
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+}
+
+/* Secondary data in dense tables and grids: the teacher under a subject,
+   a period's times, an email under a name. One step above `text-xs`, which
+   stays for timestamps and other true metadata. */
+@utility type-caption {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sonner injects its own unlayered stylesheet at runtime that hard-codes a
+   system font stack and 13px text. The doubled attribute out-ranks it. */
+[data-sonner-toaster][data-sonner-toaster] {
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster] [data-sonner-toast][data-sonner-toast] {
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+}
+[data-sonner-toaster] [data-sonner-toast] [data-title][data-title] {
+  font-weight: 600;
+}
+
+/* Respect the OS "reduce motion" setting everywhere, including the overlay
+   enter/exit animations from tw-animate-css and the landing's ambient glow. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

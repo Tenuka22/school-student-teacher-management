@@ -242,7 +242,7 @@ export const TeacherCsvImport = ({
         disabled={isImporting}
       >
         <IconUpload className="mr-2 size-4" />
-        {isImporting ? "Importing..." : "Import CSV"}
+        {isImporting ? "Importing…" : "Import CSV"}
       </Button>
       {conflicts.length > 0 && (
         <Button
@@ -253,7 +253,7 @@ export const TeacherCsvImport = ({
           <Badge variant="destructive" className="mr-2">
             {conflicts.length}
           </Badge>
-          Resolve Import Conflicts
+          Resolve import conflicts
         </Button>
       )}
       <input
@@ -269,7 +269,7 @@ export const TeacherCsvImport = ({
         onOpenChange={setIsConflictDialogOpen}
       >
         <AlertDialogContent className="max-w-2xl">
-          <AlertDialogTitle>Resolve Import Conflicts</AlertDialogTitle>
+          <AlertDialogTitle>Resolve import conflicts</AlertDialogTitle>
           <AlertDialogDescription>
             These rows from your last import differ from the current server
             data. Nothing was pushed — apply the imported version or discard it
@@ -277,12 +277,9 @@ export const TeacherCsvImport = ({
           </AlertDialogDescription>
           <div className="max-h-96 space-y-3 overflow-y-auto">
             {conflicts.map((conflict) => (
-              <div
-                key={conflict.conflictId}
-                className="rounded-lg border p-3 text-sm"
-              >
+              <div key={conflict.conflictId} className="border p-3 text-sm">
                 <p className="mb-2 font-medium">{conflict.current.name}</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
                     <p className="text-muted-foreground">Current</p>
                     <p>{conflict.current.email}</p>
@@ -306,7 +303,7 @@ export const TeacherCsvImport = ({
                     size="sm"
                     onClick={() => handleApplyConflict(conflict)}
                   >
-                    Apply Imported Version
+                    Apply imported version
                   </Button>
                 </div>
               </div>

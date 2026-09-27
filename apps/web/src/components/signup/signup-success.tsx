@@ -33,12 +33,12 @@ export const SignupSuccess = ({
   layoutTitle: string;
 }) => (
   <AuthSplitLayout
-    eyebrow="KEEP IT SAFE"
+    eyebrow="Keep it safe"
     title={layoutTitle}
     subtitle="Your sign-in details are ready — keep your username somewhere safe."
   >
     <div className="auth-card">
-      <p className="auth-kicker">WELCOME ABOARD</p>
+      <p className="auth-kicker">Welcome aboard</p>
       <h1 className="auth-h1">{heading}</h1>
       <p className="auth-intro" style={{ textAlign: "center" }}>
         {message}
@@ -52,7 +52,7 @@ export const SignupSuccess = ({
         className="auth-submit"
         style={{ marginTop: 28 }}
       >
-        GO TO SIGN IN
+        Go to sign in
       </button>
       <p className="auth-card-foot">
         {crossLinkText}{" "}

@@ -3,7 +3,9 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { IconCircleCheck, IconInfoCircle, IconAlertTriangle, IconAlertOctagon, IconLoader } from "@tabler/icons-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  // The app has a single light theme and no ThemeProvider, so "system"
+  // would render dark toasts over the cream UI for OS-dark users.
+  const { theme = "light" } = useTheme()
 
   return (
     <Sonner

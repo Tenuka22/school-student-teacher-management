@@ -140,9 +140,7 @@ export const ClassesTabs = ({
   if (classes.length === 0) {
     return (
       <Empty className="border-primary/22 min-h-[60vh] border border-dashed">
-        <EmptyTitle className="font-heading text-2xl">
-          No classes yet
-        </EmptyTitle>
+        <EmptyTitle className="text-lg">No classes yet</EmptyTitle>
         <EmptyDescription>
           Seed the default class structure or create your first class manually
           to get started
@@ -168,7 +166,7 @@ export const ClassesTabs = ({
                 }
               >
                 <IconSeedling className="mr-2 size-4" />
-                Seed Classes
+                Seed default classes
               </TooltipTrigger>
               {isSeeded && (
                 <TooltipContent>
@@ -178,7 +176,7 @@ export const ClassesTabs = ({
             </Tooltip>
             <Button onClick={onCreateClick} size="sm">
               <IconPlus className="mr-2 size-4" />
-              Create Class
+              Add class
             </Button>
           </div>
         </EmptyContent>
@@ -190,9 +188,14 @@ export const ClassesTabs = ({
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 basis-64">
-          <IconSearch className="text-muted-foreground absolute top-3 left-3 size-4" />
+          <IconSearch
+            aria-hidden="true"
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+          />
           <Input
-            placeholder="IconSearch by class name or teacher..."
+            type="search"
+            aria-label="Search classes"
+            placeholder="Search by class name or teacher"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -205,7 +208,7 @@ export const ClassesTabs = ({
           disabled={isSeedPending}
         >
           <IconSeedling className="mr-2 size-4" />
-          {isSeedPending ? "Seeding..." : "Seed Classes"}
+          {isSeedPending ? "Seeding…" : "Seed default classes"}
         </Button>
         <Button variant="outline" onClick={onExportClick} size="sm">
           <IconFileExport className="mr-2 size-4" />
@@ -213,7 +216,7 @@ export const ClassesTabs = ({
         </Button>
         <Button onClick={onCreateClick} size="sm">
           <IconPlus className="mr-2 size-4" />
-          Create Class
+          Add class
         </Button>
       </div>
 
@@ -229,7 +232,7 @@ export const ClassesTabs = ({
               className="group data-active:border-primary/18 data-active:bg-card -mb-px gap-2 rounded-none border border-b-0 border-transparent px-4 py-2.5 font-semibold after:hidden"
             >
               {category.label}
-              <span className="group-data-active:bg-primary group-data-active:text-accent bg-muted text-muted-foreground px-1.5 py-0.5 font-mono text-xs">
+              <span className="group-data-active:bg-primary group-data-active:text-accent bg-muted text-muted-foreground px-1.5 py-0.5 text-xs font-semibold tabular-nums">
                 {classesByCategory.get(category.key)?.length ?? 0}
               </span>
             </TabsTrigger>
@@ -246,9 +249,7 @@ export const ClassesTabs = ({
             >
               {categoryClasses.length === 0 ? (
                 <Empty className="border-primary/22 min-h-[30vh] border border-dashed">
-                  <EmptyTitle className="font-heading text-xl">
-                    No classes in this category
-                  </EmptyTitle>
+                  <EmptyTitle>No classes in this category</EmptyTitle>
                   <EmptyDescription>
                     {category.key === "collegiate"
                       ? "A/L class counts vary by year and are always created manually"

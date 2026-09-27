@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 /**
@@ -86,13 +87,16 @@ export const MyProfileContent = () => {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-heading text-4xl font-semibold">My Profile</h1>
-        <p className="text-muted-foreground mt-2">
-          Your staff record as verified by the administration. Contact the
-          office to correct name, email or employment details.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Teacher workspace"
+        title="My profile"
+        description={
+          <>
+            Your staff record as verified by the administration. Contact the
+            office to correct name, email or employment details.
+          </>
+        }
+      />
 
       <Card>
         <CardContent className="p-6">
@@ -120,12 +124,16 @@ export const MyProfileContent = () => {
             <FieldLabel htmlFor="my-phone">Phone</FieldLabel>
             <Input
               id="my-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              aria-describedby="my-phone-description"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+947XXXXXXXX"
+              placeholder="e.g. +94771234567"
             />
-            <FieldDescription>
-              Sri Lankan mobile number, normalized to +94 format
+            <FieldDescription id="my-phone-description">
+              Sri Lankan mobile number; it is saved in +94 format.
             </FieldDescription>
           </Field>
           <Button
@@ -140,7 +148,7 @@ export const MyProfileContent = () => {
               })
             }
           >
-            {updateMutation.isPending ? "Saving..." : "Save Phone Number"}
+            {updateMutation.isPending ? "Saving…" : "Save phone number"}
           </Button>
         </CardContent>
       </Card>

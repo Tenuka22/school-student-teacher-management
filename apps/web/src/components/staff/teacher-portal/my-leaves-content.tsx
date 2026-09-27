@@ -19,6 +19,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { ApplyLeaveForm } from "@/components/staff/teacher-portal/apply-leave-form";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
@@ -75,18 +76,19 @@ export const MyLeavesContent = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="font-heading text-4xl font-semibold">My Leave</h1>
-          <p className="text-muted-foreground mt-2">
-            Apply for leave and track the Principal&apos;s decision.
-          </p>
-        </div>
-        <Button onClick={() => setIsApplyOpen(true)}>
-          <IconPlus className="mr-2 size-4" />
-          Apply for Leave
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Teacher workspace"
+        title="My leave"
+        description={
+          <>Apply for leave and track the Principal&apos;s decision.</>
+        }
+        actions={
+          <Button onClick={() => setIsApplyOpen(true)}>
+            <IconPlus className="mr-2 size-4" />
+            Apply for leave
+          </Button>
+        }
+      />
 
       {myLeavesQuery.isLoading && (
         <div className="space-y-3">
@@ -106,7 +108,7 @@ export const MyLeavesContent = () => {
           <EmptyContent>
             <Button onClick={() => setIsApplyOpen(true)} className="mt-4">
               <IconPlus className="mr-2 size-4" />
-              Apply for Leave
+              Apply for leave
             </Button>
           </EmptyContent>
         </Empty>
@@ -141,7 +143,7 @@ export const MyLeavesContent = () => {
                     </p>
                   )}
                   {request.reviewComment && (
-                    <p className="text-muted-foreground mt-1 text-xs italic">
+                    <p className="text-muted-foreground mt-1 text-sm italic">
                       Reviewer note: {request.reviewComment}
                     </p>
                   )}
@@ -153,7 +155,7 @@ export const MyLeavesContent = () => {
                     disabled={cancelMutation.isPending}
                     onClick={() => cancelMutation.mutate({ id: request.id })}
                   >
-                    Cancel Request
+                    Cancel request
                   </Button>
                 )}
               </CardContent>

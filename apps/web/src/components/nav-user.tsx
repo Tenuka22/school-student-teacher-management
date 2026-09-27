@@ -76,14 +76,14 @@ export const NavUser = ({
               </AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left leading-tight">
-              <span className="text-sidebar-foreground truncate text-[12.5px] font-bold">
+              <span className="text-sidebar-foreground truncate text-sm font-semibold">
                 {user.name}
               </span>
-              <span className="text-sidebar-foreground/50 truncate text-xs">
+              <span className="text-sidebar-muted-foreground truncate text-xs">
                 {user.email}
               </span>
             </div>
-            <IconSelector className="text-sidebar-foreground/50 ml-auto size-4" />
+            <IconSelector className="text-sidebar-muted-foreground ml-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="border-primary/15 min-w-60 rounded-none border p-1.5 shadow-none"
@@ -99,7 +99,9 @@ export const NavUser = ({
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate text-sm font-bold">{user.name}</span>
+                <span className="truncate text-sm font-semibold">
+                  {user.name}
+                </span>
                 <span className="text-muted-foreground truncate text-xs">
                   {user.email}
                 </span>

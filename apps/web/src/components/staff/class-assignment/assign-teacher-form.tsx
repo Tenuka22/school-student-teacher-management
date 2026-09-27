@@ -20,6 +20,7 @@ import { useState } from "react";
 import * as v from "valibot";
 
 import { TeacherCombobox } from "@/components/staff/class-assignment/teacher-combobox";
+import { descriptionId, errorId, fieldA11y } from "@/lib/field-a11y";
 
 interface AssignTeacherFormProps {
   formId: string;
@@ -148,24 +149,35 @@ export const AssignTeacherForm = ({
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       {generalError && (
-        <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+        <div
+          role="alert"
+          className="bg-destructive/10 text-destructive p-3 text-sm"
+        >
           {generalError}
         </div>
       )}
 
-      <Field>
-        <FieldLabel htmlFor="teacher">Class Teacher</FieldLabel>
+      <Field data-invalid={Boolean(errors.homeroomTeacherId)}>
+        <FieldLabel htmlFor={`${formId}-teacher`}>Class teacher</FieldLabel>
         <TeacherCombobox
-          id="teacher"
+          id={`${formId}-teacher`}
+          describedBy={
+            errors.homeroomTeacherId
+              ? `${descriptionId(`${formId}-teacher`)} ${errorId(`${formId}-teacher`)}`
+              : descriptionId(`${formId}-teacher`)
+          }
+          invalid={Boolean(errors.homeroomTeacherId)}
           value={homeroomTeacherId}
           onValueChange={handleTeacherChange}
           disabled={isLoading}
         />
-        <FieldDescription>
+        <FieldDescription id={descriptionId(`${formId}-teacher`)}>
           Clear the field to unassign the current teacher.
         </FieldDescription>
         {errors.homeroomTeacherId && (
-          <FieldError>{errors.homeroomTeacherId}</FieldError>
+          <FieldError id={errorId(`${formId}-teacher`)}>
+            {errors.homeroomTeacherId}
+          </FieldError>
         )}
       </Field>
 
@@ -180,15 +192,14 @@ export const AssignTeacherForm = ({
 
       {requiresReason && (
         <Field data-invalid={!!errors.reason}>
-          <FieldLabel htmlFor="reassignment-reason">Reason</FieldLabel>
+          <FieldLabel htmlFor={`${formId}-reason`}>Reason</FieldLabel>
           <Select
             value={reason}
             onValueChange={(nextReason) => setReason(nextReason ?? "")}
           >
             <SelectTrigger
-              id="reassignment-reason"
+              {...fieldA11y(`${formId}-reason`, { error: errors.reason })}
               disabled={isLoading}
-              data-invalid={errors.reason ? true : undefined}
             >
               <SelectValue placeholder="Select a reason" />
             </SelectTrigger>
@@ -202,18 +213,22 @@ export const AssignTeacherForm = ({
               )}
             </SelectContent>
           </Select>
-          {errors.reason && <FieldError>{errors.reason}</FieldError>}
+          {errors.reason && (
+            <FieldError id={errorId(`${formId}-reason`)}>
+              {errors.reason}
+            </FieldError>
+          )}
         </Field>
       )}
 
       {changeKind !== "none" && (
         <Field>
-          <FieldLabel htmlFor="reassignment-note">Note (optional)</FieldLabel>
+          <FieldLabel htmlFor={`${formId}-note`}>Note (optional)</FieldLabel>
           <Textarea
-            id="reassignment-note"
+            id={`${formId}-note`}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Any additional context for this change..."
+            placeholder="Any context the next reader should know"
             disabled={isLoading}
             rows={3}
           />

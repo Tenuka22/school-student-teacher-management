@@ -1,10 +1,38 @@
 import { isSeededAccount } from "@school-student-teacher-management/auth/roles";
+import { Button } from "@school-student-teacher-management/ui/components/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyTitle,
+} from "@school-student-teacher-management/ui/components/empty";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@school-student-teacher-management/ui/components/select";
+import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@school-student-teacher-management/ui/components/table";
+import { useState } from "react";
+
+import { ConfirmDialog } from "@/components/ui-patterns/confirm-dialog";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 
 import { BanUserDialog } from "./ban-user-dialog";
 import type { BanTarget } from "./ban-user-dialog";
 import { PurgeUnverifiedDialog } from "./purge-unverified-dialog";
 import { ROLES, ROLE_LABELS, toRole, useAdminUsers } from "./use-admin-users";
 import type { AdminUserRow, Role } from "./use-admin-users";
+
+const LOADING_ROWS = ["a", "b", "c", "d"];
 
 const formatWhen = (value: Date | string | undefined): string => {
   if (!value) {
@@ -37,7 +65,7 @@ const BanCell = ({
   if (isSeededAccount(user.username)) {
     return (
       <span
-        className="text-xs font-bold text-[#013405]/45"
+        className="text-muted-foreground text-sm font-medium"
         title="Institutional login — managed by the College environment"
       >
         Protected
@@ -47,51 +75,78 @@ const BanCell = ({
 
   if (user.banned) {
     return (
-      <button
-        type="button"
+      <Button
+        variant="outline"
+        size="sm"
         disabled={isPending}
         onClick={() => onSelect(false)}
-        className="border border-[#013405]/30 px-3 py-1.5 text-xs font-bold text-[#013405] transition-colors hover:border-[#013405]"
+        aria-label={`Unban ${user.name}`}
       >
         Unban
-      </button>
+      </Button>
     );
   }
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="outline"
+      size="sm"
       disabled={isPending}
       onClick={() => onSelect(true)}
-      className="border border-[#A51919]/40 px-3 py-1.5 text-xs font-bold text-[#A51919] transition-colors hover:border-[#A51919]"
+      aria-label={`Ban ${user.name}`}
+      className="border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive"
     >
       Ban
-    </button>
+    </Button>
   );
 };
 
+/**
+ * Picking a role only *proposes* it: the page asks for confirmation before
+ * the existing mutation runs, so the control keeps showing the current role
+ * until the change is confirmed and saved.
+ */
 const RoleSelect = ({
+  user,
   isPending,
-  onChange,
-  role,
+  onPropose,
 }: {
+  user: AdminUserRow;
   isPending: boolean;
-  onChange: (role: Role) => void;
-  role: string | null | undefined;
-}) => (
-  <select
-    className="border border-[#013405]/22 bg-white px-2 py-1.5 text-xs outline-none focus:border-[#013405]"
-    disabled={isPending}
-    onChange={(event) => onChange(toRole(event.target.value))}
-    value={toRole(role)}
-  >
-    {ROLES.map((option) => (
-      <option key={option} value={option}>
-        {ROLE_LABELS[option]}
-      </option>
-    ))}
-  </select>
-);
+  onPropose: (role: Role) => void;
+}) => {
+  const current = toRole(user.role);
+
+  return (
+    <Select
+      value={current}
+      onValueChange={(next) => {
+        const role = toRole(next);
+        if (role !== current) {
+          onPropose(role);
+        }
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        aria-label={`Role for ${user.name}`}
+        disabled={isPending}
+        className="min-w-36"
+      >
+        <SelectValue>
+          {(value: string | null) => ROLE_LABELS[toRole(value)]}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {ROLES.map((option) => (
+          <SelectItem key={option} value={option}>
+            {ROLE_LABELS[option]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
 
 const getStaleSummary = (count: number, retentionDays: number): string => {
   if (count === 0) {
@@ -108,80 +163,73 @@ const UsersTable = ({
   isBanPending,
   isRolePending,
   onBan,
-  onRole,
+  onProposeRole,
 }: {
   users: AdminUserRow[];
   isBanPending: boolean;
   isRolePending: boolean;
   onBan: (user: AdminUserRow, banned: boolean) => void;
-  onRole: (userId: string, role: Role) => void;
+  onProposeRole: (user: AdminUserRow, role: Role) => void;
 }) => (
-  <div className="overflow-x-auto border border-[#013405]/14 bg-[#fffdf6]">
-    <table className="w-full min-w-[720px] text-left text-sm">
-      <thead>
-        <tr className="border-b border-[#013405]/14">
-          <th className="px-4 py-3 text-xs font-extrabold tracking-[0.12em] text-[#013405]/60">
-            NAME
-          </th>
-          <th className="px-4 py-3 text-xs font-extrabold tracking-[0.12em] text-[#013405]/60">
-            USERNAME
-          </th>
-          <th className="px-4 py-3 text-xs font-extrabold tracking-[0.12em] text-[#013405]/60">
-            CREATED
-          </th>
-          <th className="px-4 py-3 text-xs font-extrabold tracking-[0.12em] text-[#013405]/60">
-            ROLE
-          </th>
-          <th className="px-4 py-3 text-xs font-extrabold tracking-[0.12em] text-[#013405]/60">
-            STATUS
-          </th>
-        </tr>
-      </thead>
-      <tbody>
+  <div className="border-border bg-card border">
+    <Table className="min-w-180">
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead>Name</TableHead>
+          <TableHead>Username</TableHead>
+          <TableHead>Created</TableHead>
+          <TableHead>Role</TableHead>
+          <TableHead>Status</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {users.map((user) => (
-          <tr
-            className="border-b border-[#013405]/8 last:border-b-0"
-            key={user.id}
-          >
-            <td className="px-4 py-3">
-              <span className="block font-bold text-[#013405]">
+          <TableRow key={user.id}>
+            <TableCell className="py-3">
+              <span className="text-foreground block font-semibold">
                 {user.name}
               </span>
-              <span className="block text-xs text-[#013405]/55">
+              <span className="text-muted-foreground block text-sm">
                 {user.email}
                 {user.emailVerified === false && (
-                  <span className="ml-2 text-[#A51919]">
+                  <span className="text-destructive ml-2">
                     email not confirmed
                   </span>
                 )}
               </span>
-            </td>
-            <td className="px-4 py-3 font-mono text-xs text-[#013405]/70">
+            </TableCell>
+            <TableCell className="text-foreground/80 font-mono text-sm">
               {user.username ?? "—"}
-            </td>
-            <td className="px-4 py-3 text-xs text-[#013405]/60">
+            </TableCell>
+            <TableCell className="text-muted-foreground text-xs">
               {formatWhen(user.createdAt)}
-            </td>
-            <td className="px-4 py-3">
+            </TableCell>
+            <TableCell>
               <RoleSelect
+                user={user}
                 isPending={isRolePending}
-                onChange={(role) => onRole(user.id, role)}
-                role={user.role}
+                onPropose={(role) => onProposeRole(user, role)}
               />
-            </td>
-            <td className="px-4 py-3">
+            </TableCell>
+            <TableCell>
               <BanCell
                 isPending={isBanPending}
                 onSelect={(banned) => onBan(user, banned)}
                 user={user}
               />
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   </div>
 );
+
+interface RoleChange {
+  user: AdminUserRow;
+  from: Role;
+  to: Role;
+}
 
 /**
  * User administration, backed by Better Auth's admin plugin.
@@ -204,6 +252,7 @@ export const AdminUsersContent = () => {
     isLoadingPurgePreview,
     purgeMutation,
   } = useAdminUsers();
+  const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
 
   const staleCount = purgePreview?.count ?? 0;
   const retentionDays = purgePreview?.retentionDays ?? 7;
@@ -211,44 +260,67 @@ export const AdminUsersContent = () => {
   const openBanDialog = (target: AdminUserRow, banned: boolean) =>
     setBanDialog({ target: target as BanTarget, banned });
 
-  return (
-    <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
-          Users
-        </h1>
-        <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
-          Every account that can sign in. The role decides which workspace
-          someone lands in; leadership review authority comes from their
-          position assignment, not from here.
-        </p>
-      </div>
+  const confirmRoleChange = () => {
+    if (!roleChange) {
+      return;
+    }
+    // The same call the select used to make directly; only the timing moved.
+    setRoleMutation.mutate(
+      { userId: roleChange.user.id, role: roleChange.to },
+      { onSettled: () => setRoleChange(null) }
+    );
+  };
 
-      <section className="flex flex-wrap items-center justify-between gap-4 border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-4">
+  return (
+    <div className="flex flex-col gap-4.5">
+      <PageHeader
+        eyebrow="Administration"
+        title="Users"
+        description="Every account that can sign in. The role decides which workspace someone lands in; leadership review authority comes from their position assignment, not from here."
+      />
+
+      <section
+        aria-labelledby="unverified-heading"
+        className="border-border bg-card flex flex-wrap items-center justify-between gap-4 border px-5.5 py-4"
+      >
         <div>
-          <h2 className="font-heading text-[19px] font-semibold text-[#013405]">
+          <h2
+            id="unverified-heading"
+            className="text-foreground type-section-title m-0"
+          >
             Unverified accounts
           </h2>
-          <p className="mt-1 max-w-prose text-[13px] text-[#013405]/60">
+          <p className="text-muted-foreground mt-1 max-w-prose text-sm">
             {getStaleSummary(staleCount, retentionDays)}
           </p>
         </div>
-        <button
-          type="button"
-          className="shrink-0 border border-[#A51919]/40 px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#A51919] transition-colors hover:bg-[#A51919] hover:text-white disabled:opacity-50"
+        <Button
+          variant="outline"
+          className="border-destructive/60 text-destructive hover:bg-destructive hover:text-destructive-foreground shrink-0 text-sm font-semibold"
           disabled={purgeMutation.isPending || isLoadingPurgePreview}
           onClick={() => setIsPurgeOpen(true)}
         >
-          {staleCount === 0 ? "CHECK FOR STALE ACCOUNTS" : "CLEAN UP NOW"}
-        </button>
+          {staleCount === 0 ? "Check for stale accounts" : "Clean up now"}
+        </Button>
       </section>
 
       {isLoadingUsers && (
-        <p className="text-sm text-[#013405]/60">Loading users…</p>
+        <div className="space-y-2" aria-busy="true">
+          <span className="sr-only">Loading users…</span>
+          {LOADING_ROWS.map((row) => (
+            <Skeleton key={row} className="h-14 w-full" />
+          ))}
+        </div>
       )}
 
       {!isLoadingUsers && users.length === 0 && (
-        <p className="text-sm text-[#013405]/60">No accounts yet.</p>
+        <Empty className="border-border border border-dashed">
+          <EmptyTitle>No accounts yet</EmptyTitle>
+          <EmptyDescription>
+            Accounts appear here once someone registers or is added by an
+            administrator.
+          </EmptyDescription>
+        </Empty>
       )}
 
       {users.length > 0 && (
@@ -256,10 +328,38 @@ export const AdminUsersContent = () => {
           isBanPending={banMutation.isPending}
           isRolePending={setRoleMutation.isPending}
           onBan={openBanDialog}
-          onRole={(userId, role) => setRoleMutation.mutate({ userId, role })}
+          onProposeRole={(user, role) =>
+            setRoleChange({ user, from: toRole(user.role), to: role })
+          }
           users={users}
         />
       )}
+
+      <ConfirmDialog
+        open={roleChange !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRoleChange(null);
+          }
+        }}
+        title={
+          roleChange ? `Change ${roleChange.user.name}'s role?` : "Change role?"
+        }
+        description={
+          roleChange ? (
+            <>
+              From <strong>{ROLE_LABELS[roleChange.from]}</strong> to{" "}
+              <strong>{ROLE_LABELS[roleChange.to]}</strong>. This changes the
+              workspace they land in and what they can open the next time they
+              use the system.
+            </>
+          ) : null
+        }
+        confirmLabel="Change role"
+        pendingLabel="Changing role…"
+        isPending={setRoleMutation.isPending}
+        onConfirm={confirmRoleChange}
+      />
 
       <BanUserDialog
         isPending={banMutation.isPending}

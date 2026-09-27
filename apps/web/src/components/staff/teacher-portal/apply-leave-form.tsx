@@ -22,11 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@school-student-teacher-management/ui/components/select";
+import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { DatePicker } from "@/components/date-picker";
+import { RequiredMark } from "@/components/ui-patterns/required-mark";
+import { errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
 
 const LEAVE_TYPES = [
@@ -128,7 +131,7 @@ export const ApplyLeaveForm = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Apply for Leave</DialogTitle>
+          <DialogTitle>Apply for leave</DialogTitle>
           <DialogDescription>
             Your request goes to the Deputy Principal for recommendation, then
             to the Principal for the final decision. You&apos;ll see the outcome
@@ -137,8 +140,10 @@ export const ApplyLeaveForm = ({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <FieldGroup>
-            <Field>
-              <FieldLabel>Leave type *</FieldLabel>
+            <Field data-invalid={Boolean(errors.type)}>
+              <FieldLabel htmlFor="leave-type">
+                Leave type <RequiredMark />
+              </FieldLabel>
               <Select
                 value={form.type}
                 onValueChange={(value: string | null) => {
@@ -147,7 +152,12 @@ export const ApplyLeaveForm = ({
                   }
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger
+                  {...fieldA11y("leave-type", {
+                    error: errors.type,
+                    required: true,
+                  })}
+                >
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -158,12 +168,18 @@ export const ApplyLeaveForm = ({
                   ))}
                 </SelectContent>
               </Select>
-              {errors.type && <FieldError>{errors.type}</FieldError>}
+              {errors.type && (
+                <FieldError id={errorId("leave-type")}>
+                  {errors.type}
+                </FieldError>
+              )}
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field>
-                <FieldLabel htmlFor="leave-start">From *</FieldLabel>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field data-invalid={Boolean(errors.startDate)}>
+                <FieldLabel htmlFor="leave-start">
+                  From <RequiredMark />
+                </FieldLabel>
                 <DatePicker
                   id="leave-start"
                   value={form.startDate}
@@ -173,15 +189,17 @@ export const ApplyLeaveForm = ({
                   <FieldError>{errors.startDate}</FieldError>
                 )}
               </Field>
-              <Field>
-                <FieldLabel htmlFor="leave-end">To *</FieldLabel>
+              <Field data-invalid={Boolean(errors.endDate)}>
+                <FieldLabel htmlFor="leave-end">
+                  To <RequiredMark />
+                </FieldLabel>
                 <DatePicker
                   id="leave-end"
                   value={form.endDate}
                   onChange={(isoDate) => setField("endDate", isoDate)}
                 />
                 <FieldDescription>
-                  Same as &quot;From&quot; for one day
+                  Use the same date as &quot;From&quot; for a single day.
                 </FieldDescription>
                 {errors.endDate && <FieldError>{errors.endDate}</FieldError>}
               </Field>
@@ -189,18 +207,17 @@ export const ApplyLeaveForm = ({
 
             <Field>
               <FieldLabel htmlFor="leave-reason">Reason</FieldLabel>
-              <textarea
+              <Textarea
                 id="leave-reason"
                 value={form.reason}
                 onChange={(e) => setField("reason", e.target.value)}
                 rows={3}
                 placeholder="e.g. Family wedding out of town"
-                className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
               />
             </Field>
           </FieldGroup>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -210,7 +227,7 @@ export const ApplyLeaveForm = ({
               Cancel
             </Button>
             <Button type="submit" disabled={applyMutation.isPending}>
-              {applyMutation.isPending ? "Submitting..." : "Submit Request"}
+              {applyMutation.isPending ? "Submitting…" : "Submit request"}
             </Button>
           </div>
         </form>

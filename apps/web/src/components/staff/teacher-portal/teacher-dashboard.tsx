@@ -17,6 +17,7 @@ import { IconCalendarTime, IconId } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 const LEAVE_TYPE_LABELS: Record<string, string> = {
@@ -58,7 +59,7 @@ const LeaveBalanceCard = () => {
                   <span className="font-medium">
                     {LEAVE_TYPE_LABELS[b.leaveType] ?? b.leaveType}
                   </span>
-                  <span className="text-muted-foreground font-mono text-xs">
+                  <span className="text-muted-foreground tabular-nums">
                     {b.usedDays} / {b.maxDays} days
                   </span>
                 </div>
@@ -126,7 +127,7 @@ export const TeacherDashboard = () => {
                 className="mt-4 inline-flex items-center gap-2"
               >
                 <IconCalendarTime className="size-4" />
-                Apply for Leave
+                Apply for leave
               </Link>
             }
           />
@@ -137,21 +138,22 @@ export const TeacherDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-4xl font-semibold">
-          Welcome, {profile.name}
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Your teacher workspace — profile, leave and timetable in one place.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Teacher workspace"
+        title={<>Welcome, {profile.name}</>}
+        description={
+          <>
+            Your teacher workspace — profile, leave and timetable in one place.
+          </>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="p-6">
             <div className="mb-4 flex items-center gap-2">
               <IconId className="text-muted-foreground size-5" />
-              <h2 className="font-semibold">My Profile</h2>
+              <h2 className="font-semibold">My profile</h2>
             </div>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between gap-4">
@@ -214,7 +216,7 @@ export const TeacherDashboard = () => {
               <Button
                 render={<Link to="/teacher/$year/leave" params={{ year }} />}
               >
-                Manage My Leave
+                Manage my leave
               </Button>
               <Button
                 variant="outline"

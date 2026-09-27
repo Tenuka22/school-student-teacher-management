@@ -119,10 +119,10 @@ export const AcademicYearSwitcher = () => {
                 className="border-sidebar-primary/45 bg-sidebar-primary/10 hover:bg-sidebar-primary/15 data-[state=open]:bg-sidebar-primary/15 h-auto border py-2.5"
               >
                 <div className="grid flex-1 text-left leading-tight">
-                  <span className="font-heading text-sidebar-primary truncate text-xl leading-none font-semibold">
+                  <span className="text-sidebar-primary truncate text-lg leading-none font-bold tracking-[-0.01em] tabular-nums">
                     {currentYear?.year ?? "—"}
                   </span>
-                  <span className="text-sidebar-foreground/70 mt-1 truncate text-xs">
+                  <span className="text-sidebar-muted-foreground mt-1.5 truncate text-xs tabular-nums">
                     {currentYear?.startDate && currentYear?.endDate
                       ? `${currentYear.startDate} – ${currentYear.endDate}`
                       : "Select an academic year"}
@@ -137,8 +137,8 @@ export const AcademicYearSwitcher = () => {
             align="start"
           >
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-muted-foreground px-2 pt-1 pb-2 text-xs font-extrabold tracking-[0.18em]">
-                ACADEMIC YEARS
+              <DropdownMenuLabel className="text-muted-foreground type-eyebrow px-2 pt-1 pb-2">
+                Academic years
               </DropdownMenuLabel>
               {windowedYears.map((year) => (
                 <DropdownMenuItem
@@ -150,10 +150,10 @@ export const AcademicYearSwitcher = () => {
                       : "justify-between rounded-none py-2"
                   }
                 >
-                  <span className="font-heading text-base">{year.year}</span>
+                  <span className="text-sm tabular-nums">{year.year}</span>
                   {year.isCurrent && (
-                    <span className="text-xs font-bold tracking-wider">
-                      ACTIVE
+                    <span className="text-xs font-semibold tracking-[0.06em] uppercase">
+                      Active
                     </span>
                   )}
                 </DropdownMenuItem>

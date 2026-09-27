@@ -18,6 +18,9 @@ type Staff = typeof staffTable.$inferSelect;
 
 interface TeacherComboboxProps {
   id?: string;
+  /** Ids of the help text and/or error message describing this field. */
+  describedBy?: string;
+  invalid?: boolean;
   value: string;
   onValueChange: (staffId: string) => void;
   disabled?: boolean;
@@ -32,6 +35,8 @@ const DEBOUNCE_MS = 250;
  */
 export const TeacherCombobox = ({
   id,
+  describedBy,
+  invalid,
   value,
   onValueChange,
   disabled = false,
@@ -72,20 +77,22 @@ export const TeacherCombobox = ({
     >
       <ComboboxInput
         id={id}
-        placeholder="Search for a teacher..."
+        aria-describedby={describedBy}
+        aria-invalid={invalid || undefined}
+        placeholder="Search by teacher name"
         showClear={!!value}
         disabled={disabled}
       />
       <ComboboxContent>
         <ComboboxEmpty>
-          {staffQuery.isLoading ? "Searching..." : "No teachers found"}
+          {staffQuery.isLoading ? "Searching…" : "No teachers found"}
         </ComboboxEmpty>
         <ComboboxList>
           {staffList.map((member) => (
             <ComboboxItem key={member.id} value={member}>
               <div className="flex min-w-0 flex-col">
                 <span className="truncate font-medium">{member.name}</span>
-                <span className="text-muted-foreground truncate text-xs">
+                <span className="text-muted-foreground type-caption truncate">
                   {[member.email, member.phone].filter(Boolean).join(" · ") ||
                     "No contact info"}
                 </span>

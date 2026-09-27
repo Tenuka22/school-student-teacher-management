@@ -9,6 +9,7 @@ import { TeacherCombobox } from "@/components/staff/class-assignment/teacher-com
 import { TeacherTimetableDialogs } from "@/components/staff/period-management/teacher-timetable-dialogs";
 import { TeacherTimetableGrid } from "@/components/staff/period-management/teacher-timetable-grid";
 import { useTeacherTimetablePage } from "@/components/staff/period-management/use-teacher-timetable-page";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 
 interface TeacherTimetablePageContentProps {
   /** When set, the teacher is fixed by the route and never asked for again. */
@@ -22,13 +23,16 @@ export const TeacherTimetablePageContent = ({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold">Teacher Timetable</h1>
-        <p className="text-muted-foreground mt-2">
-          View and manage a single teacher&apos;s periods across every class
-          they teach this academic year.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Staff management"
+        title="Teacher timetable"
+        description={
+          <>
+            View and manage a single teacher&apos;s periods across every class
+            they teach this academic year.
+          </>
+        }
+      />
 
       {!fixedStaffId && (
         <Field className="max-w-sm">
@@ -54,32 +58,32 @@ export const TeacherTimetablePageContent = ({
                   .join("")}
               </span>
               <div className="min-w-0">
-                <div className="font-heading text-2xl leading-tight font-semibold">
+                <div className="type-section-title">
                   {page.currentStaff.name}
                 </div>
                 {page.currentStaff.email && (
-                  <div className="text-primary-foreground/65 mt-1 text-xs">
+                  <div className="text-primary-foreground/80 mt-1 text-sm">
                     {page.currentStaff.email}
                   </div>
                 )}
               </div>
               <div className="ml-auto flex gap-6">
                 <div>
-                  <div className="font-heading text-accent text-2xl leading-none font-semibold">
+                  <div className="text-accent text-2xl leading-none font-bold tracking-[-0.02em] tabular-nums">
                     {page.entries.length}
                   </div>
-                  <div className="text-primary-foreground/65 mt-1 text-[10px] tracking-wider uppercase">
+                  <div className="text-primary-foreground/80 type-eyebrow mt-1.5">
                     Periods / week
                   </div>
                 </div>
                 <div>
-                  <div className="font-heading text-accent text-2xl leading-none font-semibold">
+                  <div className="text-accent text-2xl leading-none font-bold tracking-[-0.02em] tabular-nums">
                     {Math.max(
                       page.periodConfig.length * 5 - page.entries.length,
                       0
                     )}
                   </div>
-                  <div className="text-primary-foreground/65 mt-1 text-[10px] tracking-wider uppercase">
+                  <div className="text-primary-foreground/80 type-eyebrow mt-1.5">
                     Free slots
                   </div>
                 </div>

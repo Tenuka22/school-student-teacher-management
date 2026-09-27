@@ -2,6 +2,7 @@ import { Button } from "@school-student-teacher-management/ui/components/button"
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { CollegeCrest } from "@/components/ui-patterns/college-crest";
 import { authClient } from "@/lib/auth-client";
 
 interface ApprovalStep {
@@ -12,20 +13,20 @@ interface ApprovalStep {
 
 const getMarkerClass = (state: ApprovalStep["state"]): string => {
   if (state === "done") {
-    return "border-[#013405] bg-[#013405] text-[#FFF8E7]";
+    return "border-primary bg-primary text-primary-foreground";
   }
 
   if (state === "current") {
-    return "border-[#A8730B] bg-[#A8730B] text-white";
+    return "border-gold-text bg-gold-text text-white";
   }
 
-  return "border-[#013405]/25 bg-transparent text-[#013405]/40";
+  return "border-input bg-transparent text-muted-foreground";
 };
 
 const getLabelClass = (state: ApprovalStep["state"]): string =>
   state === "upcoming"
-    ? "text-[14.5px] font-bold text-[#013405]/45"
-    : "text-[14.5px] font-bold text-[#013405]";
+    ? "text-[0.9375rem] font-semibold text-muted-foreground"
+    : "text-[0.9375rem] font-semibold text-foreground";
 
 const getSteps = (name: string, email: string): ApprovalStep[] => [
   {
@@ -87,28 +88,28 @@ export const PendingApprovalContent = ({
   return (
     <div className="mx-auto w-full max-w-[620px]">
       <div className="mb-8 flex items-center gap-3.5">
-        <img
-          src="/uploads/college-crest.png"
+        <CollegeCrest
           alt="St. Aloysius' College crest"
+          size="small"
           className="block h-[52px] w-auto"
         />
         <div className="leading-[1.15]">
-          <div className="text-[14px] font-extrabold tracking-[0.06em] text-[#013405]">
-            ST. ALOYSIUS&rsquo; COLLEGE
+          <div className="text-foreground text-[0.9375rem] font-bold tracking-[-0.005em]">
+            St. Aloysius&rsquo; College
           </div>
-          <div className="text-xs tracking-[0.28em] text-[#A8730B]">
-            GALLE &bull; SRI LANKA
+          <div className="text-gold-text type-eyebrow mt-0.75 font-semibold">
+            Galle &bull; Sri Lanka
           </div>
         </div>
       </div>
 
-      <div className="mb-2 text-xs font-bold tracking-[0.32em] text-[#A51919]">
-        TEACHER REGISTRATION
+      <div className="text-destructive type-eyebrow mb-2">
+        Teacher registration
       </div>
-      <h1 className="font-heading m-0 mb-3 text-[clamp(30px,5vw,42px)] leading-[1.05] font-semibold text-[#013405]">
+      <h1 className="text-foreground type-page-title m-0 mb-3">
         Waiting for approval
       </h1>
-      <p className="m-0 mb-8 text-[14px] leading-[1.6] text-[#013405]/65">
+      <p className="text-muted-foreground type-body m-0 mb-8">
         Your request to join the College as a teacher has been received. An
         administrator or the Principal has to confirm that you are on the
         College establishment before the teacher role is granted. You do not
@@ -116,15 +117,15 @@ export const PendingApprovalContent = ({
         soon as that happens.
       </p>
 
-      <ol className="m-0 flex list-none flex-col gap-0 border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
+      <ol className="border-border bg-card m-0 flex list-none flex-col gap-0 border px-[22px] py-5">
         {steps.map((step, index) => (
           <li
-            className={`flex gap-4 ${index === steps.length - 1 ? "" : "border-b border-[#013405]/10 pb-4"} ${index > 0 ? "pt-4" : ""}`}
+            className={`flex gap-4 ${index === steps.length - 1 ? "" : "border-border border-b pb-4"} ${index > 0 ? "pt-4" : ""}`}
             key={step.label}
           >
             <span
               aria-hidden="true"
-              className={`mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full border text-[11px] font-extrabold ${getMarkerClass(step.state)}`}
+              className={`mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full border text-xs font-bold ${getMarkerClass(step.state)}`}
             >
               {step.state === "done" ? "✓" : index + 1}
             </span>
@@ -132,12 +133,12 @@ export const PendingApprovalContent = ({
               <div className={getLabelClass(step.state)}>
                 {step.label}
                 {step.state === "current" && (
-                  <span className="ml-2 align-middle text-[10px] font-extrabold tracking-[0.18em] text-[#A8730B]">
-                    IN PROGRESS
+                  <span className="text-gold-text ml-2 align-middle text-xs font-bold tracking-[0.08em] uppercase">
+                    In progress
                   </span>
                 )}
               </div>
-              <div className="mt-1 text-[13px] leading-relaxed text-[#013405]/60">
+              <div className="text-muted-foreground mt-1 text-sm">
                 {step.detail}
               </div>
             </div>
@@ -147,25 +148,25 @@ export const PendingApprovalContent = ({
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <Button
-          className="bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] hover:bg-[#064A12]"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover px-5 py-2.5 text-sm font-semibold"
           disabled={isChecking}
           onClick={recheck}
         >
-          {isChecking ? "CHECKING…" : "CHECK AGAIN"}
+          {isChecking ? "Checking…" : "Check again"}
         </Button>
         <Button
-          className="border border-[#013405]/30 px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#013405] hover:bg-[#013405]/5"
+          className="border-input text-foreground hover:bg-primary/5 border px-5 py-2.5 text-sm font-semibold"
           onClick={async () => {
             await authClient.signOut();
             window.location.assign("/login");
           }}
           variant="outline"
         >
-          SIGN OUT
+          Sign out
         </Button>
       </div>
 
-      <p className="mt-6 max-w-prose text-xs leading-relaxed text-[#013405]/50">
+      <p className="text-muted-foreground mt-6 max-w-prose text-sm">
         Verification and approval are separate. Confirming your address only
         proved that the email is yours; staff access is granted by a person. If
         the request was not yours, sign out and tell an administrator.

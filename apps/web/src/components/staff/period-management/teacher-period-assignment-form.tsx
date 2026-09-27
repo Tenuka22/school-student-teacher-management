@@ -21,6 +21,7 @@ import {
   CLASS_CATEGORIES,
   categoryForGrade,
 } from "@/components/staff/class-assignment/class-categories";
+import { errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
 
 interface Class {
@@ -130,7 +131,7 @@ const SelectField = ({
   <Field data-invalid={!!error}>
     <FieldLabel htmlFor={id}>{label}</FieldLabel>
     <Select value={value} onValueChange={(next) => next && onValueChange(next)}>
-      <SelectTrigger id={id} disabled={disabled} data-invalid={!!error}>
+      <SelectTrigger {...fieldA11y(id, { error })} disabled={disabled}>
         <SelectValue placeholder={placeholder}>
           {(selectedValue: string | null) =>
             options.find((option) => option.value === selectedValue)?.label ??
@@ -146,7 +147,7 @@ const SelectField = ({
         ))}
       </SelectContent>
     </Select>
-    {error && <FieldError>{error}</FieldError>}
+    {error && <FieldError id={errorId(id)}>{error}</FieldError>}
   </Field>
 );
 
@@ -278,7 +279,10 @@ const TeacherPeriodAssignmentFormContent = ({
 }: TeacherPeriodAssignmentFormContentProps) => (
   <form id={formId} onSubmit={handleSubmit} className="space-y-6">
     {generalError && (
-      <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+      <div
+        role="alert"
+        className="bg-destructive/10 text-destructive p-3 text-sm"
+      >
         {generalError}
       </div>
     )}

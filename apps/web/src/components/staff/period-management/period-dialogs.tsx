@@ -3,14 +3,6 @@ import type {
   periodConfig as periodConfigTable,
 } from "@school-student-teacher-management/db/schema/periods";
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -21,6 +13,7 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 
 import { PeriodAssignmentForm } from "@/components/staff/period-management/period-assignment-form";
+import { ConfirmDialog } from "@/components/ui-patterns/confirm-dialog";
 
 type Staff = typeof staff.$inferSelect;
 type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
@@ -58,12 +51,12 @@ export const AssignPeriodDialog = ({
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
       <DialogHeader className="shrink-0 border-b px-6 py-4">
-        <DialogTitle>Assign Period</DialogTitle>
+        <DialogTitle>Assign period</DialogTitle>
         <DialogDescription>
           Assign a staff member to this time slot
         </DialogDescription>
       </DialogHeader>
-      <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         {selectedClass && selectedSlot && (
           <PeriodAssignmentForm
             formId="assign-period-form"
@@ -87,7 +80,7 @@ export const AssignPeriodDialog = ({
           Cancel
         </Button>
         <Button type="submit" form="assign-period-form" disabled={isLoading}>
-          {isLoading ? "Saving..." : "Assign"}
+          {isLoading ? "Saving…" : "Assign"}
         </Button>
       </div>
     </DialogContent>
@@ -116,10 +109,10 @@ export const EditPeriodDialog = ({
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
       <DialogHeader className="shrink-0 border-b px-6 py-4">
-        <DialogTitle>Edit Assignment</DialogTitle>
+        <DialogTitle>Edit period</DialogTitle>
         <DialogDescription>Update the assignment details</DialogDescription>
       </DialogHeader>
-      <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         {selectedClass && selectedAssignment && (
           <PeriodAssignmentForm
             formId="edit-period-form"
@@ -145,7 +138,7 @@ export const EditPeriodDialog = ({
           Cancel
         </Button>
         <Button type="submit" form="edit-period-form" disabled={isLoading}>
-          {isLoading ? "Saving..." : "Save"}
+          {isLoading ? "Saving…" : "Save"}
         </Button>
       </div>
     </DialogContent>
@@ -163,23 +156,15 @@ export const DeleteConfirmDialog = ({
   onConfirm: () => Promise<void>;
   isLoading: boolean;
 }) => (
-  <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-    <AlertDialogContent>
-      <AlertDialogTitle>Delete Assignment</AlertDialogTitle>
-      <AlertDialogDescription>
-        Are you sure you want to delete this assignment? This action cannot be
-        undone.
-      </AlertDialogDescription>
-      <div className="flex justify-end gap-2">
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction
-          onClick={onConfirm}
-          disabled={isLoading}
-          className="bg-destructive"
-        >
-          {isLoading ? "Deleting..." : "Delete"}
-        </AlertDialogAction>
-      </div>
-    </AlertDialogContent>
-  </AlertDialog>
+  <ConfirmDialog
+    open={isOpen}
+    onOpenChange={onOpenChange}
+    title="Unassign this period?"
+    description="The teacher and subject will be removed from this timetable slot. This cannot be undone."
+    confirmLabel="Unassign"
+    pendingLabel="Unassigning…"
+    isPending={isLoading}
+    tone="destructive"
+    onConfirm={onConfirm}
+  />
 );

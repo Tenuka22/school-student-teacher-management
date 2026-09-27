@@ -172,7 +172,7 @@ export const PortTeachersDialog = ({
             disabled={portMutation.isPending || teachers.length === 0}
           >
             {portMutation.isPending
-              ? "Importing..."
+              ? "Importing…"
               : `Import ${teachers.length - excluded.size} Teacher(s)`}
           </Button>
         </div>

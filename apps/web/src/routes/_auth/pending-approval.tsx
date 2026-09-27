@@ -2,6 +2,7 @@ import type { SessionUser } from "@school-student-teacher-management/api/context
 import { createFileRoute } from "@tanstack/react-router";
 
 import { PendingApprovalContent } from "@/components/auth/pending-approval-content";
+import { pageHead } from "@/lib/page-title";
 
 const PendingApprovalRoute = () => {
   // From the authed shell's context, not a second lookup — see `verify.tsx`.
@@ -20,4 +21,5 @@ const PendingApprovalRoute = () => {
  */
 export const Route = createFileRoute("/_auth/pending-approval")({
   component: PendingApprovalRoute,
+  head: () => pageHead("Awaiting approval"),
 });

@@ -8,6 +8,7 @@ import {
   Field,
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
+import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
 import {
   IconCheck,
   IconCircleCheck,
@@ -116,7 +117,7 @@ export const LeaveRequestCard = ({
           </p>
 
           {request.deputyStatus && request.deputyStatus !== "pending" && (
-            <p className="text-muted-foreground mt-1 text-xs">
+            <p className="text-muted-foreground mt-1 text-sm">
               Deputy Principal:{" "}
               {request.deputyStatus === "recommended"
                 ? "recommended"
@@ -126,7 +127,7 @@ export const LeaveRequestCard = ({
           )}
 
           {request.reviewComment && (
-            <p className="text-muted-foreground mt-1 text-xs italic">
+            <p className="text-muted-foreground mt-1 text-sm italic">
               Review note: {request.reviewComment}
             </p>
           )}
@@ -136,11 +137,10 @@ export const LeaveRequestCard = ({
               <FieldLabel htmlFor={`comment-${request.id}`}>
                 Review note (optional)
               </FieldLabel>
-              <textarea
+              <Textarea
                 id={`comment-${request.id}`}
                 value={comment}
                 onChange={(e) => onCommentChange(e.target.value)}
-                className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
                 rows={2}
                 placeholder="e.g. Approved — arrange cover for 6-B"
               />

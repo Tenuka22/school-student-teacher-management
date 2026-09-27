@@ -37,7 +37,7 @@ export const AcademicYearBootstrap = () => {
     <div className="flex min-h-[70vh] items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <div className="bg-primary text-primary-foreground mb-2 flex size-10 items-center justify-center rounded-lg">
+          <div className="bg-primary text-primary-foreground mb-2 flex size-10 items-center justify-center">
             <IconCalendarPlus className="size-5" />
           </div>
           <CardTitle>Create your first academic year</CardTitle>
@@ -62,7 +62,7 @@ export const AcademicYearBootstrap = () => {
             className="w-full"
             disabled={createMutation.isPending}
           >
-            {createMutation.isPending ? "Creating..." : "Create Academic Year"}
+            {createMutation.isPending ? "Creating…" : "Create academic year"}
           </Button>
         </CardContent>
       </Card>

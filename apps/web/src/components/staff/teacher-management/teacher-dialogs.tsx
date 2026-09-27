@@ -1,12 +1,4 @@
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -17,8 +9,15 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 
 import { TeacherForm } from "@/components/staff/teacher-management/teacher-form";
+import { ConfirmDialog } from "@/components/ui-patterns/confirm-dialog";
 
 type Staff = typeof staff.$inferSelect;
+
+/** Display labels for the stored enum values (as the form shows them). */
+const GENDER_LABELS: Record<string, string> = {
+  male: "Male",
+  female: "Female",
+};
 
 interface TeacherDialogsProps {
   selectedTeacher: Staff | null;
@@ -36,6 +35,7 @@ interface TeacherDialogsProps {
   onExportProfileClick: () => void;
   isDeleteOpen: boolean;
   onDeleteOpenChange: (open: boolean) => void;
+  isDeletePending: boolean;
   onConfirmDelete: () => void;
 }
 
@@ -68,6 +68,7 @@ export const TeacherDialogs = ({
   onExportProfileClick,
   isDeleteOpen,
   onDeleteOpenChange,
+  isDeletePending,
   onConfirmDelete,
 }: TeacherDialogsProps) => (
   <>
@@ -75,10 +76,10 @@ export const TeacherDialogs = ({
     <Dialog open={isCreateOpen} onOpenChange={onCreateOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Create New Teacher</DialogTitle>
+          <DialogTitle>Add teacher</DialogTitle>
           <DialogDescription>Add a new teacher to the system</DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           <TeacherForm
             formId="create-teacher-form"
             onSubmit={onCreateSubmit}
@@ -100,7 +101,7 @@ export const TeacherDialogs = ({
             form="create-teacher-form"
             disabled={isCreatePending}
           >
-            {isCreatePending ? "Saving..." : "Create Teacher"}
+            {isCreatePending ? "Saving…" : "Add teacher"}
           </Button>
         </div>
       </DialogContent>
@@ -110,10 +111,10 @@ export const TeacherDialogs = ({
     <Dialog open={isEditOpen} onOpenChange={onEditOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Edit Teacher</DialogTitle>
+          <DialogTitle>Edit teacher</DialogTitle>
           <DialogDescription>Update teacher information</DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {selectedTeacher && (
             <TeacherForm
               formId="edit-teacher-form"
@@ -138,7 +139,7 @@ export const TeacherDialogs = ({
             form="edit-teacher-form"
             disabled={isEditPending}
           >
-            {isEditPending ? "Saving..." : "Update Teacher"}
+            {isEditPending ? "Saving…" : "Save changes"}
           </Button>
         </div>
       </DialogContent>
@@ -148,7 +149,7 @@ export const TeacherDialogs = ({
     <Dialog open={isViewOpen} onOpenChange={onViewOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Teacher Profile</DialogTitle>
+          <DialogTitle>Teacher profile</DialogTitle>
           <DialogDescription>View teacher details</DialogDescription>
         </DialogHeader>
         {selectedTeacher && (
@@ -163,40 +164,30 @@ export const TeacherDialogs = ({
             />
             <TeacherProfileField
               label="Gender"
-              value={selectedTeacher.gender}
+              value={GENDER_LABELS[selectedTeacher.gender ?? ""]}
             />
             <Button
               variant="outline"
               onClick={onExportProfileClick}
               disabled={isExportProfilePending}
             >
-              {isExportProfilePending
-                ? "Exporting..."
-                : "Export Profile as PDF"}
+              {isExportProfilePending ? "Exporting…" : "Export profile as PDF"}
             </Button>
           </div>
         )}
       </DialogContent>
     </Dialog>
 
-    {/* Delete Confirmation Dialog */}
-    <AlertDialog open={isDeleteOpen} onOpenChange={onDeleteOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogTitle>Delete Teacher</AlertDialogTitle>
-        <AlertDialogDescription>
-          Are you sure you want to delete {selectedTeacher?.name}? This action
-          cannot be undone.
-        </AlertDialogDescription>
-        <div className="flex justify-end gap-2">
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirmDelete}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Delete
-          </AlertDialogAction>
-        </div>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={isDeleteOpen}
+      onOpenChange={onDeleteOpenChange}
+      title="Delete teacher?"
+      description={`${selectedTeacher?.name ?? "This teacher"} will be removed permanently. This cannot be undone.`}
+      confirmLabel="Delete teacher"
+      pendingLabel="Deleting…"
+      isPending={isDeletePending}
+      tone="destructive"
+      onConfirm={onConfirmDelete}
+    />
   </>
 );

@@ -25,6 +25,7 @@ import { useState } from "react";
 import { AttendanceGrid } from "@/components/staff/attendance/attendance-grid";
 import { useAttendancePage } from "@/components/staff/attendance/use-attendance-page";
 import { PortTeachersDialog } from "@/components/staff/teacher-management/port-teachers-dialog";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 
 export const AttendancePageContent = () => {
   const page = useAttendancePage();
@@ -37,14 +38,18 @@ export const AttendancePageContent = () => {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold">Attendance</h1>
-        <p className="text-muted-foreground mt-2">
-          Tick a period off to mark that teacher absent for it (with a reason) -
-          saves immediately, no separate save step. A teacher absent for every
-          scheduled period that day is treated as absent for the whole day.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Staff management"
+        title="Attendance"
+        description={
+          <>
+            Tick a period off to mark that teacher absent for it (with a reason)
+            - saves immediately, no separate save step. A teacher absent for
+            every scheduled period that day is treated as absent for the whole
+            day.
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-wrap items-end gap-2">
@@ -128,12 +133,16 @@ export const AttendancePageContent = () => {
         <Field className="w-64 sm:ml-auto">
           <FieldLabel htmlFor="attendance-filter">Filter teachers</FieldLabel>
           <div className="relative">
-            <IconSearch className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+            <IconSearch
+              aria-hidden="true"
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+            />
             <Input
               id="attendance-filter"
+              type="search"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="IconSearch by name..."
+              placeholder="Search by teacher name"
               className="pl-8"
             />
           </div>
@@ -150,7 +159,7 @@ export const AttendancePageContent = () => {
           <EmptyContent>
             <Button onClick={() => setIsPortDialogOpen(true)}>
               <IconUsersPlus className="mr-2 size-4" />
-              Import from Previous Year
+              Import from previous year
             </Button>
           </EmptyContent>
         </Empty>

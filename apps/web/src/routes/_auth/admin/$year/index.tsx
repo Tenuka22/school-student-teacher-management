@@ -1,235 +1,456 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 
+import { PageHeader } from "@/components/ui-patterns/page-header";
+import { pageHead } from "@/lib/page-title";
 import { orpc } from "@/utils/orpc";
 
-const CHECKLIST = [
-  { label: "Academic year opened", value: "2027" },
-  { label: "Teachers ported forward", value: "82" },
-  { label: "Classes seeded", value: "70" },
-  { label: "Homeroom teachers assigned", value: "63 / 70" },
-  { label: "Timetable filled", value: "62%" },
+/**
+ * Every figure on this page comes from a query the admin workspace already
+ * makes (the sidebar shares the same cache entries). Anything the API cannot
+ * answer — timetable slot totals, service health — is deliberately absent
+ * rather than estimated.
+ */
+
+type AdminPath =
+  | "/admin/$year/staff/teachers"
+  | "/admin/$year/staff/classes"
+  | "/admin/$year/staff/periods"
+  | "/admin/$year/staff/teacher-timetable"
+  | "/admin/$year/staff/attendance"
+  | "/admin/$year/staff/leaves"
+  | "/admin/$year/users"
+  | "/admin/$year/academic-years";
+
+const QUICK_ACTIONS: { label: string; to: AdminPath }[] = [
+  { label: "Teachers", to: "/admin/$year/staff/teachers" },
+  { label: "Class assignment", to: "/admin/$year/staff/classes" },
+  { label: "Period assignment", to: "/admin/$year/staff/periods" },
+  { label: "Teacher timetable", to: "/admin/$year/staff/teacher-timetable" },
+  { label: "Attendance", to: "/admin/$year/staff/attendance" },
+  { label: "Leave requests", to: "/admin/$year/staff/leaves" },
+  { label: "Users", to: "/admin/$year/users" },
+  { label: "Academic years", to: "/admin/$year/academic-years" },
 ];
 
-const METRICS = [
-  { label: "TEACHERS ACTIVE", value: "74", sub: "8 on leave or retired" },
-  { label: "CLASSES", value: "70", sub: "7 without a homeroom" },
-  { label: "SLOTS FILLED", value: "1,736", sub: "of 2,800 this year" },
-  { label: "UNASSIGNED STAFF", value: "9", sub: "No periods yet" },
-];
+const RING_RADIUS = 52;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+const LISTED_CLASS_NAMES = 4;
 
-const NEEDS_ATTENTION = [
-  {
-    title: "7 classes have no homeroom teacher",
-    detail: "6-C, 8-B, 9-A, 10-D and 3 more",
-    action: "Assign",
-  },
-  {
-    title: "9 teachers have no periods assigned",
-    detail: "Newly ported from 2026",
-    action: "Timetable",
-  },
-  {
-    title: "Grade 12 A-Level classes not created",
-    detail: "Streams vary yearly — always manual",
-    action: "Create",
-  },
-];
+const FOCUS_RING =
+  "focus-visible:ring-ring focus-visible:ring-offset-background focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none";
+const OUTLINE_LINK = `border-input text-foreground hover:border-primary hover:bg-muted border font-semibold transition-colors ${FOCUS_RING}`;
 
-const QUICK_ACTIONS = [
-  "Add teacher",
-  "Seed default classes",
-  "Assign homerooms",
-  "Fill timetable",
-  "CSV import",
-  "Export workbook",
-];
+const plural = (count: number, one: string, many: string) =>
+  count === 1 ? one : many;
 
-const RING_CIRCUMFERENCE = 2 * Math.PI * 52;
-const RING_PROGRESS = 0.62;
+interface Figure {
+  value: number | undefined;
+  isError: boolean;
+}
 
-const RouteComponent = () => {
-  const { session } = Route.useRouteContext();
-  const privateData = useQuery(orpc.privateData.queryOptions());
+/** A count, or an honest placeholder while loading or after a failure. */
+const showFigure = ({ value, isError }: Figure): string => {
+  if (isError) {
+    return "n/a";
+  }
+  return value === undefined ? "—" : value.toLocaleString("en-US");
+};
+
+interface ClassRow {
+  name: string;
+  homeroomTeacherId: string | null;
+}
+
+const useDashboardData = (academicYearId: string | undefined) => {
+  const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
+  const classesQuery = useQuery({
+    ...orpc.staff.listClasses.queryOptions({
+      input: { academicYearId: academicYearId ?? "" },
+    }),
+    enabled: Boolean(academicYearId),
+  });
+  const deputyQueue = useQuery(
+    orpc.staff.leaves.listLeaveRequests.queryOptions({
+      input: { queue: "deputy" },
+    })
+  );
+  const principalQueue = useQuery(
+    orpc.staff.leaves.listLeaveRequests.queryOptions({
+      input: { queue: "principal" },
+    })
+  );
+
+  const classes = classesQuery.data as ClassRow[] | undefined;
+  const withoutHomeroom = classes?.filter((c) => !c.homeroomTeacherId) ?? [];
+
+  return {
+    teachers: { value: staffQuery.data?.length, isError: staffQuery.isError },
+    classes: { value: classes?.length, isError: classesQuery.isError },
+    withoutHomeroom,
+    deputyQueue: {
+      value: deputyQueue.data?.requests.length,
+      isError: deputyQueue.isError,
+    },
+    principalQueue: {
+      value: principalQueue.data?.requests.length,
+      isError: principalQueue.isError,
+    },
+    allLoaded:
+      staffQuery.isSuccess &&
+      classesQuery.isSuccess &&
+      deputyQueue.isSuccess &&
+      principalQueue.isSuccess,
+  };
+};
+
+type DashboardData = ReturnType<typeof useDashboardData>;
+
+interface AttentionEntry {
+  title: string;
+  detail: string;
+  action: string;
+  to: AdminPath;
+}
+
+const describeUnassigned = (classes: ClassRow[]): string => {
+  const names = classes.map((c) => c.name);
+  const listed = names.slice(0, LISTED_CLASS_NAMES).join(", ");
+  const rest = names.length - LISTED_CLASS_NAMES;
+  return rest > 0 ? `${listed} and ${rest} more` : listed;
+};
+
+/** Only states the records actually show; nothing here is estimated. */
+const buildAttention = (data: DashboardData, year: string) => {
+  const entries: AttentionEntry[] = [];
+  const unassigned = data.withoutHomeroom.length;
+  const pendingRecommendation = data.deputyQueue.value ?? 0;
+
+  if (data.teachers.value === 0) {
+    entries.push({
+      title: "No teacher records yet",
+      detail: "Add teachers before assigning classes or periods.",
+      action: "Add teachers",
+      to: "/admin/$year/staff/teachers",
+    });
+  }
+  if (data.classes.value === 0) {
+    entries.push({
+      title: `No classes created for ${year}`,
+      detail: "Seed the default classes or create them one by one.",
+      action: "Create classes",
+      to: "/admin/$year/staff/classes",
+    });
+  }
+  if (unassigned > 0) {
+    entries.push({
+      title: `${unassigned} ${plural(unassigned, "class has", "classes have")} no homeroom teacher`,
+      detail: describeUnassigned(data.withoutHomeroom),
+      action: "Assign",
+      to: "/admin/$year/staff/classes",
+    });
+  }
+  if (pendingRecommendation > 0) {
+    entries.push({
+      title: `${pendingRecommendation} leave ${plural(pendingRecommendation, "request awaits", "requests await")} a recommendation`,
+      detail: "Waiting for the Deputy Principal to review.",
+      action: "View requests",
+      to: "/admin/$year/staff/leaves",
+    });
+  }
+
+  return entries;
+};
+
+const StatTile = ({
+  label,
+  figure,
+  detail,
+}: {
+  label: string;
+  figure: Figure;
+  detail: string;
+}) => (
+  <div className="bg-card border-border border-t-primary border border-t-2 px-4.5 py-4">
+    <div className="text-muted-foreground type-eyebrow">{label}</div>
+    <div className="text-foreground type-stat mt-2.5">{showFigure(figure)}</div>
+    <div className="text-muted-foreground mt-1.5 text-sm">
+      {figure.isError ? "Could not be loaded. Refresh to try again." : detail}
+    </div>
+  </div>
+);
+
+const ChecklistRow = ({
+  label,
+  value,
+  done,
+}: {
+  label: string;
+  value: string;
+  done: boolean;
+}) => (
+  <li className="border-border flex items-center gap-2.75 border-t py-2.5">
+    <span
+      aria-hidden="true"
+      className={
+        done
+          ? "border-primary bg-primary text-primary-foreground flex size-4.5 flex-none items-center justify-center border text-xs font-bold"
+          : "border-input flex size-4.5 flex-none border"
+      }
+    >
+      {done ? "✓" : null}
+    </span>
+    <span className="text-foreground min-w-0 flex-1 text-sm">
+      {label}
+      <span className="sr-only">{done ? " (done)" : " (not done)"}</span>
+    </span>
+    <span className="text-muted-foreground text-sm font-medium tabular-nums">
+      {value}
+    </span>
+  </li>
+);
+
+const CoverageCard = ({
+  data,
+  academicYear,
+}: {
+  data: DashboardData;
+  academicYear: number | undefined;
+}) => {
+  const classCount = data.classes.value;
+  const unassigned = data.withoutHomeroom.length;
+  const covered =
+    classCount === undefined ? undefined : classCount - unassigned;
+  const coverage = classCount ? (covered ?? 0) / classCount : 0;
+  const hasClasses = classCount !== undefined && classCount > 0;
 
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div className="flex flex-wrap items-end justify-between gap-5">
+    <section
+      aria-labelledby="coverage-heading"
+      className="bg-card border-border border p-6"
+    >
+      <h2 id="coverage-heading" className="text-gold-text type-eyebrow m-0">
+        Homeroom coverage
+      </h2>
+      <div className="mt-4.5 flex items-center gap-5">
+        {/* Decorative: the figure beside it carries the same information. */}
+        <svg
+          viewBox="0 0 120 120"
+          aria-hidden="true"
+          className="size-29.5 flex-none -rotate-90"
+        >
+          <circle
+            cx="60"
+            cy="60"
+            r={RING_RADIUS}
+            fill="none"
+            className="stroke-primary/12"
+            strokeWidth="11"
+          />
+          <circle
+            cx="60"
+            cy="60"
+            r={RING_RADIUS}
+            fill="none"
+            className="stroke-primary"
+            strokeWidth="11"
+            strokeDasharray={`${RING_CIRCUMFERENCE * coverage} ${RING_CIRCUMFERENCE}`}
+          />
+        </svg>
         <div>
-          <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
-            Welcome back, {session?.user.name ?? "there"}
-          </h1>
-          <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
-            {privateData.data?.message ??
-              "Four things stand between you and a running timetable."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2.5">
-          <button
-            type="button"
-            className="border border-[#013405]/25 px-[18px] py-2.5 text-xs font-bold text-[#013405] transition-colors hover:border-[#013405]"
-          >
-            Import from 2026
-          </button>
-          <button
-            type="button"
-            className="bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12]"
-          >
-            CONTINUE SETUP
-          </button>
+          <div className="text-foreground text-[2.75rem] leading-none font-bold tracking-[-0.03em] tabular-nums">
+            {hasClasses ? Math.round(coverage * 100) : "—"}
+            {hasClasses ? (
+              <span className="text-muted-foreground text-xl font-semibold">
+                %
+              </span>
+            ) : null}
+          </div>
+          <div className="text-muted-foreground mt-2 text-sm">
+            {hasClasses
+              ? `${covered} of ${classCount} classes have`
+              : "No classes yet to"}
+            <br />
+            {hasClasses ? "a homeroom teacher" : "measure coverage"}
+          </div>
         </div>
       </div>
+      <ul className="mt-5 flex list-none flex-col p-0">
+        <ChecklistRow
+          label="Academic year opened"
+          value={academicYear ? String(academicYear) : "—"}
+          done={Boolean(academicYear)}
+        />
+        <ChecklistRow
+          label="Teachers on record"
+          value={showFigure(data.teachers)}
+          done={(data.teachers.value ?? 0) > 0}
+        />
+        <ChecklistRow
+          label="Classes created"
+          value={showFigure(data.classes)}
+          done={hasClasses}
+        />
+        <ChecklistRow
+          label="Homeroom teachers assigned"
+          value={hasClasses ? `${covered} / ${classCount}` : "—"}
+          done={hasClasses && unassigned === 0}
+        />
+      </ul>
+    </section>
+  );
+};
 
-      <div className="grid items-start gap-[18px] lg:grid-cols-[minmax(300px,340px)_minmax(360px,1fr)]">
-        {/* Progress card */}
-        <div className="border border-[#013405]/14 bg-[#fffdf6] p-6">
-          <div className="text-xs font-extrabold tracking-[0.2em] text-[#A97400]">
-            TERM-START PROGRESS
-          </div>
-          <div className="mt-[18px] flex items-center gap-5">
-            <svg
-              viewBox="0 0 120 120"
-              className="h-[118px] w-[118px] flex-none -rotate-90"
+const AttentionList = ({
+  data,
+  year,
+}: {
+  data: DashboardData;
+  year: string;
+}) => {
+  const entries = buildAttention(data, year);
+
+  return (
+    <section
+      aria-labelledby="attention-heading"
+      className="bg-card border-border border px-5.5 py-5"
+    >
+      <h2
+        id="attention-heading"
+        className="text-foreground type-section-title m-0 mb-1.5"
+      >
+        Needs attention
+      </h2>
+      {entries.length === 0 ? (
+        <p className="text-muted-foreground m-0 py-3.5 text-sm">
+          {data.allLoaded
+            ? "Nothing needs attention right now."
+            : "Checking the College records…"}
+        </p>
+      ) : (
+        <ul className="m-0 list-none p-0">
+          {entries.map((entry) => (
+            <li
+              key={entry.title}
+              className="border-border flex flex-wrap items-center gap-3.5 border-b py-3.5 last:border-b-0"
             >
-              <circle
-                cx="60"
-                cy="60"
-                r="52"
-                fill="none"
-                stroke="rgba(1,52,5,0.12)"
-                strokeWidth="11"
+              <span
+                aria-hidden="true"
+                className="bg-destructive size-2 flex-none rotate-45"
               />
-              <circle
-                cx="60"
-                cy="60"
-                r="52"
-                fill="none"
-                stroke="#013405"
-                strokeWidth="11"
-                strokeDasharray={`${RING_CIRCUMFERENCE * RING_PROGRESS} ${RING_CIRCUMFERENCE}`}
-              />
-            </svg>
-            <div>
-              <div className="font-heading text-[46px] leading-none font-semibold text-[#013405]">
-                62<span className="text-2xl">%</span>
-              </div>
-              <div className="mt-1.5 text-xs leading-relaxed text-[#013405]/65">
-                1,736 of 2,800
-                <br />
-                timetable slots filled
-              </div>
-            </div>
-          </div>
-          <div className="mt-5 flex flex-col">
-            {CHECKLIST.map((c) => (
-              <div
-                key={c.label}
-                className="flex items-center gap-[11px] border-t border-[#013405]/10 py-2.5"
-              >
-                <span className="flex size-[17px] flex-none items-center justify-center border border-[#013405] bg-[#013405] text-xs font-extrabold text-[#FFF8E7]">
-                  ✓
+              <span className="min-w-0 flex-1">
+                <span className="text-foreground type-body block font-semibold">
+                  {entry.title}
                 </span>
-                <span className="min-w-0 flex-1 text-[13px] text-[#013405]/80">
-                  {c.label}
+                <span className="text-muted-foreground mt-0.5 block text-sm">
+                  {entry.detail}
                 </span>
-                <span className="font-mono text-xs text-[#013405]/55">
-                  {c.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-[18px]">
-          {/* Metrics */}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3.5">
-            {METRICS.map((m) => (
-              <div
-                key={m.label}
-                className="border border-t-2 border-[#013405]/14 border-t-[#013405] bg-[#fffdf6] px-[18px] py-4"
-              >
-                <div className="text-xs font-extrabold tracking-[0.16em] text-[#013405]/55">
-                  {m.label}
-                </div>
-                <div className="font-heading mt-2 text-[34px] leading-none font-semibold text-[#013405]">
-                  {m.value}
-                </div>
-                <div className="mt-1.5 text-xs text-[#013405]/58">{m.sub}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Needs attention */}
-          <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-            <div className="mb-1.5 flex items-baseline justify-between gap-3.5">
-              <div className="font-heading text-[23px] font-semibold text-[#013405]">
-                Needs attention
-              </div>
-              <span className="cursor-pointer border-b border-[#A51919]/40 text-xs font-bold tracking-[0.06em] text-[#A51919]">
-                VIEW ALL
               </span>
-            </div>
-            {NEEDS_ATTENTION.map((g) => (
-              <div
-                key={g.title}
-                className="flex items-center gap-3.5 border-b border-[#013405]/10 py-3.5"
+              <Link
+                to={entry.to}
+                params={{ year }}
+                className={`${OUTLINE_LINK} px-3.75 py-2 text-sm whitespace-nowrap`}
               >
-                <span className="size-2 flex-none rotate-45 bg-[#A51919]" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-bold text-[#013405]">
-                    {g.title}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-[#013405]/55">
-                    {g.detail}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="border border-[#013405]/25 px-[15px] py-2 text-xs font-bold whitespace-nowrap text-[#013405] transition-colors hover:border-[#013405]"
-                >
-                  {g.action}
-                </button>
-              </div>
-            ))}
-          </div>
+                {entry.action}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+};
 
-          <div className="grid items-start gap-[18px] sm:grid-cols-[minmax(320px,1fr)_minmax(200px,236px)]">
-            {/* Quick actions */}
-            <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-              <div className="font-heading mb-3.5 text-[23px] font-semibold text-[#013405]">
-                Quick actions
-              </div>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2.5">
-                {QUICK_ACTIONS.map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    className="border border-[#013405]/22 px-3.5 py-3 text-left text-[12.5px] font-bold text-[#013405] transition-colors hover:border-[#013405] hover:bg-[#F3F1E9]"
+const AdminDashboard = () => {
+  const { year } = Route.useParams();
+  const { session, academicYear } = Route.useRouteContext();
+  const data = useDashboardData(academicYear?.id);
+  const classDetail =
+    data.classes.value === undefined
+      ? `Created for ${year}`
+      : `${data.withoutHomeroom.length} without a homeroom teacher`;
+
+  return (
+    <div className="flex flex-col gap-4.5">
+      <PageHeader
+        eyebrow={<>Admin dashboard &middot; {year}</>}
+        title={`Welcome back, ${session?.user.name ?? "there"}`}
+        description={`A summary of the ${year} academic year, read from the College records each time this page loads.`}
+        actions={
+          <>
+            <Link
+              to="/admin/$year/academic-years"
+              params={{ year }}
+              className={`${OUTLINE_LINK} px-4.5 py-2.5 text-sm`}
+            >
+              Academic years
+            </Link>
+            <Link
+              to="/admin/$year/staff/periods"
+              params={{ year }}
+              className={`bg-primary text-primary-foreground hover:bg-primary-hover px-5 py-2.5 text-sm font-semibold transition-colors ${FOCUS_RING}`}
+            >
+              Open period assignment
+            </Link>
+          </>
+        }
+      />
+
+      <div className="grid items-start gap-4.5 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+        <CoverageCard data={data} academicYear={academicYear?.year} />
+
+        <div className="flex min-w-0 flex-col gap-4.5">
+          <section aria-label="Key figures">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3.5">
+              <StatTile
+                label="Teachers"
+                figure={data.teachers}
+                detail="Staff records on file"
+              />
+              <StatTile
+                label="Classes"
+                figure={data.classes}
+                detail={classDetail}
+              />
+              <StatTile
+                label="Awaiting recommendation"
+                figure={data.deputyQueue}
+                detail="Leave requests with the Deputy Principal"
+              />
+              <StatTile
+                label="Awaiting decision"
+                figure={data.principalQueue}
+                detail="Leave requests with the Principal"
+              />
+            </div>
+          </section>
+
+          <AttentionList data={data} year={year} />
+
+          <nav
+            aria-labelledby="quick-actions-heading"
+            className="bg-card border-border border px-5.5 py-5"
+          >
+            <h2
+              id="quick-actions-heading"
+              className="text-foreground type-section-title m-0 mb-3.5"
+            >
+              Quick actions
+            </h2>
+            <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5 p-0">
+              {QUICK_ACTIONS.map((action) => (
+                <li key={action.to}>
+                  <Link
+                    to={action.to}
+                    params={{ year }}
+                    className={`${OUTLINE_LINK} block h-full px-3.5 py-3 text-left text-sm`}
                   >
-                    {a}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* System status */}
-            <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
-              <div className="mb-3.5 text-xs font-extrabold tracking-[0.2em] text-[#013405]/55">
-                SYSTEM STATUS
-              </div>
-              <div className="flex items-center gap-2.5">
-                <span className="size-2.5 flex-none rounded-full bg-[#2E7D32]" />
-                <span className="text-sm font-bold text-[#013405]">
-                  All systems operational
-                </span>
-              </div>
-              <div className="mt-2.5 text-xs leading-relaxed text-[#013405]/60">
-                Last sync <span className="font-mono">2 min ago</span>
-                <br />
-                API &bull; database &bull; exports
-              </div>
-            </div>
-          </div>
+                    {action.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
       </div>
     </div>
@@ -237,8 +458,6 @@ const RouteComponent = () => {
 };
 
 export const Route = createFileRoute("/_auth/admin/$year/")({
-  component: RouteComponent,
-  loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(orpc.privateData.queryOptions());
-  },
+  component: AdminDashboard,
+  head: () => pageHead("Admin dashboard"),
 });

@@ -1,16 +1,34 @@
 import type { SessionUser } from "@school-student-teacher-management/api/context";
 import { needsVerification } from "@school-student-teacher-management/auth/roles";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@school-student-teacher-management/ui/components/breadcrumb";
 import { Separator } from "@school-student-teacher-management/ui/components/separator";
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@school-student-teacher-management/ui/components/sidebar";
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  createFileRoute,
+  redirect,
+  useRouterState,
+} from "@tanstack/react-router";
+import { Fragment } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { AcademicYearGate } from "@/components/staff/academic-year-switcher/academic-year-gate";
 import { getUser } from "@/functions/get-user";
+import type { Crumb } from "@/lib/breadcrumbs";
+import { getBreadcrumbs } from "@/lib/breadcrumbs";
+import { useActiveYear } from "@/lib/paths";
 
 /**
  * The two whole-page states an account can be in without a workspace. They
@@ -42,14 +60,79 @@ const getRequiredPath = (
   return null;
 };
 
+const CrumbLabel = ({ crumb, isLast }: { crumb: Crumb; isLast: boolean }) => {
+  if (isLast) {
+    return (
+      <BreadcrumbPage className="truncate font-semibold">
+        {crumb.label}
+      </BreadcrumbPage>
+    );
+  }
+  if (!crumb.href) {
+    return <span>{crumb.label}</span>;
+  }
+  return (
+    <BreadcrumbLink
+      className="focus-visible:ring-ring underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+      render={<Link to={crumb.href as never} />}
+    >
+      {crumb.label}
+    </BreadcrumbLink>
+  );
+};
+
+/**
+ * Where am I: sidebar toggle, the breadcrumb for the current URL and the
+ * academic year the URL is scoped to (only when the URL carries one).
+ */
+const ShellHeader = () => {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const year = useActiveYear();
+  const crumbs = getBreadcrumbs(pathname);
+
+  return (
+    <header className="bg-background flex min-h-14 shrink-0 items-center gap-2 border-b px-4 py-2">
+      <SidebarTrigger />
+      <Separator orientation="vertical" className="h-4" />
+      <Breadcrumb className="min-w-0 flex-1">
+        <BreadcrumbList className="flex-nowrap text-sm">
+          {crumbs.map((crumb, index) => {
+            const isLast = index === crumbs.length - 1;
+            return (
+              <Fragment key={crumb.key}>
+                {index > 0 && (
+                  <BreadcrumbSeparator className="hidden sm:list-item" />
+                )}
+                <BreadcrumbItem
+                  className={isLast ? "min-w-0" : "hidden sm:inline-flex"}
+                >
+                  <CrumbLabel crumb={crumb} isLast={isLast} />
+                </BreadcrumbItem>
+              </Fragment>
+            );
+          })}
+        </BreadcrumbList>
+      </Breadcrumb>
+      {year ? (
+        <span className="border-input text-foreground shrink-0 border px-2 py-1 text-sm font-semibold tabular-nums">
+          <span className="sr-only">Academic year </span>
+          {year}
+        </span>
+      ) : null}
+    </header>
+  );
+};
+
 const AuthLayout = () => {
   const { session, isStandalone } = Route.useRouteContext();
 
   if (isStandalone) {
     return (
-      <div className="flex min-h-dvh flex-col justify-center px-4 py-10 md:px-8">
+      <main className="flex min-h-dvh flex-col justify-center px-4 py-10 md:px-8">
         <Outlet />
-      </div>
+      </main>
     );
   }
 
@@ -67,17 +150,24 @@ const AuthLayout = () => {
 
   return (
     <SidebarProvider>
+      <a
+        href="#main-content"
+        className="bg-primary text-primary-foreground focus-visible:ring-accent sr-only z-(--z-toast) px-4 py-2.5 text-sm font-bold focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus-visible:ring-2 focus-visible:outline-none"
+      >
+        Skip to main content
+      </a>
       <AppSidebar user={user} />
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4" />
-        </header>
-        <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+        <ShellHeader />
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="max-w-content mx-auto flex w-full flex-1 flex-col gap-4 p-4 focus:outline-none md:p-6"
+        >
           <AcademicYearGate>
             <Outlet />
           </AcademicYearGate>
-        </div>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

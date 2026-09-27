@@ -7,18 +7,18 @@ import { useOtpCooldown } from "@/lib/otp-cooldown";
 import type { OtpCooldown } from "@/lib/otp-cooldown";
 
 const inputClass =
-  "w-full border border-[#013405]/22 bg-white px-3 py-2.5 text-sm text-[#013405] outline-none focus:border-[#013405]";
+  "w-full border border-input bg-white px-3 py-2.5 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring sm:text-[0.9375rem]";
 
 const getSendLabel = (cooldown: OtpCooldown): string => {
   if (cooldown.isSending) {
-    return "SENDING…";
+    return "Sending…";
   }
 
   if (cooldown.isCoolingDown) {
-    return `RESEND IN ${cooldown.secondsLeft}s`;
+    return `Resend in ${cooldown.secondsLeft}s`;
   }
 
-  return cooldown.hasSent ? "SEND AGAIN" : "SEND CODE";
+  return cooldown.hasSent ? "Send again" : "Send code";
 };
 
 /**
@@ -97,18 +97,18 @@ export const VerifyEmailContent = ({
     return (
       <div className="flex flex-col gap-[18px]">
         <div>
-          <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
+          <h1 className="text-foreground type-page-title m-0">
             Email verified
           </h1>
-          <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
+          <p className="text-muted-foreground type-body mt-2">
             {email} is confirmed. Continue to your workspace.
           </p>
         </div>
         <a
           href="/"
-          className="self-start bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12]"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover self-start px-5 py-2.5 text-sm font-semibold transition-colors"
         >
-          CONTINUE
+          Continue
         </a>
       </div>
     );
@@ -117,22 +117,22 @@ export const VerifyEmailContent = ({
   return (
     <div className="flex max-w-lg flex-col gap-[18px]">
       <div>
-        <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
+        <h1 className="text-foreground type-page-title m-0">
           Verify your email
         </h1>
-        <p className="mt-1.5 text-[13.5px] leading-relaxed text-[#013405]/65">
+        <p className="text-muted-foreground type-body mt-2">
           Your account exists, but the address on it has not been confirmed.
           Enter the code we send to <strong>{email}</strong> to unlock the rest
           of the system.
         </p>
-        <p className="mt-2 text-[13px] leading-relaxed text-[#013405]/55">
+        <p className="text-muted-foreground mt-2 text-sm">
           Verifying confirms the address is yours. If you asked to join as
           College staff, an administrator still has to approve you before you
           become a teacher.
         </p>
       </div>
 
-      <div className="border border-[#013405]/14 bg-[#fffdf6] px-[22px] py-5">
+      <div className="border-border bg-card border px-[22px] py-5">
         <form
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -140,16 +140,21 @@ export const VerifyEmailContent = ({
             verifyMutation.mutate();
           }}
         >
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-bold tracking-[0.12em] text-[#013405]/70">
-              ONE-TIME CODE
-            </span>
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="verify-otp"
+              className="text-foreground text-sm font-semibold"
+            >
+              One-time code
+            </label>
             <div className="flex gap-2">
               <input
+                id="verify-otp"
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                placeholder="123456"
+                placeholder="6-digit code"
+                aria-describedby={sent ? "verify-otp-hint" : undefined}
                 required
                 value={otp}
                 onChange={(event) => setOtp(event.target.value)}
@@ -163,30 +168,33 @@ export const VerifyEmailContent = ({
                     onSuccess: () => cooldown.registerSend(),
                   });
                 }}
-                className="shrink-0 border border-[#013405]/30 px-3 py-2 text-xs font-bold text-[#013405] transition-colors hover:border-[#013405] disabled:opacity-50"
+                className="border-input text-foreground hover:border-primary shrink-0 border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
               >
                 {getSendLabel(cooldown)}
               </button>
             </div>
             {sent && (
-              <span className="text-xs text-[#013405]/55">
+              <output
+                id="verify-otp-hint"
+                className="text-muted-foreground block text-sm"
+              >
                 Code sent — it expires in 10 minutes. Only three guesses are
                 allowed before a new code is needed.
-              </span>
+              </output>
             )}
-          </label>
+          </div>
 
           <button
             type="submit"
             disabled={verifyMutation.isPending}
-            className="self-start bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-60"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover self-start px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-60"
           >
-            {verifyMutation.isPending ? "VERIFYING…" : "VERIFY EMAIL"}
+            {verifyMutation.isPending ? "Verifying…" : "Verify email"}
           </button>
         </form>
       </div>
 
-      <p className="text-xs text-[#013405]/50">
+      <p className="text-muted-foreground text-sm">
         In development the code is printed in the server console — there is no
         mail provider wired up yet. Repeated requests are held back: each resend
         waits twice as long as the last, up to five minutes.

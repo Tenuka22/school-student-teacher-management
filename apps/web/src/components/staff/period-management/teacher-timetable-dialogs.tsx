@@ -1,12 +1,4 @@
 import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -17,6 +9,7 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 
 import { TeacherPeriodAssignmentForm } from "@/components/staff/period-management/teacher-period-assignment-form";
+import { ConfirmDialog } from "@/components/ui-patterns/confirm-dialog";
 
 interface Class {
   id: string;
@@ -77,14 +70,14 @@ export const TeacherTimetableDialogs = ({
     <Dialog open={isAddOpen} onOpenChange={onAddOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Add Timetable Assignment</DialogTitle>
+          <DialogTitle>Add timetable period</DialogTitle>
           <DialogDescription>
             Assign this teacher to a class and subject. A teacher can be
             assigned to more than one class at the same slot for combined
             sessions.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           <TeacherPeriodAssignmentForm
             formId="add-teacher-period-form"
             classes={classes}
@@ -108,7 +101,7 @@ export const TeacherTimetableDialogs = ({
             form="add-teacher-period-form"
             disabled={isAddPending}
           >
-            {isAddPending ? "Saving..." : "Add Assignment"}
+            {isAddPending ? "Saving…" : "Add period"}
           </Button>
         </div>
       </DialogContent>
@@ -118,12 +111,12 @@ export const TeacherTimetableDialogs = ({
     <Dialog open={isEditOpen} onOpenChange={onEditOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Edit Timetable Assignment</DialogTitle>
+          <DialogTitle>Edit timetable period</DialogTitle>
           <DialogDescription>
             Update the subject for this slot
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 py-4 [color-scheme:dark]">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {selectedEntry && (
             <TeacherPeriodAssignmentForm
               formId="edit-teacher-period-form"
@@ -154,31 +147,22 @@ export const TeacherTimetableDialogs = ({
             form="edit-teacher-period-form"
             disabled={isEditPending}
           >
-            {isEditPending ? "Saving..." : "Save"}
+            {isEditPending ? "Saving…" : "Save"}
           </Button>
         </div>
       </DialogContent>
     </Dialog>
 
-    {/* Delete Confirmation Dialog */}
-    <AlertDialog open={isDeleteOpen} onOpenChange={onDeleteOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogTitle>Remove Assignment</AlertDialogTitle>
-        <AlertDialogDescription>
-          Are you sure you want to remove this timetable assignment? This action
-          cannot be undone.
-        </AlertDialogDescription>
-        <div className="flex justify-end gap-3">
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirmDelete}
-            disabled={isDeletePending}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            {isDeletePending ? "Removing..." : "Remove"}
-          </AlertDialogAction>
-        </div>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={isDeleteOpen}
+      onOpenChange={onDeleteOpenChange}
+      title="Unassign this period?"
+      description="The class and subject will be removed from this teacher's timetable slot. This cannot be undone."
+      confirmLabel="Unassign"
+      pendingLabel="Unassigning…"
+      isPending={isDeletePending}
+      tone="destructive"
+      onConfirm={onConfirmDelete}
+    />
   </>
 );

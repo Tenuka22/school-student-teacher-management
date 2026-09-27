@@ -4,6 +4,7 @@ import Loader from "@/components/loader";
 import { LoginForm } from "@/components/login-form";
 import { getUser } from "@/functions/get-user";
 import { redirectAwayFromSelf } from "@/lib/away-from-self";
+import { pageHead } from "@/lib/page-title";
 
 /**
  * `?switch=1` is how a signed-in member reaches this page on purpose: to add
@@ -24,4 +25,5 @@ export const Route = createFileRoute("/login")({
       await redirectAwayFromSelf(location.pathname);
     }
   },
+  head: () => pageHead("Sign in"),
 });

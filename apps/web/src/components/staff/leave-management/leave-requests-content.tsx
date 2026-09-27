@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 import { LeaveRequestCard } from "./leave-request-card";
@@ -142,15 +143,18 @@ export const LeaveRequestsContent = () => {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-heading text-4xl font-semibold">Leave Requests</h1>
-        <p className="text-muted-foreground mt-2">
-          Review leave applications submitted by teachers — the Deputy Principal
-          recommends, the Principal gives the final decision. Approving a
-          request does not auto-mark attendance — mark the day on the Attendance
-          page.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Staff management"
+        title="Leave requests"
+        description={
+          <>
+            Review leave applications submitted by teachers — the Deputy
+            Principal recommends, the Principal gives the final decision.
+            Approving a request does not auto-mark attendance — mark the day on
+            the Attendance page.
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         {QUEUE_FILTERS.map((filter) => (
@@ -241,7 +245,7 @@ export const LeaveRequestsContent = () => {
       )}
 
       {requests.some((r) => r.status === "rejected") && (
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-sm">
           <IconCircleX className="mr-1 inline size-3.5" />
           Rejected requests stay in the history — filter to Pending to hide
           them.

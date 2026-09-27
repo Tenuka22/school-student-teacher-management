@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 import { ApproveTeacherDialog } from "./approve-teacher-dialog";
@@ -38,47 +39,48 @@ export const TeacherRequestsContent = () => {
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="font-heading m-0 text-[38px] leading-[1.05] font-semibold text-[#013405]">
-          Teacher requests
-        </h1>
-        <p className="mt-1.5 text-[13.5px] text-[#013405]/65">
-          Accounts that asked for staff access. Check the person is on the
-          College establishment, then approve — that grants the{" "}
-          <strong>teacher</strong> role.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Leadership"
+        title="Teacher requests"
+        description={
+          <>
+            Accounts that asked for staff access. Check the person is on the
+            College establishment, then approve — that grants the{" "}
+            <strong>teacher</strong> role.
+          </>
+        }
+      />
 
       {requestsQuery.isPending && (
-        <p className="text-sm text-[#013405]/60">Loading requests…</p>
+        <p className="text-muted-foreground text-sm">Loading requests…</p>
       )}
 
       {!requestsQuery.isPending && requests.length === 0 && (
-        <p className="text-sm text-[#013405]/60">
+        <p className="text-muted-foreground text-sm">
           Nobody is waiting to be approved.
         </p>
       )}
 
       {waiting.length > 0 && (
-        <section className="border-[#013405]/14 bg-[#fffdf6]">
-          <h2 className="border-b border-[#013405]/10 px-[22px] py-3 text-xs font-extrabold tracking-[0.16em] text-[#013405]/55">
-            READY TO REVIEW
+        <section className="border-border bg-card">
+          <h2 className="border-border text-muted-foreground type-eyebrow border-b px-[22px] py-3">
+            Ready to review
           </h2>
           <ul>
             {waiting.map((request) => (
               <li
                 key={request.id}
-                className="flex flex-wrap items-center gap-3 border-b border-[#013405]/8 px-[22px] py-4 last:border-b-0"
+                className="border-border flex flex-wrap items-center gap-3 border-b px-[22px] py-4 last:border-b-0"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block font-bold text-[#013405]">
+                  <span className="text-foreground type-body block font-semibold">
                     {request.name}
                   </span>
-                  <span className="block text-xs text-[#013405]/60">
+                  <span className="text-muted-foreground block text-sm">
                     {request.email} · username{" "}
                     <span className="font-mono">{request.username ?? "—"}</span>
                   </span>
-                  <span className="mt-1 block text-xs text-[#0B5E1A]">
+                  <span className="text-success mt-1 block text-sm">
                     Email verified ·{" "}
                     {request.role === "teacher-requester"
                       ? "Asked to join as staff"
@@ -92,9 +94,9 @@ export const TeacherRequestsContent = () => {
                   type="button"
                   disabled={approveMutation.isPending}
                   onClick={() => setReviewing(request)}
-                  className="shrink-0 border border-[#013405] bg-[#013405] px-4 py-2 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-50"
+                  className="border-primary bg-primary text-primary-foreground hover:bg-primary-hover shrink-0 border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
                 >
-                  REVIEW &amp; APPROVE
+                  Review &amp; approve
                 </button>
               </li>
             ))}
@@ -103,23 +105,23 @@ export const TeacherRequestsContent = () => {
       )}
 
       {blocked.length > 0 && (
-        <section className="border-[#013405]/14 bg-[#fffdf6]">
-          <h2 className="border-b border-[#013405]/10 px-[22px] py-3 text-xs font-extrabold tracking-[0.16em] text-[#013405]/55">
-            AWAITING EMAIL VERIFICATION
+        <section className="border-border bg-card">
+          <h2 className="border-border text-muted-foreground type-eyebrow border-b px-[22px] py-3">
+            Awaiting email verification
           </h2>
           <ul>
             {blocked.map((request) => (
               <li
                 key={request.id}
-                className="border-b border-[#013405]/8 px-[22px] py-4 last:border-b-0"
+                className="border-border border-b px-[22px] py-4 last:border-b-0"
               >
-                <span className="block font-bold text-[#013405]">
+                <span className="text-foreground type-body block font-semibold">
                   {request.name}
                 </span>
-                <span className="block text-xs text-[#013405]/60">
+                <span className="text-muted-foreground block text-sm">
                   {request.email}
                 </span>
-                <span className="mt-1 block text-xs text-[#A51919]">
+                <span className="text-destructive mt-1 block text-sm">
                   Has not entered the code sent to their address yet — they
                   cannot be approved until they do.
                 </span>

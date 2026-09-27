@@ -31,11 +31,13 @@ import { toast } from "sonner";
 import * as v from "valibot";
 
 import { DatePicker } from "@/components/date-picker";
+import { RequiredMark } from "@/components/ui-patterns/required-mark";
 import {
   formatApiErrorMessage,
   friendlyValidationMessage,
   validationFieldErrors,
 } from "@/lib/api-error";
+import { descriptionId, errorId, fieldA11y } from "@/lib/field-a11y";
 
 type Staff = typeof staff.$inferSelect;
 
@@ -49,6 +51,9 @@ interface TeacherFormProps {
 
 const BADGE_NUMBER_RE = /^T\d{3,6}$/u;
 const NIC_RE = /^(?:\d{9}[VvXx]|\d{12})$/u;
+
+/** Shown as required in the form; mirrors the create schema below. */
+const REQUIRED_FIELDS = new Set<string>(["nic", "name", "email"]);
 
 const createValidationSchema = () =>
   v.object({
@@ -171,94 +176,121 @@ export const TeacherForm = ({
     }
   };
 
+  const a11y = (field: keyof FormData, hasDescription = false) =>
+    fieldA11y(`${formId}-${field}`, {
+      error: errors[field],
+      hasDescription,
+      required: REQUIRED_FIELDS.has(field),
+    });
+
+  const renderError = (field: keyof FormData) =>
+    errors[field] ? (
+      <FieldError id={errorId(`${formId}-${field}`)}>
+        {errors[field]}
+      </FieldError>
+    ) : null;
+
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       <FieldSet>
-        <FieldLegend>Basic Information</FieldLegend>
+        <FieldLegend>Basic information</FieldLegend>
         <FieldGroup>
-          <Field>
-            <FieldLabel>Badge Number</FieldLabel>
+          <Field data-invalid={Boolean(errors.teacherServiceNo)}>
+            <FieldLabel htmlFor={`${formId}-teacherServiceNo`}>
+              Badge number
+            </FieldLabel>
             <Input
+              {...a11y("teacherServiceNo", true)}
               value={formData.teacherServiceNo}
               onChange={(e) =>
                 handleChange("teacherServiceNo", e.target.value.toUpperCase())
               }
-              placeholder="T0142 (optional)"
+              placeholder="e.g. T0142"
+              autoComplete="off"
               disabled={isLoading}
-              data-invalid={errors.teacherServiceNo ? true : undefined}
             />
-            <FieldDescription>
-              Optional internal service number — the login username is the NIC
+            <FieldDescription id={descriptionId(`${formId}-teacherServiceNo`)}>
+              Optional internal service number. The login username is the NIC
               below.
             </FieldDescription>
-            {errors.teacherServiceNo && (
-              <FieldError>{errors.teacherServiceNo}</FieldError>
-            )}
+            {renderError("teacherServiceNo")}
           </Field>
 
-          <Field>
-            <FieldLabel>NIC Number *</FieldLabel>
+          <Field data-invalid={Boolean(errors.nic)}>
+            <FieldLabel htmlFor={`${formId}-nic`}>
+              NIC number <RequiredMark />
+            </FieldLabel>
             <Input
+              {...a11y("nic", true)}
               value={formData.nic ?? ""}
               onChange={(e) => handleChange("nic", e.target.value)}
-              placeholder="199912345678 or 991234567V"
+              placeholder="e.g. 199912345678 or 991234567V"
+              autoComplete="off"
               disabled={isLoading}
-              data-invalid={errors.nic ? true : undefined}
             />
-            <FieldDescription>
-              The NIC is the teacher&apos;s login username — they sign in with
-              it and the password you issue.
+            <FieldDescription id={descriptionId(`${formId}-nic`)}>
+              The NIC is the teacher&apos;s login username. They sign in with it
+              and the password you issue.
             </FieldDescription>
-            {errors.nic && <FieldError>{errors.nic}</FieldError>}
+            {renderError("nic")}
           </Field>
 
-          <Field>
-            <FieldLabel>Name *</FieldLabel>
+          <Field data-invalid={Boolean(errors.name)}>
+            <FieldLabel htmlFor={`${formId}-name`}>
+              Full name <RequiredMark />
+            </FieldLabel>
             <Input
+              {...a11y("name")}
               value={formData.name}
               onChange={(e) => handleChange("name", e.target.value)}
-              placeholder="John Doe"
+              placeholder="e.g. Nimal Perera"
+              autoComplete="off"
               disabled={isLoading}
-              data-invalid={errors.name ? true : undefined}
             />
-            {errors.name && <FieldError>{errors.name}</FieldError>}
+            {renderError("name")}
           </Field>
 
-          <Field>
-            <FieldLabel>Email *</FieldLabel>
+          <Field data-invalid={Boolean(errors.email)}>
+            <FieldLabel htmlFor={`${formId}-email`}>
+              Email <RequiredMark />
+            </FieldLabel>
             <Input
+              {...a11y("email")}
               type="email"
               value={formData.email}
               onChange={(e) => handleChange("email", e.target.value)}
-              placeholder="john@school.edu.lk"
+              placeholder="e.g. nimal@school.edu.lk"
+              autoComplete="off"
               disabled={isLoading}
-              data-invalid={errors.email ? true : undefined}
             />
-            {errors.email && <FieldError>{errors.email}</FieldError>}
+            {renderError("email")}
           </Field>
 
-          <Field>
-            <FieldLabel>Phone</FieldLabel>
+          <Field data-invalid={Boolean(errors.phone)}>
+            <FieldLabel htmlFor={`${formId}-phone`}>Phone</FieldLabel>
             <Input
+              {...a11y("phone", true)}
+              type="tel"
+              inputMode="tel"
               value={formData.phone}
               onChange={(e) => handleChange("phone", e.target.value)}
-              placeholder="+947XXXXXXXX"
+              placeholder="e.g. +94771234567"
+              autoComplete="off"
               disabled={isLoading}
-              data-invalid={errors.phone ? true : undefined}
             />
-            <FieldDescription>
-              Sri Lankan phone number (normalized to +94 format)
+            <FieldDescription id={descriptionId(`${formId}-phone`)}>
+              Sri Lankan number; it is saved in +94 format.
             </FieldDescription>
-            {errors.phone && <FieldError>{errors.phone}</FieldError>}
+            {renderError("phone")}
           </Field>
 
-          <Field>
-            <FieldLabel>Gender</FieldLabel>
+          <Field data-invalid={Boolean(errors.gender)}>
+            <FieldLabel htmlFor={`${formId}-gender`}>Gender</FieldLabel>
             <Select
               value={formData.gender}
               onValueChange={(value) => handleChange("gender", value ?? "")}
             >
-              <SelectTrigger disabled={isLoading}>
+              <SelectTrigger {...a11y("gender")} disabled={isLoading}>
                 <SelectValue placeholder="Select gender" />
               </SelectTrigger>
               <SelectContent>
@@ -269,10 +301,11 @@ export const TeacherForm = ({
                 ))}
               </SelectContent>
             </Select>
+            {renderError("gender")}
           </Field>
 
-          <Field>
-            <FieldLabel htmlFor="birthDate">Birth Date</FieldLabel>
+          <Field data-invalid={Boolean(errors.birthDate)}>
+            <FieldLabel htmlFor="birthDate">Date of birth</FieldLabel>
             <DatePicker
               id="birthDate"
               value={formData.birthDate}
@@ -280,6 +313,9 @@ export const TeacherForm = ({
               disabled={isLoading}
               disableFuture
             />
+            {errors.birthDate ? (
+              <FieldError>{errors.birthDate}</FieldError>
+            ) : null}
           </Field>
         </FieldGroup>
       </FieldSet>
@@ -289,17 +325,22 @@ export const TeacherForm = ({
           <Separator />
 
           <FieldSet>
-            <FieldLegend>Employment Information</FieldLegend>
+            <FieldLegend>Employment information</FieldLegend>
             <FieldGroup>
-              <Field>
-                <FieldLabel>Appointment Type</FieldLabel>
+              <Field data-invalid={Boolean(errors.appointmentType)}>
+                <FieldLabel htmlFor={`${formId}-appointmentType`}>
+                  Appointment type
+                </FieldLabel>
                 <Select
                   value={formData.appointmentType || ""}
                   onValueChange={(value) =>
                     handleChange("appointmentType", value || "")
                   }
                 >
-                  <SelectTrigger disabled={isLoading}>
+                  <SelectTrigger
+                    {...a11y("appointmentType")}
+                    disabled={isLoading}
+                  >
                     <SelectValue placeholder="Select appointment type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -312,17 +353,23 @@ export const TeacherForm = ({
                     )}
                   </SelectContent>
                 </Select>
+                {renderError("appointmentType")}
               </Field>
 
-              <Field>
-                <FieldLabel>Employment Status</FieldLabel>
+              <Field data-invalid={Boolean(errors.employmentStatus)}>
+                <FieldLabel htmlFor={`${formId}-employmentStatus`}>
+                  Employment status
+                </FieldLabel>
                 <Select
                   value={formData.employmentStatus || ""}
                   onValueChange={(value) =>
                     handleChange("employmentStatus", value || "")
                   }
                 >
-                  <SelectTrigger disabled={isLoading}>
+                  <SelectTrigger
+                    {...a11y("employmentStatus")}
+                    disabled={isLoading}
+                  >
                     <SelectValue placeholder="Select employment status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -335,6 +382,7 @@ export const TeacherForm = ({
                     )}
                   </SelectContent>
                 </Select>
+                {renderError("employmentStatus")}
               </Field>
             </FieldGroup>
           </FieldSet>

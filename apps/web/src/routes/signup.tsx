@@ -4,6 +4,7 @@ import Loader from "@/components/loader";
 import { SignupForm } from "@/components/signup/signup-form";
 import { getUser } from "@/functions/get-user";
 import { redirectAwayFromSelf } from "@/lib/away-from-self";
+import { pageHead } from "@/lib/page-title";
 
 /** See `/login` — `?switch=1` lets a signed-in member add or switch accounts. */
 const validateSearch = (search: Record<string, unknown>) =>
@@ -20,4 +21,5 @@ export const Route = createFileRoute("/signup")({
       await redirectAwayFromSelf(location.pathname);
     }
   },
+  head: () => pageHead("Register"),
 });

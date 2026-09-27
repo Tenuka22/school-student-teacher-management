@@ -22,6 +22,9 @@ import {
 import { useState } from "react";
 import * as v from "valibot";
 
+import { RequiredMark } from "@/components/ui-patterns/required-mark";
+import { descriptionId, errorId, fieldA11y } from "@/lib/field-a11y";
+
 interface ClassFormProps {
   formId: string;
   academicYearId: string;
@@ -109,17 +112,28 @@ export const ClassForm = ({
     }
   };
 
+  const ids = {
+    gradeLevel: `${formId}-gradeLevel`,
+    name: `${formId}-name`,
+    medium: `${formId}-medium`,
+  };
+
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       {generalError && (
-        <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+        <div
+          role="alert"
+          className="bg-destructive/10 text-destructive p-3 text-sm"
+        >
           {generalError}
         </div>
       )}
 
       {!initialData && (
-        <Field>
-          <FieldLabel htmlFor="gradeLevel">Grade Level *</FieldLabel>
+        <Field data-invalid={Boolean(errors.gradeLevel)}>
+          <FieldLabel htmlFor={ids.gradeLevel}>
+            Grade <RequiredMark />
+          </FieldLabel>
           <Select
             value={formData.gradeLevel.toString()}
             onValueChange={(value) => {
@@ -129,9 +143,11 @@ export const ClassForm = ({
             }}
           >
             <SelectTrigger
-              id="gradeLevel"
+              {...fieldA11y(ids.gradeLevel, {
+                error: errors.gradeLevel,
+                required: true,
+              })}
               disabled={isLoading}
-              data-invalid={errors.gradeLevel ? true : undefined}
             >
               <SelectValue placeholder="Select a grade" />
             </SelectTrigger>
@@ -143,28 +159,40 @@ export const ClassForm = ({
               ))}
             </SelectContent>
           </Select>
-          {errors.gradeLevel && <FieldError>{errors.gradeLevel}</FieldError>}
+          {errors.gradeLevel && (
+            <FieldError id={errorId(ids.gradeLevel)}>
+              {errors.gradeLevel}
+            </FieldError>
+          )}
         </Field>
       )}
 
-      <Field>
-        <FieldLabel htmlFor="name">Class Name *</FieldLabel>
+      <Field data-invalid={Boolean(errors.name)}>
+        <FieldLabel htmlFor={ids.name}>
+          Class name <RequiredMark />
+        </FieldLabel>
         <Input
-          id="name"
-          placeholder="e.g., 10-A, Grade 9 Science"
+          {...fieldA11y(ids.name, {
+            error: errors.name,
+            hasDescription: true,
+            required: true,
+          })}
+          placeholder="e.g. 10-A"
           value={formData.name}
           onChange={(e) => handleChange("name", e.target.value)}
+          autoComplete="off"
           disabled={isLoading}
-          data-invalid={errors.name ? true : undefined}
         />
-        <FieldDescription>
-          Unique name for this class within its grade
+        <FieldDescription id={descriptionId(ids.name)}>
+          Must be unique within its grade.
         </FieldDescription>
-        {errors.name && <FieldError>{errors.name}</FieldError>}
+        {errors.name && (
+          <FieldError id={errorId(ids.name)}>{errors.name}</FieldError>
+        )}
       </Field>
 
-      <Field>
-        <FieldLabel htmlFor="medium">Medium of Instruction</FieldLabel>
+      <Field data-invalid={Boolean(errors.medium)}>
+        <FieldLabel htmlFor={ids.medium}>Medium of instruction</FieldLabel>
         <Select
           value={formData.medium}
           onValueChange={(value) => {
@@ -173,7 +201,10 @@ export const ClassForm = ({
             }
           }}
         >
-          <SelectTrigger id="medium" disabled={isLoading}>
+          <SelectTrigger
+            {...fieldA11y(ids.medium, { error: errors.medium })}
+            disabled={isLoading}
+          >
             <SelectValue placeholder="Select medium" />
           </SelectTrigger>
           <SelectContent>
@@ -182,7 +213,9 @@ export const ClassForm = ({
             <SelectItem value="english">English</SelectItem>
           </SelectContent>
         </Select>
-        {errors.medium && <FieldError>{errors.medium}</FieldError>}
+        {errors.medium && (
+          <FieldError id={errorId(ids.medium)}>{errors.medium}</FieldError>
+        )}
       </Field>
     </form>
   );

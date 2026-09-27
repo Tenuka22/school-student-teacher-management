@@ -101,16 +101,22 @@ const ROW_STATUS_BADGE: Record<
   halfDay: { label: "Half Day", variant: "destructive" },
 };
 
-const ReasonButton = ({ onClick }: { onClick: () => void }) => (
+const ReasonButton = ({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) => (
   <Button
     type="button"
     variant="ghost"
-    size="icon"
-    className="size-5"
+    size="icon-sm"
     onClick={onClick}
-    title="Add reason"
+    aria-label={label}
+    title={label}
   >
-    <IconMessage2 className="size-3.5" />
+    <IconMessage2 aria-hidden="true" className="size-4" />
   </Button>
 );
 
@@ -136,10 +142,12 @@ const SchoolCell = ({
         <Checkbox
           checked={isPresent}
           disabled={isSaving}
+          aria-label={`${teacher.name} at school`}
           onCheckedChange={() => page.toggleSchool(teacher.id)}
         />
         {!isPresent && (
           <ReasonButton
+            label={`Absence reason for ${teacher.name}, whole day`}
             onClick={() =>
               onOpenReason({
                 kind: "day",
@@ -168,8 +176,9 @@ const AttendanceCell = ({
   const scheduled = page.scheduleByStaff.get(teacher.id)?.get(periodNumber);
   if (!scheduled || scheduled.length === 0) {
     return (
-      <TableCell className="bg-muted/25 text-muted-foreground/50 w-16 text-center text-xs">
-        ·
+      <TableCell className="bg-muted/25 text-muted-foreground w-16 text-center text-xs">
+        <span aria-hidden="true">·</span>
+        <span className="sr-only">Not scheduled</span>
       </TableCell>
     );
   }
@@ -189,10 +198,12 @@ const AttendanceCell = ({
         <Checkbox
           checked={!isAbsent}
           disabled={isSaving}
+          aria-label={`${teacher.name} present, period ${periodNumber} (${title})`}
           onCheckedChange={() => page.togglePeriod(teacher.id, periodNumber)}
         />
         {isAbsent && (
           <ReasonButton
+            label={`Absence reason for ${teacher.name}, period ${periodNumber}`}
             onClick={() =>
               onOpenReason({
                 kind: "period",
@@ -229,7 +240,7 @@ const TeacherRow = ({
 
   return (
     <TableRow>
-      <TableCell className="bg-card sticky left-0 font-medium whitespace-nowrap">
+      <TableCell className="bg-card sticky left-0 font-semibold whitespace-nowrap">
         <div className="flex items-center gap-2">
           {teacher.name}
           {status !== "present" && (
@@ -238,13 +249,12 @@ const TeacherRow = ({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            className="size-5"
+            size="icon-sm"
             title="Record arrival time (auto short-leave / half-day policy)"
             aria-label={`Record arrival time for ${teacher.name}`}
             onClick={() => setArrivalOpen(true)}
           >
-            <IconClockCheck className="size-3.5" />
+            <IconClockCheck aria-hidden="true" className="size-4" />
           </Button>
         </div>
       </TableCell>
@@ -349,6 +359,7 @@ const ReasonDialog = ({
         <Textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          aria-label="Reason for absence"
           placeholder="e.g. Sick leave"
           autoFocus
         />
@@ -439,9 +450,7 @@ export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
           group.teachers.length > 0 && (
             <div key={group.key} className="space-y-2">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold tracking-wide uppercase">
-                  {group.label}
-                </h2>
+                <h2 className="type-card-title m-0">{group.label}</h2>
                 <Badge variant="secondary">{group.teachers.length}</Badge>
               </div>
               <Card className="w-fit max-w-full overflow-x-auto">
@@ -455,10 +464,17 @@ export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
                       {page.periods.map((period) => (
                         <TableHead
                           key={period.periodNumber}
-                          className="w-16 text-center whitespace-nowrap"
-                          title={`${period.startTime}-${period.endTime}`}
+                          className="h-auto w-16 py-1.5 text-center whitespace-nowrap"
                         >
-                          P{period.periodNumber}
+                          <abbr
+                            title={`Period ${period.periodNumber}`}
+                            className="no-underline"
+                          >
+                            P{period.periodNumber}
+                          </abbr>
+                          <span className="text-muted-foreground block text-xs font-medium tracking-normal tabular-nums">
+                            {period.startTime}
+                          </span>
                         </TableHead>
                       ))}
                     </TableRow>

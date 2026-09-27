@@ -18,6 +18,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import * as v from "valibot";
 
+import { RequiredMark } from "@/components/ui-patterns/required-mark";
+import { errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
 
 type Staff = typeof staffTable.$inferSelect;
@@ -204,20 +206,27 @@ export const PeriodAssignmentForm = ({
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       {generalError && (
-        <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+        <div
+          role="alert"
+          className="bg-destructive/10 text-destructive p-3 text-sm"
+        >
           {generalError}
         </div>
       )}
 
-      <Field>
-        <FieldLabel>Period</FieldLabel>
-        <div className="text-muted-foreground text-sm">
-          {DAY_NAMES[dayOfWeek]} - Period {periodNumber}
-        </div>
-      </Field>
+      <div>
+        <p className="text-foreground m-0 text-sm font-medium">
+          Timetable slot
+        </p>
+        <p className="text-muted-foreground m-0 mt-1 text-sm">
+          {DAY_NAMES[dayOfWeek]} · Period {periodNumber}
+        </p>
+      </div>
 
-      <Field>
-        <FieldLabel htmlFor="staffId">Teacher *</FieldLabel>
+      <Field data-invalid={Boolean(errors.staffId)}>
+        <FieldLabel htmlFor={`${formId}-staffId`}>
+          Teacher <RequiredMark />
+        </FieldLabel>
         <Select
           value={formData.staffId}
           onValueChange={(value) => {
@@ -227,9 +236,11 @@ export const PeriodAssignmentForm = ({
           }}
         >
           <SelectTrigger
-            id="staffId"
+            {...fieldA11y(`${formId}-staffId`, {
+              error: errors.staffId,
+              required: true,
+            })}
             disabled={isLoading}
-            data-invalid={errors.staffId ? true : undefined}
           >
             <SelectValue placeholder="Select teacher" />
           </SelectTrigger>
@@ -241,11 +252,17 @@ export const PeriodAssignmentForm = ({
             ))}
           </SelectContent>
         </Select>
-        {errors.staffId && <FieldError>{errors.staffId}</FieldError>}
+        {errors.staffId && (
+          <FieldError id={errorId(`${formId}-staffId`)}>
+            {errors.staffId}
+          </FieldError>
+        )}
       </Field>
 
-      <Field>
-        <FieldLabel htmlFor="subjectKey">Subject *</FieldLabel>
+      <Field data-invalid={Boolean(errors.subjectKey)}>
+        <FieldLabel htmlFor={`${formId}-subjectKey`}>
+          Subject <RequiredMark />
+        </FieldLabel>
         <Select
           value={formData.subjectKey}
           onValueChange={(value) => {
@@ -255,9 +272,11 @@ export const PeriodAssignmentForm = ({
           }}
         >
           <SelectTrigger
-            id="subjectKey"
+            {...fieldA11y(`${formId}-subjectKey`, {
+              error: errors.subjectKey,
+              required: true,
+            })}
             disabled={isLoading || filteredSubjects.length === 0}
-            data-invalid={errors.subjectKey ? true : undefined}
           >
             <SelectValue placeholder="Select subject" />
           </SelectTrigger>
@@ -269,7 +288,11 @@ export const PeriodAssignmentForm = ({
             ))}
           </SelectContent>
         </Select>
-        {errors.subjectKey && <FieldError>{errors.subjectKey}</FieldError>}
+        {errors.subjectKey && (
+          <FieldError id={errorId(`${formId}-subjectKey`)}>
+            {errors.subjectKey}
+          </FieldError>
+        )}
       </Field>
 
       {selectedTeacher && !teacherTimetableQuery.isLoading && (
@@ -284,14 +307,17 @@ export const PeriodAssignmentForm = ({
       {hasSlotClash && (
         <Field orientation="horizontal">
           <Checkbox
-            id="isCombinedSession"
+            id={`${formId}-isCombinedSession`}
             checked={isCombinedSession}
             onCheckedChange={(checked) =>
               setIsCombinedSession(checked === true)
             }
             disabled={isLoading}
           />
-          <FieldLabel htmlFor="isCombinedSession" className="font-normal">
+          <FieldLabel
+            htmlFor={`${formId}-isCombinedSession`}
+            className="font-normal"
+          >
             This is an intentional combined session, not a scheduling mistake
           </FieldLabel>
         </Field>

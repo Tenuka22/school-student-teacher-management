@@ -63,15 +63,15 @@ export const ClassCard = ({
       <div className="flex items-start justify-between gap-2">
         <button
           type="button"
-          className="min-w-0 text-left"
+          className="focus-visible:ring-ring min-w-0 text-left focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           onClick={() => onEditClick(cls)}
         >
-          <div className="font-heading text-2xl leading-none font-semibold hover:underline">
+          <span className="block text-xl leading-tight font-bold tracking-[-0.015em] hover:underline">
             {cls.name}
-          </div>
-          <p className="text-muted-foreground mt-1.5 text-xs tracking-wide uppercase">
+          </span>
+          <span className="text-muted-foreground mt-1 block text-sm">
             Grade {cls.gradeLevel}
-          </p>
+          </span>
         </button>
         <Badge
           variant={MEDIUM_BADGE_VARIANT[cls.medium] ?? "secondary"}
@@ -82,12 +82,12 @@ export const ClassCard = ({
       </div>
 
       <div className="flex flex-col gap-1.5 border-t pt-3">
-        <span className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">
-          Homeroom Teacher
+        <span className="text-muted-foreground type-eyebrow">
+          Homeroom teacher
         </span>
         {hasTeacher && teacher ? (
           <div className="flex items-center gap-2">
-            <span className="bg-primary/10 text-primary flex size-7 flex-none items-center justify-center rounded-full text-[10px] font-bold">
+            <span className="bg-primary/10 text-primary flex size-7 flex-none items-center justify-center rounded-full text-xs font-semibold">
               {getInitials(teacher.name)}
             </span>
             <span className="truncate text-sm font-semibold">
@@ -105,7 +105,7 @@ export const ClassCard = ({
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
-          className="flex-1 text-xs font-bold tracking-wide uppercase"
+          className="flex-1"
           onClick={() => onAssignTeacherClick(cls)}
         >
           <IconUserCog className="mr-2 size-4" />

@@ -59,13 +59,9 @@ export const SavedAccounts = ({
   }
 
   return (
-    <section className="border-t border-[#013405]/12 pt-[clamp(12px,2vh,20px)]">
-      <h2 className="text-xs font-bold tracking-[0.16em] text-[#013405]">
-        {title.toUpperCase()}
-      </h2>
-      <p className="mt-1.5 text-[12.5px] leading-[1.5] text-[#013405]/55">
-        {description}
-      </p>
+    <section className="border-border border-t pt-[clamp(12px,2vh,20px)]">
+      <h2 className="text-foreground type-eyebrow m-0">{title}</h2>
+      <p className="text-muted-foreground mt-1.5 text-sm">{description}</p>
 
       <ul className="mt-3 flex flex-col gap-2">
         {accounts.map((account) => {
@@ -81,25 +77,25 @@ export const SavedAccounts = ({
                 type="button"
                 disabled={switchingToken !== null}
                 onClick={() => handleSwitch(account.session.token)}
-                className="flex w-full items-center gap-3 border border-[#013405]/20 bg-[#fffdf6] px-4 py-3 text-left transition-colors hover:border-[#013405] hover:bg-white disabled:opacity-60"
+                className="border-border bg-card hover:border-primary flex w-full items-center gap-3 border px-4 py-3 text-left transition-colors hover:bg-white disabled:opacity-60"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold text-[#013405]">
+                  <span className="text-foreground block truncate text-sm font-semibold">
                     {account.user.name}
                   </span>
-                  <span className="block truncate text-xs text-[#013405]/55">
+                  <span className="text-muted-foreground type-caption block truncate">
                     {account.user.email}
                   </span>
                 </span>
                 {hint && (
-                  <span className="shrink-0 text-xs font-extrabold tracking-[0.12em] text-[#013405]/45">
-                    {hint.label.toUpperCase()}
+                  <span className="text-muted-foreground shrink-0 text-xs font-semibold tracking-[0.06em] uppercase">
+                    {hint.label}
                   </span>
                 )}
-                <span className="shrink-0 text-xs font-extrabold tracking-[0.08em] text-[#013405]">
+                <span className="text-foreground shrink-0 text-sm font-semibold">
                   {switchingToken === account.session.token
-                    ? "SWITCHING…"
-                    : "CONTINUE"}
+                    ? "Switching…"
+                    : "Continue"}
                 </span>
               </button>
             </li>

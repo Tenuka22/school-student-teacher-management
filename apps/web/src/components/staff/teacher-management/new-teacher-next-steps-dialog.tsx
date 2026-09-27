@@ -61,7 +61,7 @@ export const NewTeacherNextStepsDialog = ({
         </DialogHeader>
 
         {credentialsText && (
-          <div className="bg-muted space-y-2 rounded-md border p-3">
+          <div className="bg-muted space-y-2 border p-3">
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <IconId className="size-4" />
@@ -91,7 +91,7 @@ export const NewTeacherNextStepsDialog = ({
             onClick={() => teacher && onManageTimetableClick(teacher)}
           >
             <IconCalendarTime className="mr-2 size-4" />
-            Set Up Timetable
+            Set up timetable
           </Button>
         </div>
         <div className="flex justify-end">

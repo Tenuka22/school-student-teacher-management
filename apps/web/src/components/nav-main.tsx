@@ -13,32 +13,63 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@school-student-teacher-management/ui/components/sidebar";
 import { IconChevronRight } from "@tabler/icons-react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
+
+const ITEM_BASE =
+  "rounded-none border-l-[3px] py-2.5 pl-2.25 font-semibold focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+const ITEM_ACTIVE = `${ITEM_BASE} bg-sidebar-foreground/[0.14] border-sidebar-primary text-sidebar-foreground`;
+const ITEM_IDLE = `${ITEM_BASE} border-transparent text-sidebar-foreground/85 hover:bg-sidebar-foreground/[0.08] hover:text-sidebar-foreground`;
+const ITEM_UNAVAILABLE = `${ITEM_BASE} border-transparent text-sidebar-muted-foreground cursor-not-allowed hover:bg-transparent`;
+
+interface NavItem {
+  title: string;
+  url: string;
+  icon?: React.ReactNode;
+  isActive?: boolean;
+  /** Not built yet. Stays focusable so screen-reader users can discover it. */
+  disabled?: boolean;
+  tag?: string;
+  count?: string;
+  items?: {
+    title: string;
+    url: string;
+  }[];
+}
+
+const ItemContent = ({ item }: { item: NavItem }) => (
+  <>
+    <span className="flex-1">{item.title}</span>
+    {item.count && (
+      <span className="bg-sidebar-foreground/16 text-sidebar-foreground shrink-0 px-1.5 py-0.5 text-xs font-semibold tabular-nums">
+        {item.count}
+      </span>
+    )}
+    {item.tag && (
+      <span
+        aria-hidden="true"
+        className="border-sidebar-foreground/25 text-sidebar-muted-foreground shrink-0 border px-1.5 py-0.5 text-xs font-semibold tracking-[0.06em] uppercase"
+      >
+        {item.tag}
+      </span>
+    )}
+    {item.disabled && <span className="sr-only">(coming soon)</span>}
+  </>
+);
 
 export const NavMain = ({
   label = "Platform",
   items,
 }: {
   label?: string;
-  items: {
-    title: string;
-    url: string;
-    icon?: React.ReactNode;
-    isActive?: boolean;
-    disabled?: boolean;
-    tag?: string;
-    count?: string;
-    items?: {
-      title: string;
-      url: string;
-    }[];
-  }[];
+  items: NavItem[];
 }) => {
-  const navigate = useNavigate();
-  const routerState = useRouterState();
-  const currentPath = routerState.location.pathname;
+  const currentPath = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const { isMobile, setOpenMobile } = useSidebar();
 
   const isItemActive = (url: string) => {
     if (url === "#") {
@@ -47,14 +78,24 @@ export const NavMain = ({
     return currentPath === url || currentPath.startsWith(`${url}/`);
   };
 
+  // The mobile sidebar is a sheet over the page; close it once a link is
+  // followed so the destination isn't hidden behind it.
+  const handleNavigate = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
   return (
     <SidebarGroup className="gap-0 px-2.5 py-0">
-      <SidebarGroupLabel className="text-sidebar-foreground/40 px-2.5 pt-3.5 pb-1.5 text-xs font-extrabold tracking-[0.18em]">
+      <SidebarGroupLabel className="px-2.5 pt-3.5 pb-1.5">
         {label}
       </SidebarGroupLabel>
       <SidebarMenu className="gap-px">
         {items.map((item) => {
           const active = isItemActive(item.url);
+          const unavailable = item.disabled || item.url === "#";
+
           return (
             <Collapsible
               key={item.title}
@@ -64,33 +105,30 @@ export const NavMain = ({
               }
               render={<SidebarMenuItem />}
             >
-              <SidebarMenuButton
-                tooltip={item.title}
-                isActive={active}
-                disabled={item.disabled}
-                className={
-                  active
-                    ? "bg-sidebar-foreground/[0.14] border-sidebar-foreground text-sidebar-foreground rounded-none border-l-[3px] py-2.5 pl-2.25 font-semibold"
-                    : "text-sidebar-foreground/85 rounded-none border-l-[3px] border-transparent py-2.5 pl-2.25 font-semibold hover:bg-transparent"
-                }
-                onClick={() =>
-                  !item.disabled &&
-                  item.url !== "#" &&
-                  navigate({ to: item.url as never })
-                }
-              >
-                <span className="flex-1 text-[13px]">{item.title}</span>
-                {item.count && (
-                  <span className="bg-sidebar-foreground/16 text-sidebar-foreground shrink-0 px-1.5 py-0.5 font-mono text-xs">
-                    {item.count}
-                  </span>
-                )}
-                {item.tag && (
-                  <span className="border-sidebar-foreground/25 text-sidebar-foreground/50 shrink-0 border px-1.5 py-0.5 text-xs font-extrabold tracking-wider">
-                    {item.tag}
-                  </span>
-                )}
-              </SidebarMenuButton>
+              {unavailable ? (
+                <SidebarMenuButton
+                  tooltip={item.title}
+                  aria-disabled="true"
+                  className={ITEM_UNAVAILABLE}
+                >
+                  <ItemContent item={item} />
+                </SidebarMenuButton>
+              ) : (
+                <SidebarMenuButton
+                  tooltip={item.title}
+                  isActive={active}
+                  className={active ? ITEM_ACTIVE : ITEM_IDLE}
+                  render={
+                    <Link
+                      to={item.url as never}
+                      aria-current={active ? "page" : undefined}
+                      onClick={handleNavigate}
+                    />
+                  }
+                >
+                  <ItemContent item={item} />
+                </SidebarMenuButton>
+              )}
               {item.items?.length ? (
                 <>
                   <CollapsibleTrigger
@@ -99,22 +137,29 @@ export const NavMain = ({
                     }
                   >
                     <IconChevronRight />
-                    <span className="sr-only">Toggle</span>
+                    <span className="sr-only">Show {item.title} pages</span>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      {item.items?.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton
-                            isActive={isItemActive(subItem.url)}
-                            onClick={() =>
-                              navigate({ to: subItem.url as never })
-                            }
-                          >
-                            <span>{subItem.title}</span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
+                      {item.items?.map((subItem) => {
+                        const subActive = isItemActive(subItem.url);
+                        return (
+                          <SidebarMenuSubItem key={subItem.title}>
+                            <SidebarMenuSubButton
+                              isActive={subActive}
+                              render={
+                                <Link
+                                  to={subItem.url as never}
+                                  aria-current={subActive ? "page" : undefined}
+                                  onClick={handleNavigate}
+                                />
+                              }
+                            >
+                              <span>{subItem.title}</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        );
+                      })}
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </>

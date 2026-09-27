@@ -11,7 +11,9 @@ import { PortTeachersDialog } from "@/components/staff/teacher-management/port-t
 import { TeacherCsvImport } from "@/components/staff/teacher-management/teacher-csv-import";
 import { TeacherDialogs } from "@/components/staff/teacher-management/teacher-dialogs";
 import { TeachersList } from "@/components/staff/teacher-management/teachers-list";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { downloadExportFile } from "@/lib/download-export";
+import { pageHead } from "@/lib/page-title";
 import { orpc } from "@/utils/orpc";
 
 type Staff = typeof staff.$inferSelect;
@@ -194,25 +196,26 @@ const RouteComponent = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="font-heading text-4xl font-semibold">Teachers</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage teacher records, qualifications, and assignments
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setIsPortDialogOpen(true)}>
-            <IconUsersPlus className="mr-2 size-4" />
-            Import from Previous Year
-          </Button>
-          <TeacherCsvImport
-            teachers={teachers}
-            onCreate={handleImportCreate}
-            onUpdate={handleImportUpdate}
-          />
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Staff management"
+        title="Teachers"
+        description={
+          <>Manage teacher records, qualifications, and assignments</>
+        }
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setIsPortDialogOpen(true)}>
+              <IconUsersPlus className="mr-2 size-4" />
+              Import from previous year
+            </Button>
+            <TeacherCsvImport
+              teachers={teachers}
+              onCreate={handleImportCreate}
+              onUpdate={handleImportUpdate}
+            />
+          </>
+        }
+      />
 
       <TeachersList
         teachers={listQuery.data as Staff[] | undefined}
@@ -241,6 +244,7 @@ const RouteComponent = () => {
         onExportProfileClick={handleExportProfileClick}
         isDeleteOpen={isDeleteDialogOpen}
         onDeleteOpenChange={setIsDeleteDialogOpen}
+        isDeletePending={deleteMutation.isPending}
         onConfirmDelete={handleConfirmDelete}
       />
 
@@ -276,4 +280,5 @@ export const Route = createFileRoute("/_auth/admin/$year/staff/teachers")({
       orpc.staff.listStaff.queryOptions()
     );
   },
+  head: () => pageHead("Teachers"),
 });

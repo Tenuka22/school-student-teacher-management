@@ -37,7 +37,7 @@
     "db:studio": "nx run-many -t db:studio --projects=@school-student-teacher-management/db",
     "db:generate": "nx run-many -t db:generate --projects=@school-student-teacher-management/db",
     "db:migrate": "nx run-many -t db:migrate --projects=@school-student-teacher-management/db",
-    "db:start": "docker compose up -d postgres",
+    "db:start": "bun scripts/db-start.ts",
     "db:watch": "docker compose up postgres",
     "db:stop": "docker compose stop postgres",
     "db:down": "docker compose down postgres",

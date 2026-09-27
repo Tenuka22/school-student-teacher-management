@@ -17,19 +17,19 @@ import type { OtpCooldown } from "@/lib/otp-cooldown";
 type Mode = "current-password" | "email-code";
 
 const inputClass =
-  "w-full border border-[#013405]/22 bg-white px-3 py-2 text-sm text-[#013405] outline-none focus:border-[#013405]";
-const labelClass = "text-xs font-bold tracking-[0.12em] text-[#013405]/70";
+  "w-full border border-input bg-white px-3 py-2 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring sm:text-[0.9375rem]";
+const labelClass = "text-sm font-semibold text-foreground";
 
 const getSendCodeLabel = (cooldown: OtpCooldown, codeSent: boolean): string => {
   if (cooldown.isSending) {
-    return "SENDING…";
+    return "Sending…";
   }
 
   if (cooldown.isCoolingDown) {
-    return `RESEND IN ${cooldown.secondsLeft}s`;
+    return `Resend in ${cooldown.secondsLeft}s`;
   }
 
-  return codeSent || cooldown.hasSent ? "RESEND" : "SEND CODE";
+  return codeSent || cooldown.hasSent ? "Resend" : "Send code";
 };
 
 interface PasswordDialogProps {
@@ -39,20 +39,29 @@ interface PasswordDialogProps {
   username?: string | null;
 }
 
+/** Label + control. The control must carry `id={id}`. */
 const Field = ({
+  id,
   label,
   error,
   children,
 }: {
+  id: string;
   label: string;
   error?: string;
   children: React.ReactNode;
 }) => (
-  <label className="flex flex-col gap-1.5">
-    <span className={labelClass}>{label}</span>
+  <div className="flex flex-col gap-1.5">
+    <label htmlFor={id} className={labelClass}>
+      {label}
+    </label>
     {children}
-    {error && <span className="text-xs text-[#A51919]">{error}</span>}
-  </label>
+    {error && (
+      <span role="alert" className="text-destructive text-sm font-medium">
+        {error}
+      </span>
+    )}
+  </div>
 );
 
 /**
@@ -223,8 +232,8 @@ export const PasswordDialog = ({
         >
           {(
             [
-              { value: "current-password", label: "CURRENT PASSWORD" },
-              { value: "email-code", label: "EMAIL CODE" },
+              { value: "current-password", label: "Current password" },
+              { value: "email-code", label: "Email code" },
             ] as const
           ).map((option) => (
             <button
@@ -233,10 +242,10 @@ export const PasswordDialog = ({
               role="tab"
               aria-selected={mode === option.value}
               onClick={() => selectMode(option.value)}
-              className={`px-3 py-2.5 text-xs font-extrabold tracking-[0.1em] transition-colors ${
+              className={`px-3 py-2.5 text-sm font-semibold transition-colors ${
                 mode === option.value
-                  ? "bg-[#013405] text-[#FFF8E7]"
-                  : "border border-[#013405]/20 text-[#013405]/70 hover:bg-[#013405]/5"
+                  ? "bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground hover:bg-primary/5 border"
               }`}
             >
               {option.label}
@@ -245,7 +254,7 @@ export const PasswordDialog = ({
         </div>
 
         {isEnvManaged ? (
-          <p className="border border-[#013405]/20 bg-[#013405]/5 px-4 py-3 text-[13px] leading-relaxed text-[#013405]/75">
+          <p className="border-border bg-primary/5 text-foreground/75 border px-4 py-3 text-sm leading-relaxed">
             This is an institutional login. Its password is set by the
             College&rsquo;s server configuration and re-applied on every start,
             so it cannot be changed from here. Ask an administrator to update
@@ -261,8 +270,9 @@ export const PasswordDialog = ({
             }}
           >
             {mode === "current-password" ? (
-              <Field label="CURRENT PASSWORD">
+              <Field id="current-password" label="Current password">
                 <input
+                  id="current-password"
                   type="password"
                   required
                   autoComplete="current-password"
@@ -272,13 +282,17 @@ export const PasswordDialog = ({
                 />
               </Field>
             ) : (
-              <Field label="ONE-TIME CODE">
+              <Field id="password-otp" label="One-time code">
                 <div className="flex gap-2">
                   <input
+                    id="password-otp"
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
-                    placeholder="123456"
+                    aria-describedby={
+                      codeSent ? "password-otp-hint" : undefined
+                    }
+                    placeholder="6-digit code"
                     value={otp}
                     onChange={(event) => setOtp(event.target.value)}
                     className={inputClass}
@@ -293,13 +307,16 @@ export const PasswordDialog = ({
                         onSuccess: () => codeCooldown.registerSend(),
                       });
                     }}
-                    className="shrink-0 border border-[#013405]/30 px-3 py-2 text-xs font-bold text-[#013405] transition-colors hover:border-[#013405] disabled:opacity-50"
+                    className="border-input text-foreground hover:border-primary shrink-0 border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
                   >
                     {getSendCodeLabel(codeCooldown, codeSent)}
                   </button>
                 </div>
                 {codeSent && (
-                  <span className="text-xs text-[#013405]/55">
+                  <span
+                    id="password-otp-hint"
+                    className="text-muted-foreground text-sm"
+                  >
                     Check {email} — the code expires in 10 minutes, and only
                     three guesses are allowed.
                   </span>
@@ -307,8 +324,9 @@ export const PasswordDialog = ({
               </Field>
             )}
 
-            <Field label="NEW PASSWORD">
+            <Field id="new-password" label="New password">
               <input
+                id="new-password"
                 type="password"
                 required
                 minLength={8}
@@ -319,8 +337,9 @@ export const PasswordDialog = ({
               />
             </Field>
 
-            <Field label="CONFIRM NEW PASSWORD">
+            <Field id="confirm-new-password" label="Confirm new password">
               <input
+                id="confirm-new-password"
                 type="password"
                 required
                 minLength={8}
@@ -331,14 +350,18 @@ export const PasswordDialog = ({
               />
             </Field>
 
-            {error && <p className="text-sm text-[#A51919]">{error}</p>}
+            {error && (
+              <p role="alert" className="text-destructive text-sm">
+                {error}
+              </p>
+            )}
 
             <button
               type="submit"
               disabled={changeMutation.isPending}
-              className="self-start bg-[#013405] px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] text-[#FFF8E7] transition-colors hover:bg-[#064A12] disabled:opacity-60"
+              className="bg-primary text-primary-foreground hover:bg-primary-hover self-start px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-60"
             >
-              {changeMutation.isPending ? "SAVING…" : "UPDATE PASSWORD"}
+              {changeMutation.isPending ? "Saving…" : "Update password"}
             </button>
           </form>
         )}
