@@ -403,7 +403,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
           </InputGroup>
         </Field>
 
-        <Field>
+        <Field className="w-auto">
           <FieldLabel htmlFor="inventory-status">Status</FieldLabel>
           <Select
             value={status}
@@ -434,7 +434,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
           </Select>
         </Field>
 
-        <Field>
+        <Field className="w-auto">
           <FieldLabel htmlFor="inventory-category">Category</FieldLabel>
           <Select
             value={categoryId || ALL}
@@ -459,7 +459,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
           </Select>
         </Field>
 
-        <Field>
+        <Field className="w-auto">
           <FieldLabel htmlFor="inventory-condition">Condition</FieldLabel>
           <Select
             value={condition || ALL}
@@ -481,7 +481,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
           </Select>
         </Field>
 
-        <Field>
+        <Field className="w-auto">
           <FieldLabel htmlFor="inventory-custodian">Custodian</FieldLabel>
           <CustodianSelect
             id="inventory-custodian"
@@ -497,7 +497,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
           filter it switches, and `aria-pressed` states it as on without
           borrowing a second control for the state.
         */}
-        <Field>
+        <Field className="w-auto">
           <FieldLabel htmlFor="inventory-low-stock">Stock</FieldLabel>
           <Button
             id="inventory-low-stock"
@@ -538,7 +538,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
           listed, and a reader scanning the bar left to right should meet it after
           the narrowings rather than before them.
         */}
-        <Field>
+        <Field className="w-auto">
           <FieldLabel htmlFor="inventory-include-deleted">Retired</FieldLabel>
           <Button
             id="inventory-include-deleted"

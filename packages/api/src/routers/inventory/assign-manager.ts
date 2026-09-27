@@ -25,11 +25,11 @@ import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import {
-  staff,
-  staffIdSchema,
-} from "@school-student-teacher-management/db/schema/staff";
+  user,
+} from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, nullable, object, optional, pipe, string } from "valibot";
 
@@ -52,12 +52,12 @@ import {
  */
 const resolveStaffName = async (
   db: Executor,
-  staffId: string
+  userId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: staff.name })
-    .from(staff)
-    .where(eq(staff.id, staffId))
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, userId))
     .limit(1);
 
   return record?.name ?? null;
@@ -106,7 +106,7 @@ export const assignManager = adminOnlyProcedure
       /** `null` clears the manager. Deliberately nullable, not merely
        *  optional: "leave it alone" and "remove the current manager" are
        *  different requests and the UI has to be able to say both. */
-      newManagerStaffId: optional(nullable(staffIdSchema)),
+      newManagerStaffId: optional(nullable(userIdSchema)),
       /** Required unconditionally — see `transfer-custody.ts` for why that is
        *  stricter than `inventory_custody_history_reason_required`. Only
        *  `manager_assigned` is exempt there, and the stricter input costs one
@@ -178,7 +178,7 @@ export const assignManager = adminOnlyProcedure
           changeType,
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.staffId,
+          changedByStaffId: actor.userId,
         })
         .returning();
 

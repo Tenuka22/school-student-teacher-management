@@ -36,6 +36,7 @@ export const listCategories = requireInventoryPermission("read").handler(
         name: inventoryCategory.name,
         normalizedName: inventoryCategory.normalizedName,
         color: inventoryCategory.color,
+        icon: inventoryCategory.icon,
         createdAt: inventoryCategory.createdAt,
       })
       .from(inventoryCategory)
@@ -46,6 +47,7 @@ export const listCategories = requireInventoryPermission("read").handler(
       name: row.name,
       normalizedName: row.normalizedName,
       color: row.color,
+      icon: row.icon,
       createdAt: iso(row.createdAt),
     }));
   }

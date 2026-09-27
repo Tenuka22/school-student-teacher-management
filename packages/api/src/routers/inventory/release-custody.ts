@@ -23,7 +23,7 @@ import {
   inventoryItem,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { staff } from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -33,6 +33,7 @@ import {
   countersOf,
   getInventoryActor,
   getLockedItem,
+  insertCustodyNoticeRecipients,
   insertInventoryAuditLog,
   insertInventoryTransaction,
   iso,
@@ -53,9 +54,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: staff.name })
-    .from(staff)
-    .where(eq(staff.id, staffId))
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -102,7 +103,7 @@ export const releaseCustody = requireInventoryPermission("take")
       // the holder learns nothing about the item's stock state.
       const role = context.session?.user.role ?? "";
       const isAdmin = ADMIN_ROLES.has(role);
-      if (existing.custodianStaffId !== actor.staffId && !isAdmin) {
+      if (existing.custodianStaffId !== actor.userId && !isAdmin) {
         throw new ORPCError("FORBIDDEN", {
           message:
             "Only the teacher holding this item, or an administrator, can hand it back to the store",
@@ -155,13 +156,21 @@ export const releaseCustody = requireInventoryPermission("take")
           changeType: "custody_released",
           reason: "returned_to_store",
           note: input.note ?? null,
-          changedByStaffId: actor.staffId,
+          changedByStaffId: actor.userId,
         })
         .returning();
 
       if (!history) {
         throw new ORPCError("INTERNAL_SERVER_ERROR");
       }
+
+      await insertCustodyNoticeRecipients(tx, {
+        custodyHistoryId: history.id,
+        itemId: existing.id,
+        previousCustodianStaffId: existing.custodianStaffId,
+        managerStaffId: existing.managerStaffId,
+        changedByStaffId: actor.userId,
+      });
 
       await insertInventoryTransaction(tx, {
         actor,

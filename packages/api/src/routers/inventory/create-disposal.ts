@@ -143,10 +143,10 @@ export const createDisposal = adminOnlyProcedure
         status: "pending_approval",
         notes: input.notes ?? null,
         estimatedValue: input.estimatedValue ?? null,
-        // Null for the seeded admin / principal / deputy-principal seats, which
-        // are users with no staff row by design. A legitimate actor, not a
-        // failure — see `getInventoryActor`.
-        requestedByStaffId: actor.staffId,
+        // Always the caller's login id — identity here is `user.id`, not
+        // `staff.id`, so every authenticated caller including the seeded
+        // admin / principal / deputy-principal seats can request a disposal.
+        requestedByStaffId: actor.userId,
         requestedAt,
       });
 

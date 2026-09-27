@@ -34,6 +34,7 @@ import {
   inventoryBorrow,
   inventoryBorrowUnit,
   inventoryItem,
+  inventoryItemIdSchema,
   inventoryUnit,
   inventoryBorrowIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
@@ -122,6 +123,19 @@ export const returnBorrow = requireInventoryPermission("update")
        */
       returnCondition: itemConditionSchema,
       returnNote: optional(string()),
+      /**
+       * Proof the previous holder — the manager, the owner, or whoever is next
+       * up the custody chain — actually has the physical item in front of them
+       * before the loan is closed: they scan the item's own QR code (the same
+       * one `exportQrSheet` prints and `getItemForScan` reads back), and the id
+       * that scan resolves to is sent here. One scan closes the whole loan
+       * regardless of quantity — a return of 20 chairs under one bulk line
+       * scans the one label on that line, exactly like a return of a single
+       * projector scans its one label. There is no per-unit scan requirement:
+       * the QR code is printed per **item** (per product line), never per
+       * tagged unit, so "scan the item" is the only scan there is to ask for.
+       */
+      scannedItemId: inventoryItemIdSchema,
     })
   )
   .handler(({ input, context }) =>
@@ -158,6 +172,18 @@ export const returnBorrow = requireInventoryPermission("update")
       if (existingBorrow.status === "returned") {
         throw new ORPCError("CONFLICT", {
           message: `This loan was already returned on ${isoOrNull(existingBorrow.returnedAt) ?? "an earlier date"}`,
+        });
+      }
+
+      // The scan must name **this** loan's item. A scan of the wrong item's
+      // label — the projector next to it on the shelf, say — would close a
+      // loan for a device that never left the room, so the id the scanner
+      // resolved to has to match the loan being closed, not merely be *some*
+      // valid item in the register.
+      if (input.scannedItemId !== existingBorrow.itemId) {
+        throw new ORPCError("BAD_REQUEST", {
+          message:
+            "Scan this item's own QR code to confirm you have it in hand before closing the loan",
         });
       }
 
@@ -365,7 +391,7 @@ export const returnBorrow = requireInventoryPermission("update")
         .set({
           status: "returned",
           returnedAt,
-          returnedByStaffId: actor.staffId,
+          returnedByStaffId: actor.userId,
           returnCondition: input.returnCondition,
           returnNote: input.returnNote ?? null,
         })

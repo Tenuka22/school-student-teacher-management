@@ -33,7 +33,7 @@ import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { toDeviceSessions } from "@/lib/auth-sessions";
 
-const getAvatarFallback = (name: string) => {
+export const getAvatarFallback = (name: string) => {
   const parts = name.split(" ");
   if (parts.length >= 2) {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
@@ -41,16 +41,30 @@ const getAvatarFallback = (name: string) => {
   return name.slice(0, 2).toUpperCase();
 };
 
-export const NavUser = ({
+export interface AccountMenuUser {
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
+/**
+ * The account dropdown's content: account link, account switching, sign out.
+ *
+ * Pulled out of `NavUser` so the teacher workspace's mobile app bar can offer
+ * the identical menu behind a plain avatar button instead of the sidebar's
+ * `SidebarMenuButton` — the two triggers look nothing alike, but the actions
+ * behind them (and the account-switching state that drives them) are one
+ * piece of logic, and duplicating it would let the two surfaces drift.
+ */
+export const UserAccountMenu = ({
   user,
+  trigger,
+  side = "right",
 }: {
-  user?: {
-    name: string;
-    email: string;
-    avatar?: string;
-  };
+  user: AccountMenuUser;
+  trigger: React.ReactElement;
+  side?: "top" | "right" | "bottom" | "left";
 }) => {
-  const { isMobile } = useSidebar();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [switchingToken, setSwitchingToken] = useState<string | null>(null);
@@ -65,10 +79,6 @@ export const NavUser = ({
       return toDeviceSessions(data);
     },
   });
-
-  if (!user) {
-    return null;
-  }
 
   // The active account is one of the entries `listDeviceSessions` returns, not
   // a separate thing — filtering it out by email is what turns the list into
@@ -105,119 +115,133 @@ export const NavUser = ({
   };
 
   return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={trigger} />
+      <DropdownMenuContent
+        className="border-primary/15 min-w-60 rounded-none border p-1.5 shadow-none"
+        side={side}
+        align="end"
+        sideOffset={4}
+      >
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <Avatar className="bg-primary/10 text-primary size-9 rounded-none font-bold">
+            <AvatarImage src={user.avatar} alt={user.name} />
+            <AvatarFallback className="bg-primary/10 text-primary rounded-none font-bold">
+              {getAvatarFallback(user.name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="grid flex-1 text-left leading-tight">
+            <span className="truncate text-sm font-bold">{user.name}</span>
+            <span className="text-muted-foreground truncate text-xs">
+              {user.email}
+            </span>
+          </div>
+        </div>
+        <DropdownMenuSeparator className="bg-primary/10" />
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 rounded-none font-semibold"
+          onClick={() => {
+            navigate({ to: "/account" });
+          }}
+        >
+          <IconUserCircle className="size-4" />
+          Account &amp; password
+        </DropdownMenuItem>
+        {otherAccounts.length > 0 && (
+          <>
+            <DropdownMenuSeparator className="bg-primary/10" />
+            <div className="text-muted-foreground flex items-center gap-2 px-2 pt-1.5 pb-1 text-xs font-extrabold tracking-[0.1em]">
+              <IconUsers className="size-3.5" />
+              SWITCH ACCOUNT
+            </div>
+            {otherAccounts.map((account) => (
+              <DropdownMenuItem
+                key={account.session.token}
+                className="cursor-pointer gap-2 rounded-none font-semibold"
+                disabled={switchingToken !== null}
+                onClick={() => {
+                  void handleSwitch(account.session.token);
+                }}
+              >
+                <Avatar className="bg-primary/10 text-primary size-6 rounded-none font-bold">
+                  <AvatarFallback className="bg-primary/10 text-primary rounded-none text-xs font-bold">
+                    {getAvatarFallback(account.user.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="grid min-w-0 flex-1 text-left leading-tight">
+                  <span className="truncate text-xs font-bold">
+                    {account.user.name}
+                  </span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {account.user.email}
+                  </span>
+                </span>
+                {switchingToken === account.session.token && (
+                  <span className="text-primary shrink-0 text-xs font-extrabold tracking-[0.08em]">
+                    SWITCHING
+                  </span>
+                )}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 rounded-none font-semibold"
+          onClick={() => {
+            navigate({ to: "/login", search: { switch: 1 } });
+          }}
+        >
+          <IconUserPlus className="size-4" />
+          Add another account
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive hover:bg-destructive/8 cursor-pointer gap-2 rounded-none font-semibold"
+          onClick={handleSignOut}
+        >
+          <IconLogout className="size-4" />
+          Log out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+export const NavUser = ({ user }: { user?: AccountMenuUser }) => {
+  const { isMobile } = useSidebar();
+
+  if (!user) {
+    return null;
+  }
+
+  return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <SidebarMenuButton
-                size="lg"
-                className="data-[state=open]:bg-sidebar-accent"
-              />
-            }
-          >
-            <Avatar className="bg-sidebar-primary/15 text-sidebar-primary size-8 rounded-none font-bold">
-              <AvatarImage src={user.avatar} alt={user.name} />
-              <AvatarFallback className="bg-sidebar-primary/15 text-sidebar-primary rounded-none font-bold">
-                {getAvatarFallback(user.name)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="grid flex-1 text-left leading-tight">
-              <span className="text-sidebar-foreground truncate text-[12.5px] font-bold">
-                {user.name}
-              </span>
-              <span className="text-sidebar-foreground/50 truncate text-xs">
-                {user.email}
-              </span>
-            </div>
-            <IconSelector className="text-sidebar-foreground/50 ml-auto size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="border-primary/15 min-w-60 rounded-none border p-1.5 shadow-none"
-            side={isMobile ? "bottom" : "right"}
-            align="end"
-            sideOffset={4}
-          >
-            <div className="flex items-center gap-2.5 px-2 py-2">
-              <Avatar className="bg-primary/10 text-primary size-9 rounded-none font-bold">
+        <UserAccountMenu
+          user={user}
+          side={isMobile ? "bottom" : "right"}
+          trigger={
+            <SidebarMenuButton
+              size="lg"
+              className="data-[state=open]:bg-sidebar-accent"
+            >
+              <Avatar className="bg-sidebar-primary/15 text-sidebar-primary size-8 rounded-none font-bold">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="bg-primary/10 text-primary rounded-none font-bold">
+                <AvatarFallback className="bg-sidebar-primary/15 text-sidebar-primary rounded-none font-bold">
                   {getAvatarFallback(user.name)}
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate text-sm font-bold">{user.name}</span>
-                <span className="text-muted-foreground truncate text-xs">
+                <span className="text-sidebar-foreground truncate text-[12.5px] font-bold">
+                  {user.name}
+                </span>
+                <span className="text-sidebar-foreground/50 truncate text-xs">
                   {user.email}
                 </span>
               </div>
-            </div>
-            <DropdownMenuSeparator className="bg-primary/10" />
-            <DropdownMenuItem
-              className="cursor-pointer gap-2 rounded-none font-semibold"
-              onClick={() => {
-                navigate({ to: "/account" });
-              }}
-            >
-              <IconUserCircle className="size-4" />
-              Account &amp; password
-            </DropdownMenuItem>
-            {otherAccounts.length > 0 && (
-              <>
-                <DropdownMenuSeparator className="bg-primary/10" />
-                <div className="text-muted-foreground flex items-center gap-2 px-2 pt-1.5 pb-1 text-xs font-extrabold tracking-[0.1em]">
-                  <IconUsers className="size-3.5" />
-                  SWITCH ACCOUNT
-                </div>
-                {otherAccounts.map((account) => (
-                  <DropdownMenuItem
-                    key={account.session.token}
-                    className="cursor-pointer gap-2 rounded-none font-semibold"
-                    disabled={switchingToken !== null}
-                    onClick={() => {
-                      void handleSwitch(account.session.token);
-                    }}
-                  >
-                    <Avatar className="bg-primary/10 text-primary size-6 rounded-none font-bold">
-                      <AvatarFallback className="bg-primary/10 text-primary rounded-none text-xs font-bold">
-                        {getAvatarFallback(account.user.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="grid min-w-0 flex-1 text-left leading-tight">
-                      <span className="truncate text-xs font-bold">
-                        {account.user.name}
-                      </span>
-                      <span className="text-muted-foreground truncate text-xs">
-                        {account.user.email}
-                      </span>
-                    </span>
-                    {switchingToken === account.session.token && (
-                      <span className="text-primary shrink-0 text-xs font-extrabold tracking-[0.08em]">
-                        SWITCHING
-                      </span>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </>
-            )}
-            <DropdownMenuItem
-              className="cursor-pointer gap-2 rounded-none font-semibold"
-              onClick={() => {
-                navigate({ to: "/login", search: { switch: 1 } });
-              }}
-            >
-              <IconUserPlus className="size-4" />
-              Add another account
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive hover:bg-destructive/8 cursor-pointer gap-2 rounded-none font-semibold"
-              onClick={handleSignOut}
-            >
-              <IconLogout className="size-4" />
-              Log out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <IconSelector className="text-sidebar-foreground/50 ml-auto size-4" />
+            </SidebarMenuButton>
+          }
+        />
       </SidebarMenuItem>
     </SidebarMenu>
   );

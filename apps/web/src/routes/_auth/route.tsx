@@ -6,9 +6,16 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@school-student-teacher-management/ui/components/sidebar";
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { useIsMobile } from "@school-student-teacher-management/ui/hooks/use-mobile";
+import {
+  Outlet,
+  createFileRoute,
+  redirect,
+  useLocation,
+} from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { TeacherWorkspaceShell } from "@/components/staff/teacher-portal/teacher-workspace-shell";
 import { getUser } from "@/functions/get-user";
 
 /**
@@ -43,6 +50,8 @@ const getRequiredPath = (
 
 const AuthLayout = () => {
   const { session, isStandalone } = Route.useRouteContext();
+  const { pathname } = useLocation();
+  const isMobile = useIsMobile();
 
   if (isStandalone) {
     return (
@@ -63,6 +72,18 @@ const AuthLayout = () => {
           role: (session.user as SessionUser).role || "user",
         }
       : undefined;
+
+  // The teacher workspace gets an app-like mobile shell — a bottom tab bar
+  // instead of the sidebar's collapsible drawer — on a narrow viewport only.
+  // Every other workspace, and the teacher workspace at `md` and above, keeps
+  // the sidebar shell below unchanged.
+  if (user && isMobile && pathname.startsWith("/teacher")) {
+    return (
+      <TeacherWorkspaceShell user={user}>
+        <Outlet />
+      </TeacherWorkspaceShell>
+    );
+  }
 
   return (
     <SidebarProvider>

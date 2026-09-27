@@ -8,6 +8,10 @@ import {
   leavePaymentLabel,
   leaveTypeLabel,
 } from "@school-student-teacher-management/db/constants/leave-labels";
+import {
+  Avatar,
+  AvatarFallback,
+} from "@school-student-teacher-management/ui/components/avatar";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -24,8 +28,13 @@ import { Skeleton } from "@school-student-teacher-management/ui/components/skele
 import { IconCalendarTime, IconId } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
+import { useState } from "react";
 
+import { getAvatarFallback } from "@/components/nav-user";
 import { QueryErrorPanel } from "@/components/query-error-panel";
+import { CustodyRequestBanner } from "@/components/staff/teacher-portal/custody-request-banner";
+import { EquipmentSummaryCard } from "@/components/staff/teacher-portal/equipment-summary-card";
+import { RequestEquipmentDialog } from "@/components/staff/teacher-portal/request-equipment-dialog";
 import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
@@ -152,6 +161,7 @@ export const TeacherDashboard = () => {
   const myStaffQuery = useQuery(orpc.staff.getMyStaff.queryOptions());
   const profile = myStaffQuery.data?.profile;
   const username = myStaffQuery.data?.username;
+  const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
 
   if (myStaffQuery.isPending) {
     return (
@@ -216,16 +226,45 @@ export const TeacherDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-4xl font-semibold">
-          Welcome, {profile.name}
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Your teacher workspace — profile, leave and timetable in one place.
-        </p>
+      <CustodyRequestBanner />
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Avatar className="bg-primary text-primary-foreground size-14 rounded-none text-lg font-bold">
+            <AvatarFallback className="bg-primary text-primary-foreground rounded-none text-lg font-bold">
+              {getAvatarFallback(profile.name)}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 className="font-heading text-3xl font-semibold md:text-4xl">
+              Welcome, {profile.name}
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Your teacher workspace — profile, leave and timetable in one
+              place.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => setIsRequestDialogOpen(true)}
+            variant="outline"
+          >
+            Get equipment
+          </Button>
+          <Button render={<Link to="/teacher/$year/leave" params={{ year }} />}>
+            Manage My Leave
+          </Button>
+          <Button
+            variant="outline"
+            render={<Link to="/teacher/$year/timetable" params={{ year }} />}
+          >
+            Timetables
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
         <Card>
           <CardContent className="p-6">
             <div className="mb-4 flex items-center gap-2">
@@ -278,38 +317,15 @@ export const TeacherDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="flex h-full flex-col justify-between gap-4 p-6">
-            <div className="flex items-center gap-2">
-              <IconCalendarTime className="text-muted-foreground size-5" />
-              <h2 className="font-semibold">Leave &amp; Timetable</h2>
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Applying for leave, tracking approvals and checking your weekly
-              timetable all live here.
-            </p>
-            <div className="flex flex-col gap-2">
-              <Button
-                render={<Link to="/teacher/$year/leave" params={{ year }} />}
-              >
-                Manage My Leave
-              </Button>
-              <Button
-                variant="outline"
-                render={
-                  <Link to="/teacher/$year/timetable" params={{ year }} />
-                }
-              >
-                Timetables
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="md:col-span-2">
-          <LeaveBalanceCard />
-        </div>
+        <LeaveBalanceCard />
       </div>
+
+      <EquipmentSummaryCard />
+
+      <RequestEquipmentDialog
+        onOpenChange={setIsRequestDialogOpen}
+        open={isRequestDialogOpen}
+      />
     </div>
   );
 };

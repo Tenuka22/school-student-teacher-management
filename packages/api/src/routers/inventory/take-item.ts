@@ -24,7 +24,7 @@ import {
   inventoryItem,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { staff } from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -36,6 +36,7 @@ import {
   countersOf,
   getInventoryActor,
   getLockedItem,
+  insertCustodyNoticeRecipients,
   insertInventoryAuditLog,
   insertInventoryTransaction,
   iso,
@@ -68,9 +69,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: staff.name })
-    .from(staff)
-    .where(eq(staff.id, staffId))
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -98,22 +99,6 @@ export const takeItem = requireInventoryPermission("take")
     // not take a row lock on an item it is about to abandon.
     const actor = await getInventoryActor(context);
 
-    // BAD_REQUEST, not FORBIDDEN. The caller has already passed the permission
-    // gate — and the seeded `admin` / `principal` / `vicePrincipal` accounts hold
-    // their authority with no staff row at all, by design. Throwing FORBIDDEN
-    // here would be a refusal that follows a successful authorization check,
-    // which is a bug, not a policy: there is simply no staff identity for a
-    // piece of equipment to be attached to.
-    if (!actor.staffId) {
-      throw new ORPCError("BAD_REQUEST", {
-        message:
-          "Your account has no staff record, so equipment cannot be assigned to you. Ask an administrator to link your account to your staff profile",
-      });
-    }
-
-    // Narrowed for the rest of the handler; `actor.name` is the staff row's name
-    // whenever a staff row exists, which is now established.
-    const { staffId } = actor;
 
     const result = await context.db.transaction(async (tx) => {
       const existing = await getLockedItem(tx, input.itemId);
@@ -146,31 +131,37 @@ export const takeItem = requireInventoryPermission("take")
         ? await resolveStaffName(tx, existing.custodianStaffId)
         : null;
 
-      if (existing.custodianStaffId === staffId) {
+      if (existing.custodianStaffId === actor.userId) {
         throw new ORPCError("BAD_REQUEST", {
           message: "This item is already assigned to you",
         });
       }
 
+      // Somebody else is already holding it. This used to be reachable —
+      // `calculateItemStatus` never looks at custody, so a colleague's
+      // claimed item could still read as "available" — and a teacher
+      // could walk off with a colleague's equipment with nobody asked. That is
+      // exactly the gap `custody.requests` exists to close: an item already in
+      // a named person's hands is requested, not taken, and the current
+      // holder decides. `listTakeableItems` carries the identical guard in SQL
+      // now, so the catalogue and this refusal cannot drift apart again.
+      if (existing.custodianStaffId) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: `${previousCustodianName ?? "A colleague"} is already holding this item — send a request instead of taking it directly`,
+        });
+      }
+
       await tx
         .update(inventoryItem)
-        .set({ custodianStaffId: staffId })
+        .set({ custodianStaffId: actor.userId })
         .where(eq(inventoryItem.id, existing.id));
 
-      // The status guard above means `custody_transferred` is reachable here
-      // only for an item that is *not* out on loan — so this is a store item
-      // that somebody was wrongly recorded as holding, not a live hand-over.
-      // It still needs a recorded cause: `inventory_custody_history_reason_required`
-      // demands one for anything that is not `custody_taken`, and "other" is
-      // the honest one, because the caller has told us nothing else and the
-      // vocabulary has `other` precisely so a real change is recorded rather
-      // than mis-filed under a cause nobody verified. A first claim on an item
-      // in the store displaces nobody, so its reason is null and the CHECK
-      // allows it.
-      const changeType = existing.custodianStaffId
-        ? "custody_transferred"
-        : "custody_taken";
-      const reason = existing.custodianStaffId ? "other" : null;
+      // The guard above means `existing.custodianStaffId` is always null by
+      // this point, so every claim this procedure makes is a first claim on an
+      // unheld item — `custody_taken`, with no reason to record because
+      // nobody was displaced.
+      const changeType = "custody_taken" as const;
+      const reason = null;
 
       const [history] = await tx
         .insert(inventoryCustodyHistory)
@@ -178,19 +169,27 @@ export const takeItem = requireInventoryPermission("take")
           id: crypto.randomUUID(),
           itemId: existing.id,
           previousCustodianStaffId: existing.custodianStaffId,
-          newCustodianStaffId: staffId,
+          newCustodianStaffId: actor.userId,
           previousManagerStaffId: null,
           newManagerStaffId: null,
           changeType,
           reason,
           note: input.note ?? null,
-          changedByStaffId: staffId,
+          changedByStaffId: actor.userId,
         })
         .returning();
 
       if (!history) {
         throw new ORPCError("INTERNAL_SERVER_ERROR");
       }
+
+      await insertCustodyNoticeRecipients(tx, {
+        custodyHistoryId: history.id,
+        itemId: existing.id,
+        previousCustodianStaffId: existing.custodianStaffId,
+        managerStaffId: existing.managerStaffId,
+        changedByStaffId: actor.userId,
+      });
 
       // Taking an item is a change of hands, not of stock: the units are still
       // in the school's possession, so the counters are written identically on
@@ -205,7 +204,7 @@ export const takeItem = requireInventoryPermission("take")
         meta: {
           previousCustodianName,
           // `actor.name` is the staff row's name whenever `staffId` is
-          // non-null, which the guard above has established.
+          // now always present via actor.userId.
           newCustodianName: actor.name,
           reason,
         },
@@ -220,7 +219,7 @@ export const takeItem = requireInventoryPermission("take")
           custodianStaffId: existing.custodianStaffId,
           custodianName: previousCustodianName,
         },
-        after: { custodianStaffId: staffId, custodianName: actor.name },
+        after: { custodianStaffId: actor.userId, custodianName: actor.name },
       });
 
       // The same shape `transferCustody` returns, so the web app can render one
@@ -229,7 +228,7 @@ export const takeItem = requireInventoryPermission("take")
       return {
         itemId: existing.id,
         previousCustodianName,
-        custodianStaffId: staffId,
+        custodianStaffId: actor.userId,
         custodianName: actor.name,
         changeType,
         changedAt: iso(history.changedAt),

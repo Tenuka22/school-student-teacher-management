@@ -21,10 +21,8 @@
  */
 import { inventoryAuditLog } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import {
-  staff,
-  staffIdSchema,
-} from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
+import { userIdSchema } from "@school-student-teacher-management/db/schema/inventory";
 import { and, count, desc, eq, gte, lt } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -80,7 +78,7 @@ const auditSelection = {
   actorStaffId: inventoryAuditLog.actorStaffId,
   createdAt: inventoryAuditLog.createdAt,
   /** The live name, null once the staff row is gone. */
-  joinedActorName: staff.name,
+  joinedActorName: user.name,
 } as const;
 
 /**
@@ -114,7 +112,7 @@ export const listAuditLogs = adminProcedure
     object({
       entityType: optional(pipe(string(), maxLength(60))),
       entityId: optional(pipe(string(), maxLength(64))),
-      actorStaffId: optional(staffIdSchema),
+      actorStaffId: optional(userIdSchema),
       /**
        * Free text, deliberately. On this table `action` is a CRUD verb —
        * `"item.update"`, `"custody.transfer"`, `"category.create"` — and not one
@@ -182,7 +180,7 @@ export const listAuditLogs = adminProcedure
       context.db
         .select(auditSelection)
         .from(inventoryAuditLog)
-        .leftJoin(staff, eq(inventoryAuditLog.actorStaffId, staff.id))
+        .leftJoin(user, eq(inventoryAuditLog.actorStaffId, user.id))
         .where(where)
         .orderBy(...orderBy)
         .limit(limit),

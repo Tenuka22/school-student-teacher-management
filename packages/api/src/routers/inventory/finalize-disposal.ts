@@ -256,25 +256,6 @@ export const finalizeDisposal = adminOnlyProcedure
         });
       }
 
-      /**
-       * A signature the certificate cannot name. The terminal arm of
-       * `inventory_disposal_status_state` requires
-       * `finalized_by_staff_id IS NOT NULL`, and `InventoryActor.staffId` is null
-       * for the seeded `admin` / `principal` / `deputy-principal` seats. Such a
-       * write is refused by PostgreSQL however it is composed, so it is refused
-       * here with the same `BAD_REQUEST` (never `FORBIDDEN` — the role gate has
-       * already passed, and the missing thing is an identity, not an authority)
-       * and the same remedy `approveDisposal` and `take-item` name. A disposal
-       * raised under a leadership account is therefore unapprovable as well as
-       * unfinalisable, which is a real consequence of the ladder requiring a
-       * `staff` pointer on every arm but `pending_approval`.
-       */
-      if (actor.staffId === null) {
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "Your account has no staff record, so it cannot sign a disposal certificate. Ask an administrator to link your account to your staff profile",
-        });
-      }
 
       // FOR UPDATE, and deliberately *after* the disposal lock above so the two
       // rows are always taken in the same order by this flow. A soft-deleted item
@@ -398,7 +379,7 @@ export const finalizeDisposal = adminOnlyProcedure
         .update(inventoryDisposal)
         .set({
           status: input.finalStatus,
-          finalizedByStaffId: actor.staffId,
+          finalizedByStaffId: actor.userId,
           finalizedAt,
           ...(input.estimatedValue === undefined
             ? {}
@@ -419,7 +400,7 @@ export const finalizeDisposal = adminOnlyProcedure
         note:
           input.note ??
           `Disposal finalised as ${disposalStatusLabel(input.finalStatus)}`,
-        changedByStaffId: actor.staffId,
+        changedByStaffId: actor.userId,
       });
 
       // The one row in this flow where the two sides of the ledger differ. The
@@ -458,7 +439,7 @@ export const finalizeDisposal = adminOnlyProcedure
         },
         after: {
           status: updated.status,
-          finalizedByStaffId: actor.staffId,
+          finalizedByStaffId: actor.userId,
           qty: updatedItem.qty,
         },
       });

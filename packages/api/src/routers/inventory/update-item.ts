@@ -15,7 +15,6 @@ import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
 import { adminOnlyProcedure } from "../../index";
-import { normalizeLabel } from "./inventory-calculations";
 import type { InventoryItemRow } from "./inventory-database";
 import {
   assertCategoryExists,
@@ -88,7 +87,6 @@ export const updateItem = adminOnlyProcedure
       itemId: inventoryItemIdSchema,
       ...v.pick(inventoryItemUpdateSchema, [
         "categoryId",
-        "name",
         "description",
         "unit",
         "minQty",
@@ -96,7 +94,10 @@ export const updateItem = adminOnlyProcedure
         "location",
         "purchaseValue",
         "currentValue",
+        "purchaseDate",
+        "depreciationRatePercent",
         "borrowable",
+        "imageFileId",
       ]).entries,
     })
   )
@@ -113,18 +114,6 @@ export const updateItem = adminOnlyProcedure
 
       if (input.categoryId) {
         await assertCategoryExists(tx, input.categoryId);
-      }
-
-      // Same trim problem as creation: the generated schema tests
-      // `minLength(1)` and `inventory_item_name_not_blank` tests the trimmed
-      // string, so a name of spaces has to be caught here or the update is
-      // refused by the database.
-      const name =
-        input.name === undefined ? existing.name : normalizeLabel(input.name);
-      if (!name) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "Give the item a name",
-        });
       }
 
       const minQty = input.minQty ?? existing.minQty;
@@ -147,7 +136,6 @@ export const updateItem = adminOnlyProcedure
         .update(inventoryItem)
         .set({
           categoryId: input.categoryId ?? existing.categoryId,
-          name,
           description: input.description ?? existing.description,
           unit: input.unit ?? existing.unit,
           minQty,
@@ -161,6 +149,22 @@ export const updateItem = adminOnlyProcedure
           // question, and it is not answered here.
           purchaseValue: input.purchaseValue ?? existing.purchaseValue,
           currentValue: input.currentValue ?? existing.currentValue,
+          purchaseDate:
+            input.purchaseDate === undefined
+              ? existing.purchaseDate
+              : input.purchaseDate === null
+                ? null
+              : new Date(input.purchaseDate),
+          depreciationRatePercent:
+            input.depreciationRatePercent ?? existing.depreciationRatePercent,
+          // `null` clears the photo (the field sends it explicitly when a
+          // teacher removes one); `undefined` — the key omitted — leaves
+          // whatever is on file alone, the same convention every other
+          // optional column on this update follows.
+          imageFileId:
+            input.imageFileId === undefined
+              ? existing.imageFileId
+              : input.imageFileId,
         })
         .where(eq(inventoryItem.id, existing.id))
         .returning();

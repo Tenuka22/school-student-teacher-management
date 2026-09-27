@@ -14,11 +14,13 @@ import { normalizeInventoryKey } from "@school-student-teacher-management/db/con
 import {
   inventoryCustodyHistory,
   inventoryItem,
+  inventoryItemIdSchema,
   inventoryItemInsertSchema,
+  inventoryItemReplacement,
   inventoryUnit,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { staffIdSchema } from "@school-student-teacher-management/db/schema/staff";
-import { eq, inArray } from "drizzle-orm";
+import { count, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
 import { adminOnlyProcedure } from "../../index";
@@ -197,18 +199,84 @@ const assertTagsNotOnFile = async (
 };
 
 /**
- * `inventory_item_name_not_blank` tests the *trimmed* name, and the generated
- * schema only tests `minLength(1)` — a name of three spaces passes validation
- * and is refused by the database. Normalising first is also what keeps
- * " Projector " and "Projector" from being two items in the register.
+ * The item's name is never typed — it is generated from the category it was
+ * filed into and how many items that category already has, so "Lab Equipment
+ * 7" is the eighth line ever put into Lab Equipment. This removes a field a
+ * storekeeper used to be able to get wrong (a blank name, two items both
+ * called "Projector" with nothing to tell them apart at a glance) in favour of
+ * one the register can always answer for itself. The count includes retired
+ * and voided rows on purpose: the sequence is a label, not a live count, and
+ * it must never be reused once assigned.
  */
-const resolveItemName = (raw: string): string => {
-  const name = normalizeLabel(raw);
-  if (!name) {
-    throw new ORPCError("BAD_REQUEST", { message: "Give the item a name" });
+const generateItemName = async (
+  db: Executor,
+  categoryId: string,
+  categoryName: string
+): Promise<string> => {
+  const [row] = await db
+    .select({ total: count() })
+    .from(inventoryItem)
+    .where(eq(inventoryItem.categoryId, categoryId));
+
+  const sequence = (row?.total ?? 0) + 1;
+  return `${categoryName} ${sequence}`;
+};
+
+/**
+ * A person who could never be assigned custody must not be assignable on day
+ * zero either, or the item sits in the register with a holder no later
+ * procedure would ever have allowed. Independent checks, issued together
+ * rather than as a waterfall of round trips.
+ */
+const assertInitialHoldersAssignable = (
+  db: Executor,
+  managerStaffId: string | null | undefined,
+  custodianStaffId: string | null | undefined
+): Promise<unknown> =>
+  Promise.all([
+    ...(managerStaffId
+      ? [assertStaffIsAssignable(db, managerStaffId, "staff member in charge of the item")]
+      : []),
+    ...(custodianStaffId
+      ? [assertStaffIsAssignable(db, custodianStaffId, "staff member holding the item")]
+      : []),
+  ]);
+
+/**
+ * Every id named in `replacesItemIds` must be a retired item — checked once,
+ * in a single batched read, before anything is written. A missing id and a live
+ * id fail the same way (they are not a retired item this new line can succeed)
+ * but are told apart in the message, because "no such item" and "that item is
+ * still on the register" send the caller to two different screens.
+ */
+const assertReplacementsAreRetired = async (
+  db: Executor,
+  replacesItemIds: string[]
+): Promise<void> => {
+  if (replacesItemIds.length === 0) {
+    return;
   }
 
-  return name;
+  const retiredRows = await db
+    .select({ id: inventoryItem.id, deletedAt: inventoryItem.deletedAt })
+    .from(inventoryItem)
+    .where(inArray(inventoryItem.id, replacesItemIds));
+  const retiredById = new Map(retiredRows.map((row) => [row.id, row]));
+
+  for (const id of replacesItemIds) {
+    const row = retiredById.get(id);
+    if (!row) {
+      throw new ORPCError("NOT_FOUND", {
+        message: `No item with id ${id} to replace`,
+      });
+    }
+    if (!row.deletedAt) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "An item can only replace a retired item — retire it first, or remove it from the replacement list",
+      });
+    }
+  }
 };
 
 /**
@@ -396,7 +464,6 @@ export const createItem = adminOnlyProcedure
     v.object({
       ...v.pick(inventoryItemInsertSchema, [
         "categoryId",
-        "name",
         "description",
         "unit",
         "minQty",
@@ -405,6 +472,9 @@ export const createItem = adminOnlyProcedure
         "location",
         "purchaseValue",
         "currentValue",
+        "purchaseDate",
+        "depreciationRatePercent",
+        "imageFileId",
       ]).entries,
       /** Absent means "generate one for me" — see `resolveAvailableSku`. */
       sku: v.optional(skuInputSchema),
@@ -415,9 +485,17 @@ export const createItem = adminOnlyProcedure
        */
       qty: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1000)),
       /** Both are plain fields here. On an update they are not — see `updateItem`. */
-      managerStaffId: v.optional(v.nullable(staffIdSchema)),
-      custodianStaffId: v.optional(v.nullable(staffIdSchema)),
+      managerStaffId: v.optional(v.nullable(userIdSchema)),
+      custodianStaffId: v.optional(v.nullable(userIdSchema)),
       uniqueIds: v.array(itemUniqueNoSchema),
+      /**
+       * Retired items this new line stands in for — 12 worn chairs retired,
+       * 6 new ones bought, this is where the 6 name the 12. Pure reference:
+       * nothing about the named items' counts or state changes. Every id must
+       * name an item that is currently retired — `assertItemIsRetired` below
+       * refuses anything live or already voided, by name.
+       */
+      replacesItemIds: v.optional(v.array(inventoryItemIdSchema)),
     })
   )
   .handler(({ input, context }) =>
@@ -427,29 +505,12 @@ export const createItem = adminOnlyProcedure
 
       // A person who could never be assigned custody must not be assignable on
       // day zero either, or the item sits in the register with a holder no later
-      // procedure would ever have allowed. Three independent reads, so they are
-      // issued together rather than as a waterfall of round trips.
-      await Promise.all([
-        assertCategoryExists(tx, input.categoryId),
-        ...(input.managerStaffId
-          ? [
-              assertStaffIsAssignable(
+      // procedure would ever have allowed. See `assertInitialHoldersAssignable`.
+      await assertInitialHoldersAssignable(
                 tx,
                 input.managerStaffId,
-                "staff member in charge of the item"
-              ),
-            ]
-          : []),
-        ...(input.custodianStaffId
-          ? [
-              assertStaffIsAssignable(
-                tx,
-                input.custodianStaffId,
-                "staff member holding the item"
-              ),
-            ]
-          : []),
-      ]);
+        input.custodianStaffId
+      );
 
       const tags = resolveAssetTags(input.uniqueIds, input.qty);
       await assertTagsNotOnFile(
@@ -457,14 +518,26 @@ export const createItem = adminOnlyProcedure
         tags.map((entry) => entry.key)
       );
 
-      const name = resolveItemName(input.name);
+      const category = await assertCategoryExists(tx, input.categoryId);
+      const name = await generateItemName(tx, input.categoryId, category.name);
       const sku = input.sku ?? (await resolveAvailableSku(tx));
       const condition = input.condition ?? "Good";
       const location = input.location ?? "";
       const purchaseValue = input.purchaseValue ?? null;
       const currentValue = input.currentValue ?? null;
+      const purchaseDate = input.purchaseDate ? new Date(input.purchaseDate) : null;
+      const depreciationRatePercent = input.depreciationRatePercent ?? null;
       const managerStaffId = input.managerStaffId ?? null;
       const custodianStaffId = input.custodianStaffId ?? null;
+
+      // Every id named in `replacesItemIds` must be a retired item — checked
+      // once, in a single batched read, before anything is written. A missing
+      // id and a live id fail the same way (they are not a retired item this
+      // new line can succeed) but are told apart in the message, because "no
+      // such item" and "that item is still on the register" send the caller to
+      // two different screens.
+      const replacesItemIds = [...new Set(input.replacesItemIds)];
+      await assertReplacementsAreRetired(tx, replacesItemIds);
 
       const created = await insertItem(tx, {
         id: itemId,
@@ -481,16 +554,30 @@ export const createItem = adminOnlyProcedure
         location,
         purchaseValue,
         currentValue,
-        createdByStaffId: actor.staffId,
+        purchaseDate,
+        depreciationRatePercent,
+        createdByStaffId: actor.userId,
         managerStaffId,
         custodianStaffId,
+        imageFileId: input.imageFileId ?? null,
       });
+
+      if (replacesItemIds.length > 0) {
+        await tx.insert(inventoryItemReplacement).values(
+          replacesItemIds.map((retiredItemId) => ({
+            id: crypto.randomUUID(),
+            newItemId: itemId,
+            retiredItemId,
+        createdByStaffId: actor.userId,
+          }))
+        );
+      }
 
       const custodyRows = buildInitialCustodyRows(
         itemId,
         managerStaffId,
         custodianStaffId,
-        actor.staffId
+        actor.userId
       );
       if (custodyRows.length > 0) {
         await tx.insert(inventoryCustodyHistory).values(custodyRows);

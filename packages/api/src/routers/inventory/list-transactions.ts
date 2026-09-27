@@ -25,10 +25,8 @@ import {
   inventoryTransaction,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import {
-  staff,
-  staffIdSchema,
-} from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
+import { userIdSchema } from "@school-student-teacher-management/db/schema/inventory";
 import { and, count, desc, eq, gte, ilike, lt, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -124,7 +122,7 @@ const ledgerSelection = {
   actorStaffId: inventoryTransaction.actorStaffId,
   itemName: inventoryItem.name,
   itemSku: inventoryItem.sku,
-  actorName: staff.name,
+  actorName: user.name,
 } as const;
 
 const ledgerQuery = (db: Executor) =>
@@ -132,7 +130,7 @@ const ledgerQuery = (db: Executor) =>
     .select(ledgerSelection)
     .from(inventoryTransaction)
     .innerJoin(inventoryItem, eq(inventoryTransaction.itemId, inventoryItem.id))
-    .leftJoin(staff, eq(inventoryTransaction.actorStaffId, staff.id));
+    .leftJoin(user, eq(inventoryTransaction.actorStaffId, user.id));
 
 type LedgerRow = Awaited<ReturnType<typeof ledgerQuery>>[number];
 
@@ -216,7 +214,7 @@ export const listTransactions = adminProcedure
     object({
       itemId: optional(inventoryItemIdSchema),
       action: optional(inventoryActionSchema),
-      actorStaffId: optional(staffIdSchema),
+      actorStaffId: optional(userIdSchema),
       search: optional(pipe(string(), maxLength(120))),
       from: optional(isoDateSchema),
       to: optional(isoDateSchema),
@@ -285,7 +283,7 @@ export const listTransactions = adminProcedure
           inventoryItem,
           eq(inventoryTransaction.itemId, inventoryItem.id)
         )
-        .leftJoin(staff, eq(inventoryTransaction.actorStaffId, staff.id))
+        .leftJoin(user, eq(inventoryTransaction.actorStaffId, user.id))
         .where(where),
     ]);
 

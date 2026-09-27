@@ -49,11 +49,7 @@
  * as every other list in this folder. `staffId` and `staffName` are in the
  * envelope rather than derived by the client because a caller with **no** staff
  * row has no items to be lent anything, and that is an honest empty page rather
- * than an error: the seeded `admin` / `principal` / `vicePrincipal` seats are
- * users with no staff identity on purpose, and throwing here would make the route
- * unreachable for exactly the accounts most likely to click through it. Returning
- * an unfiltered list instead would hand the school's whole storebook to a read
- * grant that is not meant to see it.
+ * than an error: it now returns the userId (not staffId).
  */
 import { inventoryItem } from "@school-student-teacher-management/db/schema/inventory";
 import {
@@ -124,16 +120,8 @@ export const listLentByMe = requireInventoryPermission("read")
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
 
-    // The same honest empty result `listMyItems` gives, and for the same reason:
-    // an account with no staff row is a legitimate user who has never been on
-    // the teaching roll, and it owns nothing. Throwing would make the route
-    // unreachable for the seeded leadership seats; returning the unfiltered list
-    // would hand them — and every other holder of `read` — the whole storebook.
-    if (!actor.staffId) {
-      return { items: [], total: 0, staffId: null, staffName: actor.name };
-    }
 
-    const { staffId } = actor;
+    const { userId } = actor;
     const search = input.search?.trim();
     const limit = input.limit ?? DEFAULT_LIMIT;
 
@@ -143,14 +131,14 @@ export const listLentByMe = requireInventoryPermission("read")
     const conditions: (SQL | undefined)[] = [
       isNull(inventoryItem.deletedAt),
       // The whole security boundary of this procedure: owned by me.
-      eq(inventoryItem.managerStaffId, staffId),
+      eq(inventoryItem.managerStaffId, userId),
       // ...currently with somebody else. `isNotNull` and `ne` are both needed and
       // neither subsumes the other: `custodianStaffId <> me` alone is `null` for
       // an item sitting unheld in the store, and a `WHERE` that evaluated to
       // `null` would quietly drop every unassigned item the school owns. Written
       // as two terms, it cannot.
       isNotNull(inventoryItem.custodianStaffId),
-      ne(inventoryItem.custodianStaffId, staffId),
+      ne(inventoryItem.custodianStaffId, userId),
       search
         ? or(
             ilike(inventoryItem.name, likePattern(search)),
@@ -180,7 +168,7 @@ export const listLentByMe = requireInventoryPermission("read")
       // list are the same shape and the web app renders them with one component.
       items: rows.map((row) => toItemView(row)),
       total: totalRow?.value ?? 0,
-      staffId,
+      staffId: userId,
       staffName: actor.name,
     };
   });

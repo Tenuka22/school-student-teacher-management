@@ -36,16 +36,14 @@ import {
   inventoryItem,
   inventoryItemIdSchema,
   inventoryUnit,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import {
   student,
   studentIdSchema,
 } from "@school-student-teacher-management/db/schema/marking";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import {
-  staff,
-  staffIdSchema,
-} from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   and,
   asc,
@@ -100,7 +98,7 @@ import type { InventoryBorrower } from "./inventory-database";
  * batched in instead, which is also the only version of this read that stays a
  * constant number of queries at fifty rows.
  */
-const issuedByStaff = alias(staff, "issued_by_staff");
+const issuedByStaff = alias(user, "issued_by_staff");
 
 /**
  * The one definition of "this loan is late", reused as a filter, as a rendered
@@ -206,7 +204,7 @@ const listBorrowsInput = object({
    * because one of them sends the clerk to the roll to check they picked the
    * right child and the other sends them to the filter box.
    */
-  borrowerStaffId: optional(staffIdSchema),
+  borrowerStaffId: optional(userIdSchema),
   borrowerStudentId: optional(studentIdSchema),
   status: optional(inventoryBorrowStatusSchema),
   /** Open loans whose due date has passed. See `isOverdueExpression`. */

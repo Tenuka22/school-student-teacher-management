@@ -5,7 +5,8 @@
  * **Security property, in one sentence: this is the only inventory read a
  * `teacher` can reach, and it is scoped to the caller here in the query rather
  * than by the permission — so the `or(managerStaffId = me, custodianStaffId =
- * me)` predicate must never be lifted.** `requireInventoryPermission("read")`
+ * me)` predicate must never be lifted, and it now matches against user.id
+ * instead of staff.id.** `requireInventoryPermission("read")`
  * is reachable by the `teacher` role and grants nothing about *which* rows are
  * visible; a school-wide item list is `adminProcedure` work. The scope lives
  * here and nowhere else, which is why an account with no staff row gets an
@@ -78,19 +79,8 @@ export const listMyItems = requireInventoryPermission("read")
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
 
-    // An account with no staff row — the seeded admin, principal and
-    // deputy-principal seats are seeded as users with no staff identity on
-    // purpose — has no item to be responsible for and none to be holding. That
-    // is an empty page, not an error: the caller is a legitimate user who has
-    // simply never been on the teaching roll. Throwing here would make the
-    // route unreachable for exactly the accounts most likely to click through
-    // it, and returning an unfiltered list instead would hand the school's
-    // whole storebook to a read grant that is not meant to see it.
-    if (!actor.staffId) {
-      return { items: [], total: 0, staffId: null, staffName: actor.name };
-    }
 
-    const { staffId } = actor;
+    const { userId } = actor;
     const search = input.search?.trim();
     const limit = input.limit ?? DEFAULT_LIMIT;
 
@@ -101,8 +91,8 @@ export const listMyItems = requireInventoryPermission("read")
       isNull(inventoryItem.deletedAt),
       // The whole security boundary of this procedure.
       or(
-        eq(inventoryItem.managerStaffId, staffId),
-        eq(inventoryItem.custodianStaffId, staffId)
+        eq(inventoryItem.managerStaffId, userId),
+        eq(inventoryItem.custodianStaffId, userId)
       ),
       search
         ? or(
@@ -127,7 +117,7 @@ export const listMyItems = requireInventoryPermission("read")
       itemViewJoins(context.db)
         .where(where)
         .orderBy(
-          sql`case when ${inventoryItem.managerStaffId} = ${staffId} then 0 else 1 end`,
+        sql`case when ${inventoryItem.managerStaffId} = ${userId} then 0 else 1 end`,
           asc(inventoryItem.name)
         )
         .limit(limit),
@@ -140,7 +130,7 @@ export const listMyItems = requireInventoryPermission("read")
       // with one component.
       items: rows.map((row) => toItemView(row)),
       total: totalRow?.value ?? 0,
-      staffId,
+      staffId: userId,
       staffName: actor.name,
     };
   });

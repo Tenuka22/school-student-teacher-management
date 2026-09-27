@@ -222,10 +222,13 @@ export const createIssue = adminOnlyProcedure.input(createIssueInput).handler(
           approvedBy: input.approvedBy ?? null,
           expectedReturnDate: input.expectedReturnDate ?? null,
           note: input.note ?? null,
-          // Null for a leadership account with no staff row, which is a
-          // legitimate actor by design — the ledger and the audit log both
-          // carry `actor.name`, so the trail survives the missing id.
-          issuedByStaffId: actor.staffId,
+          // Always the caller's login id now — identity for this trail moved
+          // from `staff` to `user` (see `inventoryItem`'s FK doc comment in
+          // `schema/inventory.ts`), so there is no "leadership account with no
+          // staff row" case left to be null here. `actor.name` is still
+          // carried on the ledger/audit rows separately, for the departure
+          // case: the account itself can still be deleted later.
+          issuedByStaffId: actor.userId,
           issuedAt,
         })
         .returning();

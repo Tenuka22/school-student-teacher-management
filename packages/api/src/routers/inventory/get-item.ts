@@ -67,7 +67,11 @@ export const getItem = adminProcedure
   .handler(async ({ input, context }) => {
     const [row] = await itemViewJoins(context.db)
       .where(
-        and(eq(inventoryItem.id, input.itemId), isNull(inventoryItem.deletedAt))
+        and(
+          eq(inventoryItem.id, input.itemId),
+          isNull(inventoryItem.deletedAt),
+          isNull(inventoryItem.voidedAt)
+      )
       )
       .limit(1);
 

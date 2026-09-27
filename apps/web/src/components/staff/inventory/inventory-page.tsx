@@ -15,7 +15,12 @@ import {
   TabsList,
   TabsTrigger,
 } from "@school-student-teacher-management/ui/components/tabs";
-import { IconCategory, IconPlus, IconUserOff } from "@tabler/icons-react";
+import {
+  IconCategory,
+  IconPlus,
+  IconQrcode,
+  IconUserOff,
+} from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
@@ -37,6 +42,8 @@ import {
 } from "@/components/staff/inventory/inventory-types";
 import { InventoryItemDialogs } from "@/components/staff/inventory/item-dialogs";
 import { InventoryLifecycleTabs } from "@/components/staff/inventory/lifecycle-tabs";
+import type { QrSheetSelection } from "@/components/staff/inventory/qr-sheet-dialog";
+import { QrSheetDialog } from "@/components/staff/inventory/qr-sheet-dialog";
 import {
   invalidateInventory,
   InventoryFilterBar,
@@ -53,6 +60,7 @@ import {
   StockOutDialog,
 } from "@/components/staff/inventory/stock-dialogs";
 import { formatApiErrorMessage } from "@/lib/api-error";
+import { downloadExportFile } from "@/lib/download-export";
 import { useActiveYear, yearPath } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
@@ -310,6 +318,17 @@ export const useInventoryPage = () => {
     null
   );
 
+  /**
+   * Which live rows are ticked, for the one bulk action this register offers:
+   * printing their QR labels. This is deliberately not the bulk-selection the
+   * table's own doc comment refuses — that comment is about a checkbox
+   * column inviting a bulk *write* ("delete everything ticked"), and a label
+   * sheet writes nothing at all. Keyed by id rather than by row reference so a
+   * refetch (a new array of otherwise-identical rows) does not silently
+   * un-tick everything the reader just selected.
+   */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
@@ -320,6 +339,7 @@ export const useInventoryPage = () => {
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
   const [isStockInOpen, setIsStockInOpen] = useState(false);
   const [isStockOutOpen, setIsStockOutOpen] = useState(false);
+  const [isQrSheetOpen, setIsQrSheetOpen] = useState(false);
 
   // ─── Reads ───────────────────────────────────────────────────────────────
 
@@ -664,6 +684,93 @@ export const useInventoryPage = () => {
       },
     })
   );
+
+  const exportQrSheetMutation = useMutation(
+    orpc.inventory.items.exportQrSheet.mutationOptions({
+      onSuccess: (file, variables) => {
+        downloadExportFile(file);
+        const labelCount = variables.items.reduce(
+          (sum, entry) => sum + entry.copies,
+          0
+        );
+        toast.success(
+          `Downloaded ${labelCount} QR label${labelCount === 1 ? "" : "s"}`
+        );
+        setIsQrSheetOpen(false);
+        setSelectedIds(new Set());
+      },
+      onError: (error) => {
+        toast.error(
+          formatApiErrorMessage(error, "Could not build the QR label sheet")
+        );
+      },
+    })
+  );
+
+  const handleToggleSelect = useCallback((itemId: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * The ids the table's "select all" may tick, and the full rows behind
+   * `selectedIds` for the QR sheet dialog's per-item copy count fields \u2014
+   * one pass over `visibleItems`, because both answers are about the same
+   * page of rows and a second pass would only recompute it.
+   */
+  const { selectableIds, selectedItemsForQrSheet } = useMemo(() => {
+    const ids: string[] = [];
+    const selected: InventoryItemView[] = [];
+    for (const item of visibleItems) {
+      if (!item.deletedAt) {
+        ids.push(item.id);
+      }
+      if (selectedIds.has(item.id)) {
+        selected.push(item);
+      }
+    }
+    return { selectableIds: ids, selectedItemsForQrSheet: selected };
+  }, [visibleItems, selectedIds]);
+
+  const handleToggleSelectAll = useCallback(() => {
+    setSelectedIds((previous) =>
+      selectableIds.every((id) => previous.has(id))
+        ? new Set()
+        : new Set(selectableIds)
+    );
+  }, [selectableIds]);
+
+  const handleDownloadQrSheet = useCallback(() => {
+    if (selectedIds.size === 0) {
+      return;
+    }
+    setIsQrSheetOpen(true);
+  }, [selectedIds]);
+
+  const handleQrSheetOpenChange = useCallback((open: boolean) => {
+    setIsQrSheetOpen(open);
+  }, []);
+
+  const handleQrSheetSubmit = useCallback(
+    (selection: QrSheetSelection[]) => {
+      exportQrSheetMutation.mutate({
+        items: selection as never,
+        origin: window.location.origin,
+      });
+    },
+    [exportQrSheetMutation]
+  );
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
 
   // ─── Filters ─────────────────────────────────────────────────────────────
 
@@ -1093,6 +1200,19 @@ export const useInventoryPage = () => {
     isSeedPending: seedCategoriesMutation.isPending,
     handleSeedCategories,
 
+    // Selection — QR labels only, see the state's own doc comment
+    selectedIds,
+    selectableIds,
+    handleToggleSelect,
+    handleToggleSelectAll,
+    handleClearSelection,
+    handleDownloadQrSheet,
+    isExportingQrSheet: exportQrSheetMutation.isPending,
+    isQrSheetOpen,
+    handleQrSheetOpenChange,
+    handleQrSheetSubmit,
+    selectedItemsForQrSheet,
+
     // The two stock movements, owned by `stock-dialogs.tsx` and opened from the edit
     // form's note about what it cannot change.
     isStockInOpen,
@@ -1233,10 +1353,6 @@ const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
         >
           Register
         </h2>
-        <p className="text-muted-foreground mt-1">
-          Every item the school owns, who is responsible for it, and who is
-          holding it
-        </p>
       </div>
       <div className="flex flex-wrap gap-2">
         {/*
@@ -1324,6 +1440,39 @@ const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
       totalCount={page.registerTotal}
     />
 
+    {/*
+      The one bulk action a ticked row offers, and it only appears once
+      something is ticked — an always-visible "Download QR sheet" button
+      that does nothing until a row is selected is a control offered to
+      somebody who has not yet done the thing it needs.
+    */}
+    {page.selectedIds.size > 0 ? (
+      <div className="bg-primary/8 border-primary/20 flex flex-wrap items-center gap-3 border p-3">
+        <p className="text-sm font-medium">
+          {page.selectedIds.size} item{page.selectedIds.size === 1 ? "" : "s"}{" "}
+          selected
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          onClick={page.handleDownloadQrSheet}
+          disabled={page.isExportingQrSheet}
+          data-icon="inline-start"
+        >
+          <IconQrcode data-icon="inline-start" />
+          {page.isExportingQrSheet ? "Building sheet…" : "Download QR sheet"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={page.handleClearSelection}
+        >
+          Clear selection
+        </Button>
+      </div>
+    ) : null}
+
     <InventoryTable
       items={page.items}
       totalCount={page.registerTotal}
@@ -1349,6 +1498,10 @@ const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
       isRetirePending={page.isRetirePending}
       onRestoreItem={page.handleRestoreItem}
       isRestorePending={page.isRestorePending}
+      selectedIds={page.selectedIds}
+      selectableIds={page.selectableIds}
+      onToggleSelect={page.handleToggleSelect}
+      onToggleSelectAll={page.handleToggleSelectAll}
     />
 
     <InventoryItemDialogs
@@ -1397,7 +1550,6 @@ const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
       isLoading={page.isCategoriesLoading}
       error={page.categoriesError}
       onRetry={page.handleRetryCategories}
-      isFiltered={page.isFiltered}
       onSeed={page.handleSeedCategories}
       isSeedPending={page.isSeedPending}
     />
@@ -1409,6 +1561,14 @@ const InventoryRegisterPane = ({ page }: { page: InventoryPageState }) => (
     <StockOutDialog
       open={page.isStockOutOpen}
       onOpenChange={page.handleStockOutOpenChange}
+    />
+
+    <QrSheetDialog
+      open={page.isQrSheetOpen}
+      onOpenChange={page.handleQrSheetOpenChange}
+      items={page.selectedItemsForQrSheet}
+      isSubmitting={page.isExportingQrSheet}
+      onSubmit={page.handleQrSheetSubmit}
     />
   </section>
 );

@@ -5,12 +5,17 @@
  * Terminal and one-way: there is no `unacknowledge`, because the point of the
  * flag is to stop showing a notice once its recipient has read it, not to
  * track a reader's changing mind about having read something.
+ *
+ * Acts on the `inventoryCustodyNoticeRecipient` row's own id, not the parent
+ * `inventoryCustodyHistory` row's id — a single custody change can now name
+ * up to three people (manager, previous custodian, sub-managers up the
+ * chain), and each of them acknowledges their own row independently. One
+ * recipient acknowledging never closes the notice for another.
  */
 import { ORPCError } from "@orpc/server";
 import {
-  inventoryCustodyHistory,
-  inventoryCustodyHistoryIdSchema,
-  inventoryItem,
+  inventoryCustodyNoticeRecipient,
+  inventoryCustodyNoticeRecipientIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { eq } from "drizzle-orm";
 import { object } from "valibot";
@@ -22,7 +27,7 @@ import { getInventoryActor } from "./inventory-database";
 const ADMIN_ROLES = new Set(["admin", "principal", "vicePrincipal"]);
 
 export const acknowledgeCustodyNotice = requireInventoryPermission("take")
-  .input(object({ id: inventoryCustodyHistoryIdSchema }))
+  .input(object({ id: inventoryCustodyNoticeRecipientIdSchema }))
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
     const role = context.session?.user.role ?? "";
@@ -30,28 +35,19 @@ export const acknowledgeCustodyNotice = requireInventoryPermission("take")
 
     const [row] = await context.db
       .select({
-        id: inventoryCustodyHistory.id,
-        previousCustodianStaffId:
-          inventoryCustodyHistory.previousCustodianStaffId,
-        managerStaffId: inventoryItem.managerStaffId,
-        acknowledgedAt: inventoryCustodyHistory.acknowledgedAt,
+        id: inventoryCustodyNoticeRecipient.id,
+        staffId: inventoryCustodyNoticeRecipient.staffId,
+        acknowledgedAt: inventoryCustodyNoticeRecipient.acknowledgedAt,
       })
-      .from(inventoryCustodyHistory)
-      .innerJoin(
-        inventoryItem,
-        eq(inventoryCustodyHistory.itemId, inventoryItem.id)
-      )
-      .where(eq(inventoryCustodyHistory.id, input.id))
+      .from(inventoryCustodyNoticeRecipient)
+      .where(eq(inventoryCustodyNoticeRecipient.id, input.id))
       .limit(1);
 
     if (!row) {
       throw new ORPCError("NOT_FOUND", { message: "Notice not found" });
     }
 
-    const isRecipient =
-      actor.staffId !== null &&
-      (row.previousCustodianStaffId === actor.staffId ||
-        row.managerStaffId === actor.staffId);
+    const isRecipient = row.staffId === actor.userId;
 
     if (!isRecipient && !isLeadership) {
       throw new ORPCError("FORBIDDEN", {
@@ -64,9 +60,9 @@ export const acknowledgeCustodyNotice = requireInventoryPermission("take")
     }
 
     await context.db
-      .update(inventoryCustodyHistory)
+      .update(inventoryCustodyNoticeRecipient)
       .set({ acknowledgedAt: new Date() })
-      .where(eq(inventoryCustodyHistory.id, input.id));
+      .where(eq(inventoryCustodyNoticeRecipient.id, input.id));
 
     return { id: row.id, acknowledged: true };
   });

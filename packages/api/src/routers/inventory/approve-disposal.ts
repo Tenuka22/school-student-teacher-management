@@ -134,38 +134,6 @@ export const approveDisposal = adminOnlyProcedure
         });
       }
 
-      /**
-       * A signature the schema cannot record is refused here rather than at the
-       * database.
-       *
-       * `InventoryActor.staffId` is null for the seeded `admin` / `principal` /
-       * `deputy-principal` seats — leadership accounts seeded as users with no
-       * staff identity on purpose. The `approved` arm of
-       * `inventory_disposal_status_state` requires `approved_by_staff_id IS NOT
-       * NULL` (and so does each of the six final arms), so a write from an actor
-       * with no staff row is refused by PostgreSQL no matter how it is
-       * composed. The alternative to this guard is a raw constraint violation
-       * reaching the user as a toast, and there is no legitimate way round the
-       * CHECK: the only value that would satisfy it is a `staff` row invented for
-       * an account that is not on the teaching roll, which is the fake row
-       * `InventoryActor`'s own doc comment exists to avoid.
-       *
-       * **BAD_REQUEST, not FORBIDDEN.** The caller has already passed the
-       * `adminProcedure` role gate, so their *authority* to approve is not in
-       * question; what is missing is an identity the certificate can name. That
-       * is the same distinction `take-item.ts` draws for the same situation —
-       * "a refusal that follows a successful authorization check is a bug, not a
-       * policy" — and the message says what to do about it (get the account
-       * linked to a staff profile) rather than reporting a permission failure.
-       * `createDisposal` needs no such guard: `pending_approval` is the one arm
-       * of the ladder that does not name anybody.
-       */
-      if (actor.staffId === null) {
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "Your account has no staff record, so it cannot sign a disposal certificate. Ask an administrator to link your account to your staff profile",
-        });
-      }
 
       /**
        * Refuse the requester signing their own request.
@@ -187,7 +155,7 @@ export const approveDisposal = adminOnlyProcedure
        */
       if (
         existing.requestedByStaffId !== null &&
-        actor.staffId === existing.requestedByStaffId
+        actor.userId === existing.requestedByStaffId
       ) {
         throw new ORPCError("FORBIDDEN", {
           message:
@@ -210,7 +178,7 @@ export const approveDisposal = adminOnlyProcedure
         .update(inventoryDisposal)
         .set({
           status: "approved",
-          approvedByStaffId: actor.staffId,
+          approvedByStaffId: actor.userId,
           approvedAt,
         })
         .where(eq(inventoryDisposal.id, existing.id))
@@ -232,7 +200,7 @@ export const approveDisposal = adminOnlyProcedure
         fromStatus: existing.status,
         toStatus: "approved",
         note: input.note ?? "Disposal approved",
-        changedByStaffId: actor.staffId,
+      changedByStaffId: actor.userId,
       });
 
       // The item is read (not locked) for its name, SKU and counters: the ledger
@@ -279,7 +247,7 @@ export const approveDisposal = adminOnlyProcedure
         entityType: "inventory_disposal",
         entityId: existing.id,
         before: { status: existing.status, approvedAt: null },
-        after: { status: updated.status, approvedByStaffId: actor.staffId },
+      after: { status: updated.status, approvedByStaffId: actor.userId },
       });
 
       return {

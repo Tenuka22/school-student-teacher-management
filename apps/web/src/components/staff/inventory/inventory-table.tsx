@@ -11,6 +11,7 @@ import {
 } from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
+import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -305,6 +306,8 @@ const SortableHead: React.FC<{
 
 interface InventoryRowProps {
   item: InventoryItemView;
+  isSelected: boolean;
+  onToggleSelect: (itemId: string) => void;
   onOpenItem: (item: InventoryItemView) => void;
   onViewCustody: (item: InventoryItemView) => void;
   onTransferCustody: (item: InventoryItemView) => void;
@@ -326,7 +329,10 @@ interface InventoryRowProps {
  * straight through with a rest. The row keeps `item` and `onOpenItem` — the click
  * target — and everything else belongs to the menu.
  */
-type RowActionProps = Omit<InventoryRowProps, "item" | "onOpenItem">;
+type RowActionProps = Omit<
+  InventoryRowProps,
+  "item" | "onOpenItem" | "isSelected" | "onToggleSelect"
+>;
 
 interface RowActionMenuProps extends RowActionProps {
   item: InventoryItemView;
@@ -612,28 +618,23 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
 /**
  * One line of the register.
  *
- * **The row opens on click; the keyboard path is the name button.**
- * `teachers-list.tsx` — the incumbent table in this app — does exactly this, and
- * for the same reason: making the `<tr>` itself a tab stop *as well as* the
- * button inside it puts one action in the tab order twice, which a screen-reader
- * user hears as "Projector, button" and then "row" and has to work out are the
- * same thing. So the `<tr>` carries the mouse affordance and the name is a real
- * `<button>`, which is focusable and activates on both Enter and Space for free
- * from the platform. The menu's own trigger stops propagation so opening the
- * menu does not also open the item.
- *
- * `cursor-pointer` is the one thing the row was missing. The shared `TableRow`
- * already carries `hover:bg-muted/50`, so a mouse user had a tint and no pointer —
- * which reads as "this row is selected" rather than "this row is a link", and
- * the name's own hover underline was the only real hint. It is the same `cursor-pointer`
- * `my-equipment.tsx` puts on its clickable rows, for the same reason.
+ * **Only the name opens the custody history — not the row.** An earlier
+ * version made the whole `<tr>` clickable, on the reasoning that a mouse user
+ * needs a bigger target than one button. In practice it meant every other
+ * control a row grew afterwards — the selection checkbox below, a status
+ * badge, a future inline action — had to remember to stop propagation or
+ * silently open the history sheet instead of doing what it was clicked for.
+ * The name is a real `<button>`, focusable and activating on both Enter and
+ * Space for free from the platform, and it is now the row's only click
+ * target: one place decides what a click on this row means, not every
+ * element in it.
  *
  * ## A retired row is neither clickable nor clickable-looking, and says so
  *
  * The row's click target is the custody history, and `listCustodyHistory` refuses
- * a retired item with `NOT_FOUND` — its own comment says a 200-item history of a
- * deleted row "is a dead end". So on a retired row the `<tr>` drops its handler
- * and its pointer, the name becomes plain text rather than a button, and the
+* a retired item with `NOT_FOUND` — its own comment says a 200-item history of a
+ * deleted row "is a dead end". So on a retired row the name becomes plain text
+ * rather than a button — there is nothing left to open — and the
  * `hover` tint is replaced by a flat muted band. A control that reliably opens a
  * dead end is the same defect as one that reliably fails, and the honest version of
  * a retired row is one that says what it is instead of pretending to be live.
@@ -655,7 +656,13 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
  * the row is the thing a reader comes to for the columns; the menu is a list of nine
  * verbs with their own rules, so it is now read on its own.
  */
-const InventoryRow = ({ item, onOpenItem, ...actions }: InventoryRowProps) => {
+const InventoryRow = ({
+  item,
+  isSelected,
+  onToggleSelect,
+  onOpenItem,
+  ...actions
+}: InventoryRowProps) => {
   const isRetired = item.deletedAt !== null;
 
   return (
@@ -663,10 +670,17 @@ const InventoryRow = ({ item, onOpenItem, ...actions }: InventoryRowProps) => {
       className={
         isRetired
           ? "bg-muted/30 hover:bg-muted/30"
-          : "hover:bg-muted/50 cursor-pointer"
+          : "hover:bg-muted/50"
       }
-      onClick={isRetired ? undefined : () => onOpenItem(item)}
     >
+      <TableCell>
+        <Checkbox
+          aria-label={`Select ${item.name} for QR labels`}
+          checked={isSelected}
+          disabled={isRetired}
+          onCheckedChange={() => onToggleSelect(item.id)}
+        />
+      </TableCell>
       <TableCell className="max-w-64 whitespace-normal">
         {isRetired ? (
           <div className="flex flex-col items-start gap-0.5 text-left">
@@ -1269,9 +1283,20 @@ const useSortedRows = (
 const RegisterTableHeader: React.FC<{
   sort: SortState | null;
   onToggleSort: (key: SortKey) => void;
-}> = ({ sort, onToggleSort }) => (
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleSelectAll: () => void;
+}> = ({ sort, onToggleSort, allSelected, someSelected, onToggleSelectAll }) => (
   <TableHeader>
     <TableRow className="bg-primary hover:bg-primary border-none">
+      <TableHead className={`${COLUMN_HEADING} w-10`}>
+        <Checkbox
+          aria-label="Select all items on this page for QR labels"
+          checked={allSelected}
+          indeterminate={!allSelected && someSelected}
+          onCheckedChange={onToggleSelectAll}
+        />
+      </TableHead>
       <SortableHead
         label="Asset"
         sort={sort}
@@ -1350,6 +1375,12 @@ export interface InventoryTableProps {
    */
   onRestoreItem: (item: InventoryItemView) => Promise<void>;
   isRestorePending: boolean;
+  /** Live rows this reader has ticked for the QR label sheet \u2014 see the table's own doc comment. */
+  selectedIds: Set<string>;
+  /** Every live row's id on this page, for "select all". */
+  selectableIds: string[];
+  onToggleSelect: (itemId: string) => void;
+  onToggleSelectAll: () => void;
 }
 
 /**
@@ -1429,17 +1460,24 @@ const RegisterEmptyState = ({
 /**
  * The register, as a table.
  *
- * **No bulk selection, on purpose.** A checkbox column above a school asset register
- * offers one obvious thing: "delete everything ticked". The nearest bulk write this
- * feature has is a disposal, and a disposal takes **a signature, per unit** — it is
- * the one irreversible act in the feature and the reason it is two-staged. A row of
- * ticks that quietly produced a mixed write-off across a borrowed projector and a box
- * of chairs would be a false affordance wearing the costume of a convenience, and it
- * would be one keystroke away from being used on the wrong selection.
- * `teachers-list.tsx` has bulk delete because deleting a teacher is a single,
- * server-guarded, reversible-in-effect record change; retiring inventory is not the
- * same act, so it does not get the same affordance. Every destructive action here is
- * per row, named, and behind an `AlertDialog`.
+ * **No bulk *write*, still \u2014 the checkbox column that exists is for one
+ * read-only export.** The register used to carry a comment here refusing any
+ * checkbox column outright, on the reasoning that one above a school asset
+ * register offers an obvious, dangerous thing: "delete everything ticked".
+ * That reasoning still holds for every write this feature makes: the nearest
+ * bulk write is a disposal, and a disposal takes **a signature, per unit** \u2014
+ * the one irreversible act in the feature, two-staged on purpose, and a row
+ * of ticks that quietly produced a mixed write-off across a borrowed
+ * projector and a box of chairs would be a false affordance wearing the
+ * costume of a convenience. Every destructive action here is still per row,
+ * named, and behind an `AlertDialog` \u2014 none of that changed.
+ *
+ * What the ticks *do* select is a printable sheet of QR labels
+ * (`export-qr-sheet.ts`), which writes nothing: it reads a name and a SKU per
+ * selected row and hands back a PDF. There is no write this checkbox column
+ * can trigger, so the risk the old comment named does not apply to it \u2014
+ * and retired rows are excluded from "select all" for the same reason they
+ * cannot be opened: nothing is left to scan into.
  */
 export const InventoryTable = ({
   items,
@@ -1466,6 +1504,10 @@ export const InventoryTable = ({
   isRetirePending,
   onRestoreItem,
   isRestorePending,
+  selectedIds,
+  selectableIds,
+  onToggleSelect,
+  onToggleSelectAll,
 }: InventoryTableProps) => {
   const [sort, setSort] = useState<SortState | null>(null);
   const [retireTarget, setRetireTarget] = useState<InventoryItemView | null>(
@@ -1650,12 +1692,23 @@ export const InventoryTable = ({
         {SORT_SCOPE_NOTE}
       </p>
       <Table aria-label={tableLabel}>
-        <RegisterTableHeader sort={sort} onToggleSort={toggleSort} />
+        <RegisterTableHeader
+          sort={sort}
+          onToggleSort={toggleSort}
+          allSelected={
+            selectableIds.length > 0 &&
+            selectableIds.every((id) => selectedIds.has(id))
+          }
+          someSelected={selectableIds.some((id) => selectedIds.has(id))}
+          onToggleSelectAll={onToggleSelectAll}
+        />
         <TableBody>
           {rows.map((item) => (
             <InventoryRow
               key={item.id}
               item={item}
+              isSelected={selectedIds.has(item.id)}
+              onToggleSelect={onToggleSelect}
               onOpenItem={onOpenItem}
               onViewCustody={onViewCustody}
               onTransferCustody={onTransferCustody}

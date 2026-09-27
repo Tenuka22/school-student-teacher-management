@@ -14,12 +14,15 @@
  * why, and leaves it on `list-custody-history.ts`'s trail for whoever looks
  * into it. A dispute is also, by definition, the recipient's own response to
  * the notice, so it acknowledges the row in the same write.
+ *
+ * Acts on the `inventoryCustodyNoticeRecipient` row's own id — see
+ * `acknowledge-custody-notice.ts` for why a single custody-history row now
+ * has one recipient row per person it concerns, each disputed independently.
  */
 import { ORPCError } from "@orpc/server";
 import {
-  inventoryCustodyHistory,
-  inventoryCustodyHistoryIdSchema,
-  inventoryItem,
+  inventoryCustodyNoticeRecipient,
+  inventoryCustodyNoticeRecipientIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { eq } from "drizzle-orm";
 import { minLength, object, pipe, string } from "valibot";
@@ -36,7 +39,7 @@ const DISPUTE_NOTE_MAX_LENGTH = 500;
 export const disputeCustodyNotice = requireInventoryPermission("take")
   .input(
     object({
-      id: inventoryCustodyHistoryIdSchema,
+      id: inventoryCustodyNoticeRecipientIdSchema,
       note: pipe(string(), minLength(1, "Say what is wrong with this record")),
     })
   )
@@ -53,28 +56,19 @@ export const disputeCustodyNotice = requireInventoryPermission("take")
 
     const [row] = await context.db
       .select({
-        id: inventoryCustodyHistory.id,
-        previousCustodianStaffId:
-          inventoryCustodyHistory.previousCustodianStaffId,
-        managerStaffId: inventoryItem.managerStaffId,
-        disputedAt: inventoryCustodyHistory.disputedAt,
+        id: inventoryCustodyNoticeRecipient.id,
+        staffId: inventoryCustodyNoticeRecipient.staffId,
+        disputedAt: inventoryCustodyNoticeRecipient.disputedAt,
       })
-      .from(inventoryCustodyHistory)
-      .innerJoin(
-        inventoryItem,
-        eq(inventoryCustodyHistory.itemId, inventoryItem.id)
-      )
-      .where(eq(inventoryCustodyHistory.id, input.id))
+      .from(inventoryCustodyNoticeRecipient)
+      .where(eq(inventoryCustodyNoticeRecipient.id, input.id))
       .limit(1);
 
     if (!row) {
       throw new ORPCError("NOT_FOUND", { message: "Notice not found" });
     }
 
-    const isRecipient =
-      actor.staffId !== null &&
-      (row.previousCustodianStaffId === actor.staffId ||
-        row.managerStaffId === actor.staffId);
+    const isRecipient = row.staffId === actor.userId;
 
     if (!isRecipient && !isLeadership) {
       throw new ORPCError("FORBIDDEN", {
@@ -90,9 +84,9 @@ export const disputeCustodyNotice = requireInventoryPermission("take")
 
     const now = new Date();
     await context.db
-      .update(inventoryCustodyHistory)
+      .update(inventoryCustodyNoticeRecipient)
       .set({ acknowledgedAt: now, disputedAt: now, disputeNote: input.note })
-      .where(eq(inventoryCustodyHistory.id, input.id));
+      .where(eq(inventoryCustodyNoticeRecipient.id, input.id));
 
     return { id: row.id, disputed: true };
   });

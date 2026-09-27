@@ -19,10 +19,13 @@ import type { InventoryAction } from "@school-student-teacher-management/db/cons
 import { normalizeInventoryKey } from "@school-student-teacher-management/db/constants/inventory";
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
 import { user } from "@school-student-teacher-management/db/schema/auth";
+import { files } from "@school-student-teacher-management/db/schema/files";
 import {
   inventoryAuditLog,
   inventoryBorrowUnit,
   inventoryCategory,
+  inventoryCustodyHistory,
+  inventoryCustodyNoticeRecipient,
   inventoryDisposal,
   inventoryDisposalUnit,
   inventoryIssueUnit,
@@ -97,9 +100,11 @@ export const countersOf = (row: InventoryCountersRow): InventoryCounters => ({
 });
 
 /**
- * `staff` joined twice onto the same `inventory_item` row.
+ * `user` joined twice onto the same `inventory_item` row — the manager and
+ * the custodian are logins now, not staff profiles, so their display names
+ * come from `user.name` rather than `staff.name`.
  *
- * Both staff aliases must be `left` joins and not `inner` joins: an item sitting
+ * Both aliases must be `left` joins and not `inner` joins: an item sitting
  * unassigned in the store has a null `managerStaffId` and a null
  * `custodianStaffId`, and an inner join would drop exactly the rows a new store
  * is full of.
@@ -108,9 +113,15 @@ export const countersOf = (row: InventoryCountersRow): InventoryCounters => ({
  * because `manager` and `custodian` answer different questions — see the
  * `inventoryItem` schema comment — and a single join could not label which of
  * the two it had matched.
+ *
+ * Named `managerStaff`/`custodianStaff` rather than renamed to `*User`, so the
+ * dozens of call sites that already destructure `managerName`/`custodianName`
+ * off `itemViewSelection` do not need to change alongside the FK target.
  */
-export const managerStaff = alias(staff, "manager_staff");
-export const custodianStaff = alias(staff, "custodian_staff");
+export const managerStaff = alias(user, "manager_staff");
+export const custodianStaff = alias(user, "custodian_staff");
+/** The item's own photo, joined by `inventoryItem.imageFileId`. */
+export const itemImageFile = alias(files, "item_image_file");
 
 /**
  * Every `inventory_item` column, plus everything the web app needs that lives
@@ -138,18 +149,33 @@ export const itemViewSelection = {
   location: inventoryItem.location,
   purchaseValue: inventoryItem.purchaseValue,
   currentValue: inventoryItem.currentValue,
+  purchaseDate: inventoryItem.purchaseDate,
+  depreciationRatePercent: inventoryItem.depreciationRatePercent,
   createdByStaffId: inventoryItem.createdByStaffId,
   managerStaffId: inventoryItem.managerStaffId,
   custodianStaffId: inventoryItem.custodianStaffId,
+  imageFileId: inventoryItem.imageFileId,
   deletedAt: inventoryItem.deletedAt,
+  voidedAt: inventoryItem.voidedAt,
+  voidReason: inventoryItem.voidReason,
+  voidedByStaffId: inventoryItem.voidedByStaffId,
   createdAt: inventoryItem.createdAt,
   updatedAt: inventoryItem.updatedAt,
 
   categoryName: inventoryCategory.name,
   categoryColor: inventoryCategory.color,
+  categoryIcon: inventoryCategory.icon,
 
   managerName: managerStaff.name,
   custodianName: custodianStaff.name,
+  /**
+   * The item's photo, as the static path it was uploaded to — see
+   * `apps/web/src/routes/api/files.upload.ts`. Null whenever `imageFileId`
+   * is null; the left join is what makes an unphotographed item (the
+   * overwhelming majority of a school's store) a row with a null column
+   * rather than a row this selection drops.
+   */
+  imageUrl: itemImageFile.key,
 
   uniqueIdCount: sql<number>`(
     select ${count()} from ${inventoryUnit}
@@ -207,34 +233,37 @@ export const itemViewJoins = (db: Executor) =>
     .leftJoin(
       custodianStaff,
       eq(inventoryItem.custodianStaffId, custodianStaff.id)
-    );
+    )
+    .leftJoin(itemImageFile, eq(inventoryItem.imageFileId, itemImageFile.id));
 
 // ─── Actor resolution ───────────────────────────────────────────────────────
 
 /**
- * Who is making the change. Every ledger and audit row points at a `staff` row
- * where one exists rather than at a `user` row, because an inventory action has
- * to survive the departure of the person who performed it — a storekeeper who
- * leaves the school must not be deletable until every item they issued is
- * accounted for.
+ * Who is making the change. Every ledger and custody/holder column points at
+ * `user.id` — the login — not at a `staff` row. This is a reversal of the
+ * module's earlier design: identity for custody and management used to be the
+ * `staff` profile precisely so it would survive the departure of the person
+ * behind it, which meant the three seeded leadership logins (admin, principal,
+ * deputy-principal, none of which have a `staff` row) could not hold or manage
+ * equipment at all. `delete-staff.ts` now carries that survivability guarantee
+ * instead: it deletes the linked `user` row in the same transaction as the
+ * `staff` row, and probes every inventory column before either delete runs, the
+ * same way it always has.
  *
- * `staffId` is nullable because **not every account in this system is staff**.
- * The school administrator manages the inventory, and the seeded `admin`,
- * `principal` and `deputy-principal` accounts are seeded as users with no staff
- * identity on purpose (see `packages/auth/src/admin.ts`): they are leadership
- * seats, not employees on the teaching roll, and inventing a staff row for one
- * would be the same fake row `inventoryIssue.receiverName` exists to avoid. A
- * null `staffId` is therefore a legitimate actor, not a failure — see
- * `getInventoryActor` for what the write is attributed by instead.
+ * `staffId` remains on this interface only as reference information — whether
+ * the caller happens to have a linked `staff` profile, which some non-custody
+ * logic elsewhere still cares about. **Nothing writes `staffId` into a
+ * `*StaffId` column any more; every such write uses `userId`, which is always
+ * present for an authenticated caller.**
  */
 export interface InventoryActor {
-  /** The caller's staff row, or null for an account that has none (the seeded
-   *  admin / principal / deputy-principal accounts are seeded as users with no
-   *  staff identity on purpose). Null is a legitimate actor, not an error. */
+  /** The caller's linked staff row, if any — reference information only. Not
+   *  written into any custody/holder/actor column; see `userId` for that. */
   staffId: string | null;
   /** Denormalised onto the ledger so the trail keeps a name even after the
-   *  staff row is gone. Never null. */
+   *  account is gone. Never null. */
   name: string;
+  /** The caller's login id. This is what every `*StaffId` column now stores. */
   userId: string;
 }
 
@@ -394,16 +423,17 @@ export const resolveBorrowerStaffBatch = async (
 
   const rows = await db
     .select({
-      id: staff.id,
-      name: staff.name,
-      // The badge / service number, and the one staff identifier a person can
-      // be given across a counter. `teacher_service_no` is unique and nullable,
-      // so an office record that was never issued one yields a null reference
-      // rather than a missing row.
-      reference: staff.teacherServiceNo,
+      id: user.id,
+      name: user.name,
+      // The one identifier a login carries that a storekeeper can act on
+      // across a counter, now that a borrower is a `user` row rather than a
+      // `staff` row — `teacherServiceNo` does not exist here, so the
+      // username fills the same role and is `null` for an account that never
+      // set one, exactly like a badge number that was never issued.
+      reference: user.username,
     })
-    .from(staff)
-    .where(inArray(staff.id, [...staffIds]));
+    .from(user)
+    .where(inArray(user.id, [...staffIds]));
 
   for (const row of rows) {
     borrowers.set(row.id, {
@@ -502,12 +532,13 @@ export const resolveBorrowerStaff = async (
     throw new ORPCError("NOT_FOUND", { message: "Staff member not found" });
   }
 
-  // Verify that the staff member's linked user (if any) is not an admin
+  // A loan cannot be owed back by an administrator account — same rule as
+  // `assertStaffIsAssignable`, checked directly against `user` now that the
+  // borrower pointer names a login rather than a staff row.
   const [staffRecord] = await db
     .select({ role: user.role })
-    .from(staff)
-    .leftJoin(user, eq(staff.userId, user.id))
-    .where(eq(staff.id, staffId))
+    .from(user)
+    .where(eq(user.id, staffId))
     .limit(1);
 
   if (staffRecord?.role === "admin") {
@@ -610,7 +641,13 @@ export const getLockedItem = async (
   const [record] = await db
     .select()
     .from(inventoryItem)
-    .where(and(eq(inventoryItem.id, itemId), isNull(inventoryItem.deletedAt)))
+    .where(
+      and(
+        eq(inventoryItem.id, itemId),
+        isNull(inventoryItem.deletedAt),
+        isNull(inventoryItem.voidedAt)
+      )
+    )
     .limit(1)
     .for("update");
 
@@ -661,18 +698,50 @@ export const getLockedRetiredItem = async (
 };
 
 /**
+ * Read one **voided** item under a row lock — `getLockedRetiredItem`'s twin
+ * for the other kind of hidden row. Same reasoning throughout: a separate
+ * function rather than a flag, `NOT_FOUND` rather than `CONFLICT`, and a
+ * message a caller can act on rather than a bare refusal.
+ */
+export const getLockedVoidedItem = async (
+  db: Executor,
+  itemId: string
+): Promise<InventoryItemRow> => {
+  const [record] = await db
+    .select()
+    .from(inventoryItem)
+    .where(
+      and(eq(inventoryItem.id, itemId), isNotNull(inventoryItem.voidedAt))
+    )
+    .limit(1)
+    .for("update");
+
+  if (!record) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "No voided item with this id — it may already be unvoided",
+    });
+  }
+
+  return record;
+};
+
+/**
  * The category must exist before the item that references it.
  *
  * The foreign key is `restrict`, so an unknown category id would otherwise
  * surface as a raw constraint violation from the driver. This turns it into a
  * message the picker can act on.
+ *
+ * Returns the category's name, which `createItem` needs to generate the
+ * item's name — one read serving both the existence guard and the value the
+ * caller was going to fetch next anyway.
  */
 export const assertCategoryExists = async (
   db: Executor,
   categoryId: string
-): Promise<void> => {
+): Promise<{ id: string; name: string }> => {
   const [record] = await db
-    .select({ id: inventoryCategory.id })
+    .select({ id: inventoryCategory.id, name: inventoryCategory.name })
     .from(inventoryCategory)
     .where(eq(inventoryCategory.id, categoryId))
     .limit(1);
@@ -680,30 +749,24 @@ export const assertCategoryExists = async (
   if (!record) {
     throw new ORPCError("NOT_FOUND", { message: "Category not found" });
   }
+
+  return record;
 };
 
 /**
- * The target must be a real member of staff who is still employed.
+ * The target must be a real, active login — identity for custody and
+ * management is the account now, not a `staff` profile behind it, so
+ * "assignable" is a question `user` answers on its own.
  *
- * This is the school-domain replacement for the source app's
- * `assertActiveOwnerExists`, which asked whether a `user` row was banned. A
- * banned login and a departed member of staff are the same fact about the
- * store, and this repo states it as a person: **employment status that is
- * `"active"` or null**, and nothing else. There is no `staffCategory`
- * predicate, and its removal is the decision rather than an omission — a
- * Principal is a person in the building, not only a login, and the bursar is
- * who a school projector actually leaves the office with. `STAFF_CATEGORIES` has
- * two values (`teacher`, `officeStaff`) and both describe people who are
- * employed, so filtering on the column would have excluded a colleague rather
- * than a category of person who cannot hold property.
- *
- * **The employment-status half is the half doing the work, and it is the half
- * that stays.** It is what stops the register naming somebody who is not a real,
- * employed person: a *terminated* or *on-leave* colleague is refused, because
- * the equipment leaves the building with them. A *null* status is admitted,
- * because a null means nobody has confirmed it — refusing those would make the
- * ledger unusable until an administrator filled in a field the storekeeper has
- * no business editing.
+ * **This is a deliberate reversal.** The check used to be "employment status
+ * is active or null", read off `staff`, precisely because a `staff` row was
+ * the only way to be handed a projector — the three seeded leadership logins
+ * have no `staff` row at all and were refused for exactly that reason. Now that
+ * every column this guards points at `user.id`, the equivalent, simpler fact is
+ * **not banned**: `better-auth`'s own `banned` flag is what a school uses to
+ * say "this account is no longer active", the same signal `assertActiveOwnerExists`
+ * in the source app already checked. A departed teacher whose account should stop
+ * holding equipment is banned or deleted, not silently still assignable.
  *
  * **`label` names the role being filled, never the category of person.** It is
  * interpolated into the refusal below, and the whole point of the widened
@@ -718,24 +781,18 @@ export const assertCategoryExists = async (
  */
 export const assertStaffIsAssignable = async (
   db: Executor,
-  staffId: string,
+  userId: string,
   label: string
 ): Promise<{ id: string; name: string }> => {
   const [record] = await db
-    .select({ id: staff.id, name: staff.name, role: user.role })
-    .from(staff)
-    .leftJoin(user, eq(staff.userId, user.id))
-    .where(
-      and(
-        eq(staff.id, staffId),
-        or(eq(staff.employmentStatus, "active"), isNull(staff.employmentStatus))
-      )
-    )
+    .select({ id: user.id, name: user.name, role: user.role })
+    .from(user)
+    .where(and(eq(user.id, userId), or(eq(user.banned, false), isNull(user.banned))))
     .limit(1);
 
   if (!record) {
     throw new ORPCError("BAD_REQUEST", {
-      message: `Select an active ${label} to be in charge of this item`,
+      message: `Select an active account as the ${label}`,
     });
   }
 
@@ -1139,12 +1196,12 @@ export interface InsertTransactionInput {
  * joined on purpose: the transactions screen renders a year of history and must
  * not turn into an N+1 over items and staff, and a store whose items are later
  * deleted must still be able to show what happened to them. `actorName` is
- * there for the same reason — `actorStaffId` is `set null`, so a departed
- * storekeeper's name would otherwise vanish from every historic row. It is also
- * what makes a **null** `actor.staffId` survivable: an account with no staff row
- * (a seeded administrator, say) writes an unattributed `actor_staff_id` and a
- * named `meta.actorName`, and the row still answers "who did this" long after
- * the session that produced it is gone.
+ * there for the same reason — `actorStaffId` (a `user.id` now, not a
+ * `staff.id`) is `set null`, so a departed login's name would otherwise vanish
+ * from every historic row. `actor.userId` is always present for an
+ * authenticated caller, so unlike the old staff-based design there is no null
+ * case to survive here — `actorName` still carries the row after the account
+ * itself is deleted, which is the scenario `set null` exists for.
  *
  * The three defaults are spread **last** and cannot be overridden. A caller
  * that already has the right values has no reason to pass them, and a caller
@@ -1158,7 +1215,7 @@ export const insertInventoryTransaction = async (
 ): Promise<void> => {
   await db.insert(inventoryTransaction).values({
     id: crypto.randomUUID(),
-    actorStaffId: input.actor.staffId,
+    actorStaffId: input.actor.userId,
     action: input.action,
     itemId: input.item.id,
     qtyBefore: input.before.qty,
@@ -1208,7 +1265,7 @@ export const insertInventoryAuditLog = async (
 ): Promise<void> => {
   await db.insert(inventoryAuditLog).values({
     id: crypto.randomUUID(),
-    actorStaffId: input.actor.staffId,
+    actorStaffId: input.actor.userId,
     actorName: input.actor.name,
     action: input.action,
     entityType: input.entityType,
@@ -1216,6 +1273,127 @@ export const insertInventoryAuditLog = async (
     before: (input.before ?? null) as Record<string, unknown> | null,
     after: (input.after ?? null) as Record<string, unknown> | null,
   });
+};
+
+// ─── Custody chain + notices ────────────────────────────────────────────────
+
+/**
+ * Everyone who held this item earlier in the same unbroken chain of
+ * hand-overs, oldest first, **not including** `immediatePreviousCustodianStaffId`
+ * itself (that person is always notified separately, as `previous_custodian`).
+ *
+ * The chain is derived, not stored: walk every `inventoryCustodyHistory` row
+ * for the item in order, tracking who is currently holding it. A
+ * `custody_released` row (the item went back to the store) empties the chain,
+ * because a fresh loan afterwards has nothing to do with whoever held it
+ * before it was last returned. A `custody_taken`/`custody_transferred` row
+ * appends its new holder. `manager_*` rows never touch the custodian and are
+ * skipped. Safe to call either side of inserting the row for the transfer in
+ * progress: `immediatePreviousCustodianStaffId` locates that transfer's own
+ * spot in the chain, and anything appended after it (including that very row,
+ * if already inserted) is sliced away. Must run under the same row lock
+ * `getLockedItem` already took, so the chain it reads cannot change under it
+ * mid-transaction.
+ */
+export const getUpstreamSubManagerStaffIds = async (
+  db: Executor,
+  itemId: string,
+  immediatePreviousCustodianStaffId: string | null
+): Promise<string[]> => {
+  const rows = await db
+    .select({
+      changeType: inventoryCustodyHistory.changeType,
+      newCustodianStaffId: inventoryCustodyHistory.newCustodianStaffId,
+    })
+    .from(inventoryCustodyHistory)
+    .where(eq(inventoryCustodyHistory.itemId, itemId))
+    .orderBy(inventoryCustodyHistory.changedAt, inventoryCustodyHistory.id);
+
+  const chain: string[] = [];
+  for (const row of rows) {
+    if (row.changeType === "custody_released") {
+      chain.length = 0;
+      continue;
+    }
+    if (
+      (row.changeType === "custody_taken" ||
+        row.changeType === "custody_transferred") &&
+      row.newCustodianStaffId
+    ) {
+      chain.push(row.newCustodianStaffId);
+    }
+  }
+
+  if (!immediatePreviousCustodianStaffId) {
+    return [];
+  }
+
+  const idx = chain.lastIndexOf(immediatePreviousCustodianStaffId);
+  const upstream = idx >= 0 ? chain.slice(0, idx) : chain.slice(0, -1);
+  return [...new Set(upstream)];
+};
+
+export interface InsertCustodyNoticeRecipientsInput {
+  custodyHistoryId: string;
+  itemId: string;
+  /** The custodian the item was just taken from/returned by, if any. */
+  previousCustodianStaffId: string | null;
+  /** The item's manager, read live off the item row (not the history row —
+   *  a pure custody row never carries manager columns, see the CHECK). */
+  managerStaffId: string | null;
+  /** Whoever performed this action never gets notified about their own act. */
+  changedByStaffId: string | null;
+}
+
+/**
+ * Write one `inventory_custody_notice_recipient` row per person a custody
+ * change concerns, with precedence `manager` > `previous_custodian` >
+ * `sub_manager` so nobody is notified twice about the same event under two
+ * roles. Call once, right after inserting the `inventoryCustodyHistory` row
+ * this recipient list is about, inside the same transaction.
+ */
+export const insertCustodyNoticeRecipients = async (
+  db: Executor,
+  input: InsertCustodyNoticeRecipientsInput
+): Promise<void> => {
+  const roleByStaffId = new Map<string, "manager" | "previous_custodian" | "sub_manager">();
+
+  const consider = (
+    staffId: string | null,
+    role: "manager" | "previous_custodian" | "sub_manager"
+  ) => {
+    if (!staffId || staffId === input.changedByStaffId) {
+      return;
+    }
+    if (!roleByStaffId.has(staffId)) {
+      roleByStaffId.set(staffId, role);
+    }
+  };
+
+  consider(input.managerStaffId, "manager");
+  consider(input.previousCustodianStaffId, "previous_custodian");
+
+  const subManagerStaffIds = await getUpstreamSubManagerStaffIds(
+    db,
+    input.itemId,
+    input.previousCustodianStaffId
+  );
+  for (const staffId of subManagerStaffIds) {
+    consider(staffId, "sub_manager");
+  }
+
+  if (roleByStaffId.size === 0) {
+    return;
+  }
+
+  await db.insert(inventoryCustodyNoticeRecipient).values(
+    [...roleByStaffId.entries()].map(([staffId, role]) => ({
+      id: crypto.randomUUID(),
+      custodyHistoryId: input.custodyHistoryId,
+      staffId,
+      role,
+    }))
+  );
 };
 
 // ─── Serialisation ──────────────────────────────────────────────────────────
@@ -1244,6 +1422,7 @@ export interface InventoryItemView {
   categoryId: string;
   categoryName: string;
   categoryColor: string;
+  categoryIcon: string;
   managerStaffId: string | null;
   managerName: string | null;
   custodianStaffId: string | null;
@@ -1259,11 +1438,19 @@ export interface InventoryItemView {
   location: string;
   purchaseValue: string | null;
   currentValue: string | null;
+  currentValueComputed: string | null;
+  purchaseDate: string | null;
+  depreciationRatePercent: string | null;
   uniqueIdCount: number;
   activeUnitCount: number;
+  imageFileId: string | null;
+  imageUrl: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  voidedByStaffId: string | null;
 }
 
 /**
@@ -1274,6 +1461,41 @@ export interface InventoryItemView {
  * the functions in `inventory-calculations`, rather than each procedure
  * re-deriving them from whatever it happened to have selected.
  */
+
+/** Days in a year for depreciation's purposes — not a leap-year calendar, a
+ *  straight-line schedule that a printed report can check by hand. */
+const DAYS_PER_YEAR = 365;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Straight-line depreciation: `purchaseValue × (1 − rate% × yearsElapsed)`,
+ * floored at zero. `null` whenever any of the three inputs the formula needs
+ * — `purchaseValue`, `purchaseDate`, `depreciationRatePercent` — is missing,
+ * because a partial answer here is worse than admitting the register does not
+ * know: the field this feeds, `currentValueComputed`, exists precisely so a
+ * caller never has to guess which of `currentValue` (hand-entered) or this one
+ * is the current truth.
+ */
+export const computeDepreciatedValue = (row: {
+  purchaseValue: string | null;
+  purchaseDate: Date | null;
+  depreciationRatePercent: string | null;
+}): string | null => {
+  if (!(row.purchaseValue && row.purchaseDate && row.depreciationRatePercent)) {
+    return null;
+  }
+
+  const purchaseValue = Number(row.purchaseValue);
+  const ratePercent = Number(row.depreciationRatePercent);
+  const yearsElapsed =
+    (Date.now() - row.purchaseDate.getTime()) / (MS_PER_DAY * DAYS_PER_YEAR);
+
+  const fraction = Math.max(0, 1 - (ratePercent / 100) * yearsElapsed);
+  const value = Math.max(0, purchaseValue * fraction);
+
+  return value.toFixed(2);
+};
+
 export const toItemView = (row: InventoryItemJoinedRow): InventoryItemView => {
   const counters = countersOf(row);
   const availableQty = calculateAvailableQuantity(counters);
@@ -1286,6 +1508,7 @@ export const toItemView = (row: InventoryItemJoinedRow): InventoryItemView => {
     categoryId: row.categoryId,
     categoryName: row.categoryName,
     categoryColor: row.categoryColor,
+    categoryIcon: row.categoryIcon,
     managerStaffId: row.managerStaffId,
     managerName: row.managerName,
     custodianStaffId: row.custodianStaffId,
@@ -1301,10 +1524,18 @@ export const toItemView = (row: InventoryItemJoinedRow): InventoryItemView => {
     location: row.location,
     purchaseValue: row.purchaseValue,
     currentValue: row.currentValue,
+    currentValueComputed: computeDepreciatedValue(row),
+    purchaseDate: isoOrNull(row.purchaseDate),
+    depreciationRatePercent: row.depreciationRatePercent,
     uniqueIdCount: row.uniqueIdCount,
     activeUnitCount: row.activeUnitCount,
+    imageFileId: row.imageFileId,
+    imageUrl: row.imageUrl,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     deletedAt: isoOrNull(row.deletedAt),
+    voidedAt: isoOrNull(row.voidedAt),
+    voidReason: row.voidReason,
+    voidedByStaffId: row.voidedByStaffId,
   };
 };

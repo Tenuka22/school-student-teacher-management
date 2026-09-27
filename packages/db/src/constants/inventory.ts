@@ -152,6 +152,76 @@ export const CUSTODY_CHANGE_TYPE_LABELS: Record<string, string> = {
 
 export const custodyChangeTypeSchema = v.picklist(CUSTODY_CHANGE_TYPES);
 
+// ─── Custody notice recipient roles ─────────────────────────────────────────
+
+/**
+ * Who a single row in `inventoryCustodyHistory` concerns, one row per
+ * recipient in `inventoryCustodyNoticeRecipient`.
+ *
+ * `previous_custodian` is whoever just lost the item. `manager` is the item's
+ * current manager, notified because they stay accountable regardless of who
+ * is holding it. `sub_manager` is new: everyone else who held the item
+ * earlier in the same unbroken chain of hand-overs since it was last back in
+ * the store — A lent it to B, B lent it to C, and now C lends it to D. B is a
+ * `sub_manager` on that row: they are not the item's manager and they are not
+ * losing the item themselves, but they vouched for C when they lent it on,
+ * and the school treats that as shared accountability, not silence. A person
+ * who qualifies for more than one role on the same row (the manager who is
+ * also the chain's first holder) gets exactly one recipient row, in the
+ * higher-precedence role — `manager` over `previous_custodian` over
+ * `sub_manager` — so nobody is notified twice about the same event.
+ */
+export const CUSTODY_NOTICE_RECIPIENT_ROLES = [
+  "manager",
+  "previous_custodian",
+  "sub_manager",
+] as const;
+export type CustodyNoticeRecipientRole =
+  (typeof CUSTODY_NOTICE_RECIPIENT_ROLES)[number];
+
+export const CUSTODY_NOTICE_RECIPIENT_ROLE_LABELS: Record<string, string> = {
+  manager: "Manager",
+  previous_custodian: "Previous custodian",
+  sub_manager: "Sub-manager",
+};
+
+export const custodyNoticeRecipientRoleSchema = v.picklist(
+  CUSTODY_NOTICE_RECIPIENT_ROLES
+);
+
+// ─── Custody requests (peer-to-peer borrow approval) ────────────────────────
+
+/**
+ * The lifecycle of a request to borrow an item **someone else is already
+ * holding**. This is a different door from `custody.take` (which claims an
+ * item nobody holds, instantly) and from `custody.transfer` (an administrator
+ * moving an item by hand): here the current holder is the one who decides,
+ * because the item is in their custody, and the change only happens if they
+ * say yes.
+ *
+ * `pending` is the only open state; `approved` and `denied` are the
+ * custodian's two answers; `cancelled` is the requester withdrawing before
+ * either. An `approved` request always produces exactly one
+ * `custody_transferred` row in `inventoryCustodyHistory` — approving *is*
+ * the transfer, not a separate step after it.
+ */
+export const CUSTODY_REQUEST_STATUSES = [
+  "pending",
+  "approved",
+  "denied",
+  "cancelled",
+] as const;
+export type CustodyRequestStatus = (typeof CUSTODY_REQUEST_STATUSES)[number];
+
+export const CUSTODY_REQUEST_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  denied: "Denied",
+  cancelled: "Cancelled",
+};
+
+export const custodyRequestStatusSchema = v.picklist(CUSTODY_REQUEST_STATUSES);
+
 // ─── Borrow status ──────────────────────────────────────────────────────────
 
 export const BORROW_STATUSES = ["borrowed", "returned"] as const;
@@ -318,26 +388,84 @@ export const inventoryActionSchema = v.picklist(INVENTORY_TRANSACTION_ACTIONS);
  * re-create.
  */
 export const DEFAULT_INVENTORY_CATEGORIES = [
-  { name: "IT Equipment", normalizedName: "it equipment", color: "#0EA5E9" },
-  { name: "Lab Equipment", normalizedName: "lab equipment", color: "#8B5CF6" },
+  {
+    name: "IT Equipment",
+    normalizedName: "it equipment",
+    color: "#0EA5E9",
+    icon: "device-desktop",
+  },
+  {
+    name: "Lab Equipment",
+    normalizedName: "lab equipment",
+    color: "#8B5CF6",
+    icon: "flask",
+  },
   {
     name: "Sports Equipment",
     normalizedName: "sports equipment",
     color: "#22C55E",
+    icon: "ball-basketball",
   },
   {
     name: "Audio Visual",
     normalizedName: "audio visual",
     color: "#EC4899",
+    icon: "video",
   },
-  { name: "Furniture", normalizedName: "furniture", color: "#C79A2B" },
-  { name: "Cleaning", normalizedName: "cleaning", color: "#14B8A6" },
-  { name: "Kitchen", normalizedName: "kitchen", color: "#F97316" },
-  { name: "Other", normalizedName: "other", color: "#6366F1" },
+  {
+    name: "Furniture",
+    normalizedName: "furniture",
+    color: "#C79A2B",
+    icon: "armchair",
+  },
+  {
+    name: "Cleaning",
+    normalizedName: "cleaning",
+    color: "#14B8A6",
+    icon: "spray",
+  },
+  {
+    name: "Kitchen",
+    normalizedName: "kitchen",
+    color: "#F97316",
+    icon: "chef-hat",
+  },
+  {
+    name: "Other",
+    normalizedName: "other",
+    color: "#6366F1",
+    icon: "category",
+  },
 ] as const;
 
 export type DefaultInventoryCategory =
   (typeof DEFAULT_INVENTORY_CATEGORIES)[number];
+
+/**
+ * The closed set of Tabler icon names a category's `icon` column may hold —
+ * exactly the eight `DEFAULT_INVENTORY_CATEGORIES` use, since the category
+ * list itself is now closed (see `inventoryCategory`'s schema doc comment).
+ * The web app maps each of these to a `@tabler/icons-react` component through
+ * a lookup table that falls back to `category`'s icon for anything it does
+ * not recognise — so an old row referencing a since-renamed icon degrades to
+ * a generic glyph instead of a blank space or a crash.
+ */
+export const INVENTORY_CATEGORY_ICON_KEYS = [
+  "device-desktop",
+  "flask",
+  "ball-basketball",
+  "video",
+  "armchair",
+  "spray",
+  "chef-hat",
+  "category",
+] as const;
+export type InventoryCategoryIcon =
+  (typeof INVENTORY_CATEGORY_ICON_KEYS)[number];
+
+export const inventoryCategoryIconSchema = v.picklist(
+  INVENTORY_CATEGORY_ICON_KEYS
+);
 
 // ─── Normalization + labels ─────────────────────────────────────────────────
 
@@ -396,6 +524,10 @@ export const custodyChangeTypeLabel = (
   value: string | null | undefined
 ): string => storedKeyLabel(value, CUSTODY_CHANGE_TYPE_LABELS);
 
+export const custodyNoticeRecipientRoleLabel = (
+  value: string | null | undefined
+): string => storedKeyLabel(value, CUSTODY_NOTICE_RECIPIENT_ROLE_LABELS);
+
 export const disposalMethodLabel = (value: string | null | undefined): string =>
   storedKeyLabel(value, DISPOSAL_METHOD_LABELS);
 
@@ -409,3 +541,7 @@ export const inventoryActionLabel = (
 export const inventoryTransferReasonLabel = (
   value: string | null | undefined
 ): string => storedKeyLabel(value, INVENTORY_TRANSFER_REASON_LABELS);
+
+export const custodyRequestStatusLabel = (
+  value: string | null | undefined
+): string => storedKeyLabel(value, CUSTODY_REQUEST_STATUS_LABELS);

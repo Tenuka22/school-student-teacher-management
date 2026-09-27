@@ -3,42 +3,52 @@ import { approveDisposal } from "./approve-disposal";
 import { assignManager } from "./assign-manager";
 import { cancelDisposal } from "./cancel-disposal";
 import { createBorrow } from "./create-borrow";
-import { createCategory } from "./create-category";
+import { createCustodyRequest } from "./create-custody-request";
 import { createDisposal } from "./create-disposal";
 import { createIssue } from "./create-issue";
 import { createItem } from "./create-item";
+import { decideCustodyRequest } from "./decide-custody-request";
 import { deleteItem } from "./delete-item";
 import { disputeCustodyNotice } from "./dispute-custody-notice";
+import { exportQrSheet } from "./export-qr-sheet";
 import { finalizeDisposal } from "./finalize-disposal";
 import { getItem } from "./get-item";
 import { getItemForScan } from "./get-item-for-scan";
+import { getPunctualityScore } from "./get-punctuality-score";
 import { listAuditLogs } from "./list-audit-logs";
 import { listBorrows } from "./list-borrows";
 import { listCategories } from "./list-categories";
 import { listCustodyHistory } from "./list-custody-history";
 import { listCustodyNotices } from "./list-custody-notices";
+import {
+  listIncomingCustodyRequests,
+  listOutgoingCustodyRequests,
+} from "./list-custody-requests";
 import { listDisposals } from "./list-disposals";
 import { listIssues } from "./list-issues";
 import { listItems } from "./list-items";
 import { listLentByMe } from "./list-lent-by-me";
 import { listMyItems } from "./list-my-items";
+import { listRequestableItems } from "./list-requestable-items";
 import { listTakeableItems } from "./list-takeable-items";
 import { listAssignableStaff } from "./list-teacher-options";
 import { listTransactions } from "./list-transactions";
 import { listUnits } from "./list-units";
 import { reclaimCustody } from "./reclaim-custody";
 import { releaseCustody } from "./release-custody";
-import { removeCategory } from "./remove-category";
 import { restoreItem } from "./restore-item";
 import { returnBorrow } from "./return-borrow";
 import { seedCategories } from "./seed-categories";
 import { stockIn } from "./stock-in";
 import { stockOut } from "./stock-out";
+import { subscribeCustodyRequests } from "./subscribe-custody-requests";
 import { takeItem } from "./take-item";
 import { transferCustody } from "./transfer-custody";
 import { transferOwnership } from "./transfer-ownership";
+import { unvoidItem } from "./unvoid-item";
 import { updateItem } from "./update-item";
 import { updateUnit } from "./update-unit";
+import { voidItem } from "./void-item";
 
 /**
  * The inventory store, grouped the way an administrator does the work.
@@ -71,8 +81,6 @@ import { updateUnit } from "./update-unit";
 export const inventoryRouter = {
   categories: {
     list: listCategories,
-    create: createCategory,
-    remove: removeCategory,
     seed: seedCategories,
   },
   options: { assignableStaff: listAssignableStaff },
@@ -97,8 +105,18 @@ export const inventoryRouter = {
      * gate is `update` rather than `delete`, and why it takes no reason.
      */
     restore: restoreItem,
+    /** `voidItem`'s inverse — see its own doc comment. */
+    unvoid: unvoidItem,
+    /**
+     * The other soft delete: a row that should never have existed (a
+     * duplicate creation, a data-entry slip), kept apart from `remove`
+     * (genuine retirement) so a retirement report is never answered by a
+     * typo. See `void-item.ts`.
+     */
+    void: voidItem,
     stockIn,
     stockOut,
+    exportQrSheet,
   },
   units: { list: listUnits, update: updateUnit },
   custody: {
@@ -132,12 +150,32 @@ export const inventoryRouter = {
     /** The owner's view of what is out with other people. */
     lent: listLentByMe,
     takeable: { listTakeableItems },
+    /**
+     * The peer-to-peer request/approval queue — the fourth verb on custody
+     * alongside `take`, `transfer` and `release`. `requests.create` and
+     * `requests.listRequestable` are the requester's half; `listIncoming` /
+     * `listOutgoing` are each side's queue; `decide` is the custodian's
+     * approve-or-deny; `subscribe` is the live channel both sides listen on.
+     * See `custody-request-events.ts` for the channel and
+     * `decide-custody-request.ts` for why approving is the transfer.
+     */
+    requests: {
+      create: createCustodyRequest,
+      listRequestable: listRequestableItems,
+      listIncoming: listIncomingCustodyRequests,
+      listOutgoing: listOutgoingCustodyRequests,
+      decide: decideCustodyRequest,
+      subscribe: subscribeCustodyRequests,
+    },
   },
   issues: { list: listIssues, create: createIssue },
   borrows: {
     list: listBorrows,
     create: createBorrow,
     return: returnBorrow,
+    /** A borrower's punctuality score, computed live from their loan history —
+     *  see `get-punctuality-score.ts`. `userId` optional, defaults to the caller. */
+    punctualityScore: getPunctualityScore,
   },
   disposals: {
     list: listDisposals,

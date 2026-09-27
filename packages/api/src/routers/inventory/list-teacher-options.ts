@@ -1,6 +1,5 @@
 import { normalizeInventoryKey } from "@school-student-teacher-management/db/constants/inventory";
 import { user } from "@school-student-teacher-management/db/schema/auth";
-import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, asc, eq, ilike, isNull, ne, or } from "drizzle-orm";
 import * as v from "valibot";
 
@@ -17,6 +16,13 @@ const DEFAULT_ASSIGNABLE_STAFF_LIMIT = 50;
  * anything it offers can be handed a school laptop. It holds the identical
  * predicate to `assertStaffIsAssignable` in `./inventory-database`, so the list
  * and that guard offer and accept the same set.
+ *
+ * - **The banned and admin filters are the only ones applied.** The old
+ *   employment status predicate is gone: now that user.id is written into these
+ *   columns, any active, non-banned user can be assigned custody or management,
+ *   regardless of their employment status. The list holds the identical
+ *   predicate to `assertStaffIsAssignable` in `./inventory-database`, so the list
+ *   and that guard offer and accept the same set.
  *
  * - **Every category of staff qualifies, and that is the decision, not a
  *   widening left half-done.** The `staffCategory = "teacher"` restriction used
@@ -58,11 +64,6 @@ const DEFAULT_ASSIGNABLE_STAFF_LIMIT = 50;
  * narrower rule here — a visiting contractor or an honorary fellow who may
  * borrow but not be paid a custodian's duty — it belongs in this file alone.
  */
-const activeOrUnsetEmployment = or(
-  eq(staff.employmentStatus, "active"),
-  isNull(staff.employmentStatus)
-);
-
 /**
  * `LIKE` / `ILIKE` wildcards typed by a user have to be escaped.
  *
@@ -162,32 +163,20 @@ export const listAssignableStaff = adminProcedure
 
     const rows = await context.db
       .select({
-        id: staff.id,
-        name: staff.name,
-        staffCategory: staff.staffCategory,
-        employmentStatus: staff.employmentStatus,
-        serviceNo: staff.teacherServiceNo,
-        currentRole: user.role,
+        id: user.id,
+        name: user.name,
       })
-      .from(staff)
-      // A `left` join and not an `inner` one: most of the staff roll has no
-      // login account, and an inner join would silently drop exactly the people
-      // a storekeeper is most likely to be looking for. `staff.userId` is
-      // unique, so the join cannot multiply a staff row.
-      .leftJoin(user, eq(staff.userId, user.id))
+      .from(user)
       .where(
         and(
-          activeOrUnsetEmployment,
-          or(isNull(user.id), ne(user.role, "admin")),
+          or(eq(user.banned, false), isNull(user.banned)),
+          ne(user.role, "admin"),
           term
-            ? or(
-                ilike(staff.name, pattern),
-                ilike(staff.teacherServiceNo, pattern)
-              )
+            ? ilike(user.name, pattern)
             : undefined
         )
       )
-      .orderBy(asc(staff.name))
+      .orderBy(asc(user.name))
       .limit(input.limit ?? DEFAULT_ASSIGNABLE_STAFF_LIMIT);
 
     return rows;

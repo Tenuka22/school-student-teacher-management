@@ -33,7 +33,7 @@ import {
   inventoryItem,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { staff } from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
@@ -69,10 +69,10 @@ const ADMIN_ROLES = new Set(["admin", "principal", "vicePrincipal"]);
  * on a custody row and for the new custodian on a release, and an inner join
  * would delete exactly those rows from the audit.
  */
-const previousCustodian = alias(staff, "previous_custodian_staff");
-const newCustodian = alias(staff, "new_custodian_staff");
-const previousManager = alias(staff, "previous_manager_staff");
-const newManager = alias(staff, "new_manager_staff");
+const previousCustodian = alias(user, "previous_custodian_user");
+const newCustodian = alias(user, "new_custodian_user");
+const previousManager = alias(user, "previous_manager_user");
+const newManager = alias(user, "new_manager_user");
 
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
@@ -152,9 +152,8 @@ export const listCustodyHistory = requireInventoryPermission("read")
     const role = context.session?.user.role ?? "";
     const isLeadership = ADMIN_ROLES.has(role);
     const isCallerInvolved =
-      actor.staffId !== null &&
-      (item.managerStaffId === actor.staffId ||
-        item.custodianStaffId === actor.staffId);
+      item.managerStaffId === actor.userId ||
+      item.custodianStaffId === actor.userId;
 
     if (!isLeadership && !isCallerInvolved) {
       throw new ORPCError("FORBIDDEN", {

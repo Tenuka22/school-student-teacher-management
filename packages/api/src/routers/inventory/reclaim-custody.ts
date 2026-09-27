@@ -57,7 +57,7 @@ import {
   inventoryItem,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { staff } from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -67,6 +67,7 @@ import {
   countersOf,
   getInventoryActor,
   getLockedItem,
+  insertCustodyNoticeRecipients,
   insertInventoryAuditLog,
   insertInventoryTransaction,
   iso,
@@ -88,9 +89,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: staff.name })
-    .from(staff)
-    .where(eq(staff.id, staffId))
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -149,7 +150,7 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
       // possible", and because a caller who is neither the owner nor leadership
       // must learn nothing about whether the item exists beyond the `NOT_FOUND`
       // `getLockedItem` already produced.
-      const isOwner = existing.managerStaffId === actor.staffId;
+      const isOwner = existing.managerStaffId === actor.userId;
       const isLeadership = ADMIN_ROLES.has(context.session?.user.role ?? "");
       if (!isOwner && !isLeadership) {
         throw new ORPCError("FORBIDDEN", {
@@ -228,13 +229,21 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
           changeType: "custody_released",
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.staffId,
+          changedByStaffId: actor.userId,
         })
         .returning();
 
       if (!history) {
         throw new ORPCError("INTERNAL_SERVER_ERROR");
       }
+
+      await insertCustodyNoticeRecipients(tx, {
+        custodyHistoryId: history.id,
+        itemId: existing.id,
+        previousCustodianStaffId: existing.custodianStaffId,
+        managerStaffId: existing.managerStaffId,
+        changedByStaffId: actor.userId,
+      });
 
       // `before` and `after` are the same pair, and this is the ledger row where
       // that is most worth a reader's attention: **nothing was counted, because

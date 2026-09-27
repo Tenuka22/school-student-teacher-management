@@ -1,3 +1,11 @@
+import { Button } from "@school-student-teacher-management/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@school-student-teacher-management/ui/components/card";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -28,29 +36,25 @@ const SessionsUnreadable = ({
   onRetry: () => void;
 }) => (
   <div
-    className="border-destructive/30 bg-card mt-4 border px-[22px] py-4"
+    className="border-destructive/30 bg-destructive/5 mt-4 border p-4"
     role="alert"
   >
     <p className="text-destructive text-sm font-bold">
       The list of active sessions could not be read
     </p>
-    <p className="text-primary/65 mt-1 text-[13px]">
+    <p className="text-muted-foreground mt-1 text-[13px]">
       {message} That is a failure to read, not a result: this screen cannot tell
       you that your account is open elsewhere, and it cannot tell you that it
       isn&apos;t. The sessions are unknown, not absent — so there is nothing
       here to revoke. Nothing has been changed.
     </p>
-    <p className="text-primary/65 mt-1 text-[13px]">
+    <p className="text-muted-foreground mt-1 text-[13px]">
       Try again in a moment. If it keeps failing, change your password: that
       ends every session on this account, including this one.
     </p>
-    <button
-      type="button"
-      className="border-primary/30 text-primary hover:border-primary mt-3 border px-3 py-1.5 text-xs font-bold transition-colors"
-      onClick={onRetry}
-    >
+    <Button className="mt-3" onClick={onRetry} size="sm" variant="outline">
       Try again
-    </button>
+    </Button>
   </div>
 );
 
@@ -120,77 +124,76 @@ export const AccountSessions = () => {
   );
 
   return (
-    <section className="border-primary/14 bg-card px-[22px] py-5">
-      <h2 className="font-heading text-primary text-[23px] font-semibold">
-        Active sessions
-      </h2>
-      <p className="text-primary/60 mt-1.5 text-[13px]">
-        Every browser currently signed in as this account. Revoke anything you
-        do not recognise.
-      </p>
+    <Card>
+      <CardHeader>
+        <CardTitle>Active sessions</CardTitle>
+        <CardDescription>
+          Every browser currently signed in as this account. Revoke anything you
+          do not recognise.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {sessionsQuery.isPending && (
+          <p className="text-muted-foreground text-sm">Loading sessions…</p>
+        )}
 
-      {sessionsQuery.isPending && (
-        <p className="text-primary/60 mt-4 text-sm">Loading sessions…</p>
-      )}
+        {isListFailed && (
+          <SessionsUnreadable
+            message={listErrorMessage}
+            onRetry={() => {
+              void sessionsQuery.refetch();
+            }}
+          />
+        )}
 
-      {isListFailed && (
-        <SessionsUnreadable
-          message={listErrorMessage}
-          onRetry={() => {
-            void sessionsQuery.refetch();
-          }}
-        />
-      )}
+        {isListLoadedAndEmpty && (
+          <p className="text-muted-foreground text-sm">
+            No other active sessions.
+          </p>
+        )}
 
-      {isListLoadedAndEmpty && (
-        <p className="text-primary/60 mt-4 text-sm">
-          No other active sessions.
-        </p>
-      )}
-
-      {sessionsQuery.isSuccess && sessions.length > 0 && (
-        <ul className="mt-4 flex flex-col">
-          {sessions.map((entry, index) => {
-            const { session, user } = entry;
-            return (
-              <li
-                key={session.token}
-                className="border-primary/10 flex flex-wrap items-center gap-3 border-b py-3 last:border-b-0"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="text-primary block text-sm font-bold">
-                    {describeAgent(session.userAgent)}
-                    {index === 0 && (
-                      <span className="text-primary/55 ml-2 text-xs font-semibold">
-                        most recent
-                      </span>
-                    )}
+        {sessionsQuery.isSuccess && sessions.length > 0 && (
+          <ul className="flex flex-col">
+            {sessions.map((entry, index) => {
+              const { session, user } = entry;
+              return (
+                <li
+                  key={session.token}
+                  className="border-border flex flex-wrap items-center gap-3 border-b py-3 last:border-b-0"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold">
+                      {describeAgent(session.userAgent)}
+                      {index === 0 && (
+                        <span className="text-muted-foreground ml-2 text-xs font-semibold">
+                          most recent
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground mt-0.5 block text-xs">
+                      {user.name} · {user.email}
+                    </span>
+                    <span className="text-muted-foreground mt-0.5 block text-xs">
+                      {session.ipAddress ?? "unknown IP"} · signed in{" "}
+                      {formatWhen(session.createdAt)} · expires{" "}
+                      {formatWhen(session.expiresAt)}
+                    </span>
                   </span>
-                  <span className="text-primary/55 mt-0.5 block text-xs">
-                    {user.name} · {user.email}
-                  </span>
-                  <span className="text-primary/55 mt-0.5 block text-xs">
-                    {session.ipAddress ?? "unknown IP"} · signed in{" "}
-                    {formatWhen(session.createdAt)} · expires{" "}
-                    {formatWhen(session.expiresAt)}
-                  </span>
-                </span>
 
-                <span className="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    className="border-destructive/40 text-destructive hover:border-destructive border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
+                  <Button
                     disabled={revokeMutation.isPending}
                     onClick={() => revokeMutation.mutate(session.token)}
+                    size="sm"
+                    variant="destructive"
                   >
                     Revoke
-                  </button>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 };

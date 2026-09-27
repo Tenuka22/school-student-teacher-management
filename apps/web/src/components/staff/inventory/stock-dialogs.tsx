@@ -118,6 +118,7 @@ import {
   IconPackage,
   IconPackageOff,
   IconRestore,
+  IconWand,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -741,6 +742,28 @@ const AssetTagFields: React.FC<{
     setPasteBuffer("");
   };
 
+  /**
+   * One tag per row, generated rather than typed — for a delivery that has
+   * no printed asset tags to copy from at all (bulk stock with no per-unit
+   * labelling policy yet) and for a clerk who would rather correct a handful
+   * of generated codes than type every one from scratch. Reuses the same
+   * `onPasteTags` path a real paste takes, so a generated tag is checked
+   * against the store exactly the way a typed one is — the server still
+   * refuses a collision, however the tag arrived in the field.
+   *
+   * The random segment is per click, not per row: two clicks in the same
+   * session must not mint the same batch twice, and `crypto.randomUUID`'s
+   * first eight hex characters are already effectively collision-proof for
+   * one delivery's worth of units.
+   */
+  const applyAutoGenerate = () => {
+    const batchCode = crypto.randomUUID().slice(0, 8).toUpperCase();
+    const generated = rows.map(
+      (_, index) => `AUTO-${batchCode}-${String(index + 1).padStart(2, "0")}`
+    );
+    onPasteTags(generated, []);
+  };
+
   return (
     <Field data-invalid={tagsError || uniqueIdsError ? true : undefined}>
       <FieldLabel htmlFor="stock-in-tag-0">Asset tags *</FieldLabel>
@@ -759,16 +782,27 @@ const AssetTagFields: React.FC<{
        * detail is: it is a real button, in the tab order, and its content is
        * readable without a pointer.
        */}
-      <Collapsible>
-        <CollapsibleTrigger
-          render={<Button type="button" variant="outline" size="sm" />}
-          className="w-fit"
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={applyAutoGenerate}
           disabled={disabled}
+          data-icon="inline-start"
         >
-          <IconClipboardText data-icon="inline-start" />
-          Paste tags instead
-        </CollapsibleTrigger>
-        <CollapsibleContent>
+          <IconWand data-icon="inline-start" />
+          Auto-generate tags
+        </Button>
+        <Collapsible>
+          <CollapsibleTrigger
+            render={<Button type="button" variant="outline" size="sm" />}
+            disabled={disabled}
+          >
+            <IconClipboardText data-icon="inline-start" />
+            Paste tags instead
+          </CollapsibleTrigger>
+          <CollapsibleContent>
           <div className="space-y-2 pt-2">
             <FieldLabel htmlFor="stock-in-paste-tags">
               Paste the supplier&rsquo;s tag list
@@ -802,7 +836,8 @@ const AssetTagFields: React.FC<{
             </Button>
           </div>
         </CollapsibleContent>
-      </Collapsible>
+        </Collapsible>
+      </div>
 
       <div className="space-y-2">
         {rows.map((row, index) => {

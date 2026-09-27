@@ -131,23 +131,6 @@ export const cancelDisposal = adminOnlyProcedure
         });
       }
 
-      /**
-       * A cancellation the schema cannot record. The `cancelled` arm of
-       * `inventory_disposal_status_state` requires
-       * `cancelled_by_staff_id IS NOT NULL`, and `InventoryActor.staffId` is null
-       * for the seeded `admin` / `principal` / `deputy-principal` seats. That
-       * write is refused by PostgreSQL however it is composed, so it is refused
-       * here — `BAD_REQUEST`, never `FORBIDDEN`, because the `update` permission
-       * has already been granted and the missing thing is an identity the
-       * certificate can name rather than an authority to act. Same remedy, same
-       * wording as `approveDisposal` and `take-item`.
-       */
-      if (actor.staffId === null) {
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "Your account has no staff record, so it cannot be recorded as cancelling a disposal request. Ask an administrator to link your account to your staff profile",
-        });
-      }
 
       // Reaching here means `existing.status` is `pending_approval` or
       // `approved`, which are the only two the ladder's `cancelled` arm accepts
@@ -233,7 +216,7 @@ export const cancelDisposal = adminOnlyProcedure
         .update(inventoryDisposal)
         .set({
           status: "cancelled",
-          cancelledByStaffId: actor.staffId,
+          cancelledByStaffId: actor.userId,
           cancelledAt,
           cancellationReason: input.reason,
         })
@@ -280,7 +263,7 @@ export const cancelDisposal = adminOnlyProcedure
         fromStatus: existing.status,
         toStatus: "cancelled",
         note: input.reason,
-        changedByStaffId: actor.staffId,
+      changedByStaffId: actor.userId,
       });
 
       /**
@@ -332,7 +315,7 @@ export const cancelDisposal = adminOnlyProcedure
         after: {
           status: updated.status,
           cancellationReason: updated.cancellationReason,
-          cancelledByStaffId: actor.staffId,
+        cancelledByStaffId: actor.userId,
         },
       });
 

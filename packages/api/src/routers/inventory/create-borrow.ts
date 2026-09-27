@@ -48,9 +48,9 @@ import {
   inventoryBorrowUnit,
   inventoryItem,
   inventoryUnit,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { studentIdSchema } from "@school-student-teacher-management/db/schema/marking";
-import { staffIdSchema } from "@school-student-teacher-management/db/schema/staff";
 import { eq, inArray } from "drizzle-orm";
 import {
   array,
@@ -159,7 +159,7 @@ const borrowAuditSnapshot = (
  * from this one object and the case cannot be lost between the two.
  */
 const borrowerSchema = variant("type", [
-  object({ type: literal("staff"), staffId: staffIdSchema }),
+  object({ type: literal("staff"), staffId: userIdSchema }),
   object({ type: literal("student"), studentId: studentIdSchema }),
 ]);
 
@@ -236,27 +236,14 @@ export const createBorrow = requireInventoryPermission("create")
   )
   .handler(({ input, context }) =>
     context.db.transaction(async (tx) => {
-      const actor = await getInventoryActor(context);
-
-      // A loan has to be attributable to somebody who can be asked for the
-      // thing. `InventoryActor.staffId` is nullable *by design* — the seeded
-      // admin / principal / deputy-principal accounts are users with no staff
-      // identity on purpose, and no other inventory write is refused for that.
-      // This one is different: both borrower columns are `restrict`, and a
-      // borrow whose holder is "an account with no staff row" cannot be chased
-      // up at the end of term. BAD_REQUEST, not FORBIDDEN — the caller holds
-      // the `create` permission; what they lack is a staff record to attach to.
-      if (!actor.staffId) {
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "This is a personal login with no staff record, so there is nobody to attach a loan to — ask an administrator to add your staff record before borrowing",
-        });
-      }
 
       // FOR UPDATE. Two clerks borrowing from the same item at the same moment
       // both read `borrowedQty = 1` and both decide two units are free; only
       // the lock makes the second one see the first one's write.
-      const existing = await getLockedItem(tx, input.itemId);
+      const [actor, existing] = await Promise.all([
+        getInventoryActor(context),
+        getLockedItem(tx, input.itemId),
+      ]);
 
       // `borrowable` is the item's own statement about whether it is the kind
       // of thing a person carries off-site. A fixed projector in the hall, a
@@ -350,7 +337,7 @@ export const createBorrow = requireInventoryPermission("create")
           approvedBy: input.approvedBy ?? null,
           note: input.note ?? null,
           status: "borrowed",
-          borrowedByStaffId: actor.staffId,
+          borrowedByStaffId: actor.userId,
           borrowedAt,
           // The four return fields are written `null` explicitly rather than
           // omitted. `inventory_borrow_return_state` requires all four to be

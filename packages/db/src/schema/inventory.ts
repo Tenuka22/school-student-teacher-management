@@ -24,18 +24,24 @@ import * as v from "valibot";
 import {
   BORROW_STATUSES,
   CUSTODY_CHANGE_TYPES,
+  CUSTODY_NOTICE_RECIPIENT_ROLES,
+  CUSTODY_REQUEST_STATUSES,
   DISPOSAL_FINAL_STATUSES,
   DISPOSAL_METHODS,
   DISPOSAL_STATUSES,
+  INVENTORY_CATEGORY_ICON_KEYS,
   INVENTORY_TRANSACTION_ACTIONS,
   INVENTORY_TRANSFER_REASON_KEYS,
   ITEM_CONDITIONS,
   UNIT_STATUSES,
   custodyChangeTypeSchema,
+  custodyNoticeRecipientRoleSchema,
+  custodyRequestStatusSchema,
   disposalMethodSchema,
   disposalStatusSchema,
   inventoryActionSchema,
   inventoryBorrowStatusSchema,
+  inventoryCategoryIconSchema,
   inventoryTransferReasonSchema,
   itemConditionSchema,
   unitStatusSchema,
@@ -45,7 +51,24 @@ import type { Brand } from "./brand";
 import { fileIdSchema, files } from "./files";
 import { student, studentIdSchema } from "./marking";
 import { isoDateSchema, optionalNullable, slPhoneSchema } from "./primitives";
-import { staff, staffIdSchema } from "./staff";
+import { user } from "./auth";
+
+/**
+ * Every "who did this / who holds this / who manages this" column in this
+ * module points at `user.id`, not `staff.id` — identity here is the login,
+ * and what a login may do is decided by `user.role` (see
+ * `packages/auth/src/permissions.ts`), not by whether a `staff` profile
+ * happens to exist behind it. This is a deliberate reversal of the module's
+ * earlier design, which pointed every one of these columns at `staff` so a
+ * departed teacher's name would survive their own deletion. That guarantee
+ * now lives with `user` instead: `delete-staff.ts` deletes the `user` row in
+ * the same transaction as the `staff` row, and probes every column below
+ * before either delete runs, exactly as it did when they pointed at `staff`.
+ * Unbranded, matching `staff.ts`'s own treatment of its `userId` column —
+ * `user.id` is not a domain concept this module owns, so it does not mint a
+ * brand for it.
+ */
+export const userIdSchema = v.pipe(v.string(), v.minLength(1));
 
 // ─── House rule for closed sets ──────────────────────────────────────────────
 
@@ -93,6 +116,15 @@ export const inventoryIssueIdSchema = v.pipe(
   brand<string, "InventoryIssueId">()
 );
 
+export type InventoryItemReplacementId = Brand<
+  string,
+  "InventoryItemReplacementId"
+>;
+export const inventoryItemReplacementIdSchema = v.pipe(
+  v.string(),
+  brand<string, "InventoryItemReplacementId">()
+);
+
 export type InventoryBorrowId = Brand<string, "InventoryBorrowId">;
 export const inventoryBorrowIdSchema = v.pipe(
   v.string(),
@@ -121,6 +153,24 @@ export type InventoryCustodyHistoryId = Brand<
 export const inventoryCustodyHistoryIdSchema = v.pipe(
   v.string(),
   brand<string, "InventoryCustodyHistoryId">()
+);
+
+export type InventoryCustodyNoticeRecipientId = Brand<
+  string,
+  "InventoryCustodyNoticeRecipientId"
+>;
+export const inventoryCustodyNoticeRecipientIdSchema = v.pipe(
+  v.string(),
+  brand<string, "InventoryCustodyNoticeRecipientId">()
+);
+
+export type InventoryCustodyRequestId = Brand<
+  string,
+  "InventoryCustodyRequestId"
+>;
+export const inventoryCustodyRequestIdSchema = v.pipe(
+  v.string(),
+  brand<string, "InventoryCustodyRequestId">()
 );
 
 export type InventoryTransactionId = Brand<string, "InventoryTransactionId">;
@@ -187,14 +237,26 @@ export const moneyStringSchema = () =>
 // ─── Categories ─────────────────────────────────────────────────────────────
 
 /**
- * A store category. Free text with a colour, seeded from
- * `DEFAULT_INVENTORY_CATEGORIES` but never closed — a school that needs a
- * "Dining" category should be able to add one without a migration.
+ * A store category. **Closed**, not free text: the only categories that will
+ * ever exist are the ones seeded from `DEFAULT_INVENTORY_CATEGORIES`, and
+ * there is deliberately no `createCategory`/`removeCategory` procedure any
+ * more. A school that types its own taxonomy ends up with "IT", "I.T" and
+ * "Computers" as three unrelated rows within a term; a fixed list with a
+ * fixed icon per entry is a register that cannot drift, and "Other" is the
+ * honest escape hatch for anything that does not fit the seven named ones.
+ * `seedCategories` is now the *only* writer of this table, and it is still
+ * safe to re-run — see its own doc comment.
  *
  * `normalizedName` is what the unique index is written against, because
  * "IT Equipment" and "it equipment" are one category to a storekeeper and two
  * rows to a `unique` index. Same reason the source app kept it, and the same
  * reason it must be written with `normalizeInventoryKey`.
+ *
+ * `icon` is a closed set too (`INVENTORY_CATEGORY_ICON_KEYS`), read by the web
+ * app as a Tabler icon component name. It is looked up through
+ * `inventoryCategoryIconComponent`'s lookup table, which always has a
+ * fallback for a key it does not recognise — an icon rename in a future
+ * release degrades to a generic glyph instead of a blank space or a crash.
  */
 export const inventoryCategory = pgTable(
   "inventory_category",
@@ -204,6 +266,8 @@ export const inventoryCategory = pgTable(
     /** lowercased + whitespace-collapsed `name`; the case-insensitive key */
     normalizedName: text("normalized_name").notNull(),
     color: text("color").notNull().default("#6366F1"),
+    /** Tabler icon name; one of `INVENTORY_CATEGORY_ICON_KEYS`. */
+    icon: text("icon").notNull().default("category"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -221,6 +285,10 @@ export const inventoryCategory = pgTable(
     check(
       "inventory_category_color_hex",
       sql`${table.color} ~ '^#[0-9A-Fa-f]{6}$'`
+    ),
+    check(
+      "inventory_category_icon_check",
+      sqlIn(table.icon, INVENTORY_CATEGORY_ICON_KEYS)
     ),
   ]
 );
@@ -280,16 +348,43 @@ export const inventoryItem = pgTable(
     condition: text("condition").notNull().default("Good"),
     location: text("location").notNull().default(""),
     purchaseValue: numeric("purchase_value", { precision: 14, scale: 2 }),
+    /**
+     * The hand-entered valuation, kept as the answer whenever the item cannot
+     * be depreciated — no `purchaseDate`, no `depreciationRatePercent`, or
+     * neither. Once both of those are set, `toItemView` overrides what is
+     * shown with a computed straight-line figure instead of trusting this
+     * column to have been kept up to date by hand; see
+     * `computeDepreciatedValue` in `inventory-database.ts`. The column itself
+     * is left in place rather than dropped, because an item with no purchase
+     * date still needs somewhere to record a valuation a storekeeper simply
+     * knows.
+     */
     currentValue: numeric("current_value", { precision: 14, scale: 2 }),
-    createdByStaffId: text("created_by_staff_id").references(() => staff.id, {
+    /** When the item was bought — the depreciation clock's start. Required
+     *  alongside `depreciationRatePercent` for `currentValue` to be computed
+     *  rather than hand-entered. */
+    purchaseDate: timestamp("purchase_date"),
+    /**
+     * Straight-line depreciation, percent of `purchaseValue` lost per full
+     * year since `purchaseDate` — `10.00` means a laptop is worth 10% less
+     * for every year that has passed. Straight-line rather than compound on
+     * purpose: it is the method a school's own paper asset register already
+     * uses, and it is checkable by hand on a printed report without a
+     * calculator, unlike a compounding formula.
+     */
+    depreciationRatePercent: numeric("depreciation_rate_percent", {
+      precision: 5,
+      scale: 2,
+    }),
+    createdByStaffId: text("created_by_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     /** Teacher in charge of this item; null while it sits unassigned in store. */
-    managerStaffId: text("manager_staff_id").references(() => staff.id, {
+    managerStaffId: text("manager_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     /** Teacher who has physically taken this item; null while it is in store. */
-    custodianStaffId: text("custodian_staff_id").references(() => staff.id, {
+    custodianStaffId: text("custodian_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     /**
@@ -308,6 +403,25 @@ export const inventoryItem = pgTable(
     }),
     /** Soft delete. An item with unit rows cannot be hard-deleted (restrict). */
     deletedAt: timestamp("deleted_at"),
+    /**
+     * A second, distinct soft delete — for a row that should never have
+     * existed at all (a duplicate creation, a data-entry slip), not for an
+     * item that genuinely served the school and is now out of service.
+     * `deletedAt` (retirement) and `voidedAt` are mutually exclusive
+     * (`inventory_item_retirement_or_void`): an item is live, retired, or
+     * voided, never two of those at once. Both hide the row from the working
+     * register the same way; only the label and the reason differ, which is
+     * the whole point of keeping them apart — a report asking "how much
+     * did we retire" should not be answered by rows that were mistakes and
+     * never real stock.
+     */
+    voidedAt: timestamp("voided_at"),
+    /** Required whenever `voidedAt` is set — the same reasoning as
+     *  `stockOut.reason`: the first line an auditor reads. */
+    voidReason: text("void_reason"),
+    voidedByStaffId: text("voided_by_staff_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -320,6 +434,7 @@ export const inventoryItem = pgTable(
     index("inventory_item_manager_staff_idx").on(table.managerStaffId),
     index("inventory_item_custodian_staff_idx").on(table.custodianStaffId),
     index("inventory_item_deleted_at_idx").on(table.deletedAt),
+    index("inventory_item_voided_at_idx").on(table.voidedAt),
     index("inventory_item_name_lower_idx").on(sql`lower(${table.name})`),
     check(
       "inventory_item_name_not_blank",
@@ -359,6 +474,78 @@ export const inventoryItem = pgTable(
     check(
       "inventory_item_values_nonneg",
       sql`(${table.purchaseValue} is null or ${table.purchaseValue} >= 0) and (${table.currentValue} is null or ${table.currentValue} >= 0)`
+    ),
+    check(
+      "inventory_item_depreciation_rate_range",
+      sql`${table.depreciationRatePercent} is null or (${table.depreciationRatePercent} >= 0 and ${table.depreciationRatePercent} <= 100)`
+    ),
+    check(
+      "inventory_item_retirement_or_void",
+      sql`not (${table.deletedAt} is not null and ${table.voidedAt} is not null)`
+    ),
+    check(
+      "inventory_item_void_reason_required",
+      sql`${table.voidedAt} is null or ${table.voidReason} is not null`
+    ),
+  ]
+);
+
+// ─── Item replacement (a new line standing in for a retired one) ──────────
+
+/**
+ * "This is the item that replaces that one" — a pure reference link, written
+ * once when the replacement item is created, never touched again and never
+ * moving a counter on its own.
+ *
+ * The motivating case: a school retires 12 worn office chairs and buys 6 new
+ * ones. The 6 new chairs are their own `inventoryItem` row with their own
+ * count — nothing about the 12 old ones changes, and the register does not
+ * pretend the school still has 12 chairs' worth of seating. What this table
+ * adds is the fact a plain register cannot otherwise state: *these 6 are what
+ * replaced those 12*, so a later reader can see the succession instead of two
+ * unrelated rows that happen to both be about chairs. There is deliberately no
+ * quantity reconciliation here (no "6 of 12 replaced" arithmetic) — that was
+ * considered and rejected: it would need a school-wide "how many of this do we
+ * need" figure this register does not keep, and a shortfall number nobody
+ * asked for is worse than no number at all.
+ *
+ * `retiredItemId` is `restrict`, not `set null`: the whole reason this row
+ * exists is to name which item was replaced, and a link to nothing is not a
+ * fact worth keeping. It is not required that the referenced item currently
+ * *be* retired at read time — only that it existed and was retired the
+ * moment the link was written; `createItem` enforces that at write time, and
+ * a later `restoreItem` on the old row does not retroactively invalidate the
+ * history of what replaced it.
+ */
+export const inventoryItemReplacement = pgTable(
+  "inventory_item_replacement",
+  {
+    id: text("id").primaryKey(),
+    newItemId: text("new_item_id")
+      .notNull()
+      .references(() => inventoryItem.id, { onDelete: "restrict" }),
+    retiredItemId: text("retired_item_id")
+      .notNull()
+      .references(() => inventoryItem.id, { onDelete: "restrict" }),
+    note: text("note"),
+    createdByStaffId: text("created_by_staff_id").references(
+      () => user.id,
+      { onDelete: "set null" }
+    ),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("inventory_item_replacement_new_item_idx").on(table.newItemId),
+    index("inventory_item_replacement_retired_item_idx").on(
+      table.retiredItemId
+    ),
+    uniqueIndex("inventory_item_replacement_unique").on(
+      table.newItemId,
+      table.retiredItemId
+    ),
+    check(
+      "inventory_item_replacement_distinct",
+      sql`${table.newItemId} <> ${table.retiredItemId}`
     ),
   ]
 );
@@ -469,7 +656,7 @@ export const inventoryIssue = pgTable(
     /** ISO date string — when it was expected back, if ever. */
     expectedReturnDate: text("expected_return_date"),
     note: text("note"),
-    issuedByStaffId: text("issued_by_staff_id").references(() => staff.id, {
+    issuedByStaffId: text("issued_by_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     issuedAt: timestamp("issued_at").defaultNow().notNull(),
@@ -614,7 +801,7 @@ export const inventoryBorrow = pgTable(
      * exclusivity CHECK is for, and a `notNull` here would have pinned the
      * borrower to staff for good.
      */
-    borrowerStaffId: text("borrower_staff_id").references(() => staff.id, {
+    borrowerStaffId: text("borrower_staff_id").references(() => user.id, {
       onDelete: "restrict",
     }),
     borrowerStudentId: text("borrower_student_id").references(
@@ -629,12 +816,12 @@ export const inventoryBorrow = pgTable(
     approvedBy: text("approved_by"),
     note: text("note"),
     status: text("status").notNull().default("borrowed"),
-    borrowedByStaffId: text("borrowed_by_staff_id").references(() => staff.id, {
+    borrowedByStaffId: text("borrowed_by_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     borrowedAt: timestamp("borrowed_at").defaultNow().notNull(),
     returnedAt: timestamp("returned_at"),
-    returnedByStaffId: text("returned_by_staff_id").references(() => staff.id, {
+    returnedByStaffId: text("returned_by_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     returnCondition: text("return_condition"),
@@ -796,21 +983,21 @@ export const inventoryDisposal = pgTable(
     notes: text("notes"),
     estimatedValue: numeric("estimated_value", { precision: 14, scale: 2 }),
     requestedByStaffId: text("requested_by_staff_id").references(
-      () => staff.id,
+      () => user.id,
       { onDelete: "set null" }
     ),
     requestedAt: timestamp("requested_at").defaultNow().notNull(),
-    approvedByStaffId: text("approved_by_staff_id").references(() => staff.id, {
+    approvedByStaffId: text("approved_by_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     approvedAt: timestamp("approved_at"),
     finalizedByStaffId: text("finalized_by_staff_id").references(
-      () => staff.id,
+      () => user.id,
       { onDelete: "set null" }
     ),
     finalizedAt: timestamp("finalized_at"),
     cancelledByStaffId: text("cancelled_by_staff_id").references(
-      () => staff.id,
+      () => user.id,
       { onDelete: "set null" }
     ),
     cancelledAt: timestamp("cancelled_at"),
@@ -970,7 +1157,7 @@ export const inventoryDisposalStatusHistory = pgTable(
     fromStatus: text("from_status"),
     toStatus: text("to_status").notNull(),
     note: text("note"),
-    changedByStaffId: text("changed_by_staff_id").references(() => staff.id, {
+    changedByStaffId: text("changed_by_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1035,70 +1222,31 @@ export const inventoryCustodyHistory = pgTable(
       // their behalf.
       .references(() => inventoryItem.id, { onDelete: "restrict" }),
     previousCustodianStaffId: text("previous_custodian_staff_id").references(
-      () => staff.id,
+      () => user.id,
       { onDelete: "set null" }
     ),
     newCustodianStaffId: text("new_custodian_staff_id").references(
-      () => staff.id,
+      () => user.id,
       { onDelete: "set null" }
     ),
     previousManagerStaffId: text("previous_manager_staff_id").references(
-      () => staff.id,
+      () => user.id,
       { onDelete: "set null" }
     ),
-    newManagerStaffId: text("new_manager_staff_id").references(() => staff.id, {
+    newManagerStaffId: text("new_manager_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     changeType: text("change_type").notNull(),
     reason: text("reason"),
     note: text("note"),
-    changedByStaffId: text("changed_by_staff_id").references(() => staff.id, {
+    changedByStaffId: text("changed_by_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     changedAt: timestamp("changed_at").defaultNow().notNull(),
-    /**
-     * Whether the row's own \u201crecipients\u201d have seen it \u2014 the previous
-     * custodian (property moved out of their hands without their own action,
-     * on a `custody_taken`/`custody_transferred` row) and the item's manager
-     * (accountable for the item regardless of who is holding it, so a
-     * custody change that is not also a manager change still concerns them).
-     * Both are read from a self-service equipment page's own \u201cnotices\u201d
-     * list \u2014 there is no push channel in this app, so \u201cnotified\u201d means
-     * \u201csurfaced the next time that person's own page reads unacknowledged
-     * rows naming them\u201d. Acknowledging is one-way and terminal; a disputed
-     * row is also acknowledged, since raising a dispute is itself the
-     * recipient's response to the notice.
-     */
-    acknowledgedAt: timestamp("acknowledged_at"),
-    /**
-     * The recipient's claim that this change did not happen as recorded \u2014
-     * \u201cI never handed this over\u201d or \u201cI was never given this\u201d. This does
-     * not undo the custody change on its own: the row this table describes
-     * already moved `inventoryItem.managerStaffId`/`custodianStaffId`, and
-     * silently reversing that from an unverified claim would let anyone
-     * disown custody by disputing it. A dispute is a flag for an
-     * administrator to look into, not a second write path onto the item.
-     */
-    disputedAt: timestamp("disputed_at"),
-    disputeNote: text("dispute_note"),
   },
   (table) => [
     index("inventory_custody_history_item_id_idx").on(table.itemId),
     index("inventory_custody_history_changed_at_idx").on(table.changedAt),
-    // The one read a recipient's own equipment page runs on every visit:
-    // "which rows name me and are not yet acknowledged". Composite rather
-    // than two single-column indexes because the query always filters both.
-    index("inventory_custody_history_unacknowledged_idx")
-      .on(table.previousCustodianStaffId, table.changedAt)
-      .where(sql`${table.acknowledgedAt} is null`),
-    check(
-      "inventory_custody_history_dispute_note_required",
-      sql`${table.disputedAt} is null or ${table.disputeNote} is not null`
-    ),
-    check(
-      "inventory_custody_history_dispute_implies_ack",
-      sql`${table.disputedAt} is null or ${table.acknowledgedAt} is not null`
-    ),
     check(
       "inventory_custody_history_change_type_check",
       sqlIn(table.changeType, CUSTODY_CHANGE_TYPES)
@@ -1123,6 +1271,184 @@ export const inventoryCustodyHistory = pgTable(
     check(
       "inventory_custody_history_reason_check",
       sqlInOrNull(table.reason, INVENTORY_TRANSFER_REASON_KEYS)
+    ),
+  ]
+);
+
+// ─── Custody notices (one row per person a custody-history row concerns) ───
+
+/**
+ * Who a single `inventoryCustodyHistory` row concerns, and what each of them
+ * has done about it — the recipient half of "notified" that the history row
+ * itself used to carry as two shared columns (`acknowledgedAt`/`disputedAt`)
+ * before a hand-over could have more than two people worth telling.
+ *
+ * A custody change concerns up to three kinds of person, given by
+ * `custodyNoticeRecipientRoleSchema`: the item's current `manager`, the
+ * `previous_custodian` who just lost the item, and every `sub_manager` —
+ * everyone else who held the item earlier in the same unbroken chain of
+ * hand-overs since it was last back in the store. A lends to B, B lends to C:
+ * when C lends on to D, B is a `sub_manager` on that row. The chain resets
+ * every time the item comes back to the store (`custody_released`), so a
+ * fresh loan never drags in names from an unrelated, already-closed loan.
+ *
+ * One row per (history row, staff member) — never two roles for the same
+ * person on the same event — so each person's own acknowledgement and
+ * dispute are theirs alone, unlike the old shared columns where one
+ * recipient's acknowledgement silently closed the notice for the other one
+ * too. `changedByStaffId` on the parent row is never a recipient of its own
+ * row: nobody needs telling about the change they themselves made.
+ */
+export const inventoryCustodyNoticeRecipient = pgTable(
+  "inventory_custody_notice_recipient",
+  {
+    id: text("id").primaryKey(),
+    custodyHistoryId: text("custody_history_id")
+      .notNull()
+      // Same reasoning as `inventoryCustodyHistory.itemId`: this table is
+      // evidence about who was told what, and a cascading delete of the
+      // history row it names would silently erase that evidence.
+      .references(() => inventoryCustodyHistory.id, { onDelete: "restrict" }),
+    staffId: text("staff_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    role: text("role").notNull(),
+    /** See `inventoryCustodyHistory`'s old doc comment for the shape of this
+     *  contract — unchanged, just per-recipient now. */
+    acknowledgedAt: timestamp("acknowledged_at"),
+    disputedAt: timestamp("disputed_at"),
+    disputeNote: text("dispute_note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("inventory_custody_notice_recipient_history_idx").on(
+      table.custodyHistoryId
+    ),
+    // The one read a recipient's own equipment page runs on every visit:
+    // "which rows name me and are not yet acknowledged".
+    index("inventory_custody_notice_recipient_unacknowledged_idx")
+      .on(table.staffId, table.createdAt)
+      .where(sql`${table.acknowledgedAt} is null`),
+    // A person appears at most once per event, in a single role — the
+    // precedence rule (manager over previous_custodian over sub_manager) is
+    // enforced by the inserting code, and this is the database's half of
+    // that promise: it cannot be double-inserted into two rows by accident.
+    uniqueIndex("inventory_custody_notice_recipient_unique").on(
+      table.custodyHistoryId,
+      table.staffId
+    ),
+    check(
+      "inventory_custody_notice_recipient_role_check",
+      sqlIn(table.role, CUSTODY_NOTICE_RECIPIENT_ROLES)
+    ),
+    check(
+      "inventory_custody_notice_recipient_dispute_note_required",
+      sql`${table.disputedAt} is null or ${table.disputeNote} is not null`
+    ),
+    check(
+      "inventory_custody_notice_recipient_dispute_implies_ack",
+      sql`${table.disputedAt} is null or ${table.acknowledgedAt} is not null`
+    ),
+  ]
+);
+
+// --- Custody requests (peer-to-peer borrow approval) ---
+
+/**
+ * A request from one teacher to borrow an item another teacher already
+ * holds. See constants/inventory.ts's CUSTODY_REQUEST_STATUSES doc for
+ * the lifecycle; this table is its storage.
+ *
+ * custodianStaffId is captured at request time rather than read live off
+ * inventoryItem.custodianStaffId at decision time, for the same reason
+ * inventoryBorrow denormalises its borrower: the item can change hands
+ * between the request and the decision (the holder could hand it back to the
+ * store, or an administrator could transfer it away), and a request answered
+ * by whoever happens to hold the item now would let somebody who was never
+ * asked approve a hand-over on the original holder's behalf. decideCustodyRequest
+ * re-checks this column against the live item under a row lock before writing
+ * anything, so a request that has gone stale this way is refused rather than
+ * silently honoured.
+ *
+ * requesterStaffId and custodianStaffId are restrict, not set null:
+ * unlike the audit trail in inventoryCustodyHistory, a request is live
+ * paperwork with an outstanding decision, and a departing member of staff
+ * must be resolved (denied or cancelled) before their staff row can be
+ * removed, the same guard delete-staff already applies to other open
+ * inventory work.
+ */
+export const inventoryCustodyRequest = pgTable(
+  "inventory_custody_request",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => inventoryItem.id, { onDelete: "restrict" }),
+    requesterStaffId: text("requester_staff_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    /** The item's custodian at the moment the request was raised - see the
+     *  doc comment above for why this is captured rather than read live. */
+    custodianStaffId: text("custodian_staff_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    status: text("status").notNull().default("pending"),
+    note: text("note"),
+    requestedAt: timestamp("requested_at").defaultNow().notNull(),
+    decidedByStaffId: text("decided_by_staff_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: timestamp("decided_at"),
+    decisionNote: text("decision_note"),
+  },
+  (table) => [
+    index("inventory_custody_request_item_idx").on(table.itemId),
+    index("inventory_custody_request_requester_idx").on(table.requesterStaffId),
+    // The one read the custodian's own dashboard runs on every visit: which
+    // requests are waiting on my decision. Composite because that read
+    // always filters both columns together, the same reasoning as
+    // inventory_custody_history_unacknowledged_idx.
+    index("inventory_custody_request_custodian_pending_idx")
+      .on(table.custodianStaffId, table.requestedAt)
+      .where(sql`${table.status} = 'pending'`),
+    // At most one open request per (item, requester) pair - a teacher who has
+    // already asked for a projector cannot ask again until the first request
+    // is decided or withdrawn. Partial, not plain: once a request leaves
+    // pending it must never block a fresh one, the same reasoning as
+    // inventory_disposal_unit_active_unique.
+    uniqueIndex("inventory_custody_request_open_unique")
+      .on(table.itemId, table.requesterStaffId)
+      .where(sql`${table.status} = 'pending'`),
+    check(
+      "inventory_custody_request_status_check",
+      sqlIn(table.status, CUSTODY_REQUEST_STATUSES)
+    ),
+    check(
+      "inventory_custody_request_requester_not_custodian",
+      sql`${table.requesterStaffId} <> ${table.custodianStaffId}`
+    ),
+    // The pairing check: a decision names both who made it and when, or
+    // neither - the same shape as the three pairing checks on
+    // inventoryDisposal.
+    check(
+      "inventory_custody_request_decision_state",
+      sql`(${table.decidedByStaffId} is null) = (${table.decidedAt} is null)`
+    ),
+    // pending names nobody yet; every other status is a decision (a
+    // custodian's approval/denial) or a withdrawal (cancelled, which the
+    // requester themselves records - decidedByStaffId there is the
+    // requester's own id, not the custodian's).
+    check(
+      "inventory_custody_request_status_state",
+      sql`(
+        ${table.status} = 'pending'
+        and ${table.decidedByStaffId} is null
+        and ${table.decidedAt} is null
+      ) or (
+        ${table.status} in ('approved', 'denied', 'cancelled')
+        and ${table.decidedByStaffId} is not null
+        and ${table.decidedAt} is not null
+      )`
     ),
   ]
 );
@@ -1163,7 +1489,7 @@ export const inventoryTransaction = pgTable(
   "inventory_transaction",
   {
     id: text("id").primaryKey(),
-    actorStaffId: text("actor_staff_id").references(() => staff.id, {
+    actorStaffId: text("actor_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     action: text("action").notNull(),
@@ -1241,7 +1567,7 @@ export const inventoryAuditLog = pgTable(
   "inventory_audit_log",
   {
     id: text("id").primaryKey(),
-    actorStaffId: text("actor_staff_id").references(() => staff.id, {
+    actorStaffId: text("actor_staff_id").references(() => user.id, {
       onDelete: "set null",
     }),
     /** Denormalised from the `staff` row at write time; see the comment above. */
@@ -1291,6 +1617,7 @@ const inventoryCategoryColumnRefinements = {
   id: () => inventoryCategoryIdSchema,
   name: () => v.pipe(v.string(), v.minLength(1)),
   normalizedName: () => v.pipe(v.string(), v.minLength(1)),
+  icon: () => inventoryCategoryIconSchema,
 };
 
 export const inventoryCategorySelectSchema = createSelectSchema(
@@ -1315,15 +1642,22 @@ const inventoryItemColumnRefinements = {
   // violation: "INV-0001" and "inv-00001" are both caught before the insert.
   sku: () => v.pipe(v.string(), v.regex(/^INV-\d{5}$/u)),
   condition: () => itemConditionSchema,
-  createdByStaffId: () => staffIdSchema,
-  managerStaffId: () => staffIdSchema,
-  custodianStaffId: () => staffIdSchema,
+  createdByStaffId: () => userIdSchema,
+  managerStaffId: () => userIdSchema,
+  custodianStaffId: () => userIdSchema,
+  voidedByStaffId: () => userIdSchema,
   imageFileId: () => fileIdSchema,
   minQty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   qty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   borrowedQty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   purchaseValue: () => moneyStringSchema(),
   currentValue: () => moneyStringSchema(),
+  // Percent, not a fraction: "10.00" means 10%/year, matching how a
+  // storekeeper would fill in a paper form. Same digit shape as money, just a
+  // narrower range enforced by `inventory_item_depreciation_rate_range`.
+  depreciationRatePercent: () =>
+    optionalNullable(v.pipe(v.string(), v.regex(/^\d{1,3}(?:\.\d{1,2})?$/u))),
+  purchaseDate: () => optionalNullable(isoDateSchema),
 };
 
 export const inventoryItemSelectSchema = createSelectSchema(
@@ -1337,6 +1671,26 @@ export const inventoryItemInsertSchema = createInsertSchema(
 export const inventoryItemUpdateSchema = createUpdateSchema(
   inventoryItem,
   inventoryItemColumnRefinements
+);
+
+const inventoryItemReplacementColumnRefinements = {
+  id: () => inventoryItemReplacementIdSchema,
+  newItemId: () => inventoryItemIdSchema,
+  retiredItemId: () => inventoryItemIdSchema,
+  createdByStaffId: () => userIdSchema,
+};
+
+export const inventoryItemReplacementSelectSchema = createSelectSchema(
+  inventoryItemReplacement,
+  inventoryItemReplacementColumnRefinements
+);
+export const inventoryItemReplacementInsertSchema = createInsertSchema(
+  inventoryItemReplacement,
+  inventoryItemReplacementColumnRefinements
+);
+export const inventoryItemReplacementUpdateSchema = createUpdateSchema(
+  inventoryItemReplacement,
+  inventoryItemReplacementColumnRefinements
 );
 
 const inventoryUnitColumnRefinements = {
@@ -1376,7 +1730,7 @@ const inventoryIssueColumnRefinements = {
   receiverPhone: () => optionalNullable(slPhoneSchema),
   purpose: () => v.pipe(v.string(), v.minLength(1)),
   expectedReturnDate: () => isoDateSchema,
-  issuedByStaffId: () => staffIdSchema,
+  issuedByStaffId: () => userIdSchema,
 };
 
 export const inventoryIssueSelectSchema = createSelectSchema(
@@ -1417,16 +1771,16 @@ const inventoryBorrowColumnRefinements = {
   // Both borrower pointers are `optionalNullable` for the same reason they are
   // nullable in the database: the pair is discriminated by which one is set, and
   // `inventory_borrow_borrower_exclusive` — not this schema — is the thing that
-  // insists exactly one of them is. Wrapping these in `staffIdSchema` alone
+  // insists exactly one of them is. Wrapping these in `userIdSchema` alone
   // would make a generated *select* schema claim the column is never null, which
   // is a lie the type layer tells to every reader of a borrow.
-  borrowerStaffId: () => optionalNullable(staffIdSchema),
+  borrowerStaffId: () => optionalNullable(userIdSchema),
   borrowerStudentId: () => optionalNullable(studentIdSchema),
   purpose: () => v.pipe(v.string(), v.minLength(1)),
   expectedReturnDate: () => isoDateSchema,
   status: () => inventoryBorrowStatusSchema,
-  borrowedByStaffId: () => staffIdSchema,
-  returnedByStaffId: () => staffIdSchema,
+  borrowedByStaffId: () => userIdSchema,
+  returnedByStaffId: () => userIdSchema,
   returnCondition: () => itemConditionSchema,
 };
 
@@ -1469,10 +1823,10 @@ const inventoryDisposalColumnRefinements = {
   method: () => disposalMethodSchema,
   status: () => disposalStatusSchema,
   estimatedValue: () => moneyStringSchema(),
-  requestedByStaffId: () => staffIdSchema,
-  approvedByStaffId: () => staffIdSchema,
-  finalizedByStaffId: () => staffIdSchema,
-  cancelledByStaffId: () => staffIdSchema,
+  requestedByStaffId: () => userIdSchema,
+  approvedByStaffId: () => userIdSchema,
+  finalizedByStaffId: () => userIdSchema,
+  cancelledByStaffId: () => userIdSchema,
 };
 
 export const inventoryDisposalSelectSchema = createSelectSchema(
@@ -1511,7 +1865,7 @@ const inventoryDisposalStatusHistoryColumnRefinements = {
   disposalId: () => inventoryDisposalIdSchema,
   fromStatus: () => disposalStatusSchema,
   toStatus: () => disposalStatusSchema,
-  changedByStaffId: () => staffIdSchema,
+  changedByStaffId: () => userIdSchema,
 };
 
 export const inventoryDisposalStatusHistorySelectSchema = createSelectSchema(
@@ -1530,15 +1884,15 @@ export const inventoryDisposalStatusHistoryUpdateSchema = createUpdateSchema(
 const inventoryCustodyHistoryColumnRefinements = {
   id: () => inventoryCustodyHistoryIdSchema,
   itemId: () => inventoryItemIdSchema,
-  previousCustodianStaffId: () => staffIdSchema,
-  newCustodianStaffId: () => staffIdSchema,
-  previousManagerStaffId: () => staffIdSchema,
-  newManagerStaffId: () => staffIdSchema,
+  previousCustodianStaffId: () => userIdSchema,
+  newCustodianStaffId: () => userIdSchema,
+  previousManagerStaffId: () => userIdSchema,
+  newManagerStaffId: () => userIdSchema,
   changeType: () => custodyChangeTypeSchema,
   // The transfer vocabulary, enforced here so a row cannot be written with a
   // cause that is not in the list a report groups by — see the table comment.
   reason: () => optionalNullable(inventoryTransferReasonSchema),
-  changedByStaffId: () => staffIdSchema,
+  changedByStaffId: () => userIdSchema,
 };
 
 export const inventoryCustodyHistorySelectSchema = createSelectSchema(
@@ -1554,9 +1908,51 @@ export const inventoryCustodyHistoryUpdateSchema = createUpdateSchema(
   inventoryCustodyHistoryColumnRefinements
 );
 
+const inventoryCustodyNoticeRecipientColumnRefinements = {
+  id: () => inventoryCustodyNoticeRecipientIdSchema,
+  custodyHistoryId: () => inventoryCustodyHistoryIdSchema,
+  staffId: () => optionalNullable(userIdSchema),
+  role: () => custodyNoticeRecipientRoleSchema,
+};
+
+export const inventoryCustodyNoticeRecipientSelectSchema = createSelectSchema(
+  inventoryCustodyNoticeRecipient,
+  inventoryCustodyNoticeRecipientColumnRefinements
+);
+export const inventoryCustodyNoticeRecipientInsertSchema = createInsertSchema(
+  inventoryCustodyNoticeRecipient,
+  inventoryCustodyNoticeRecipientColumnRefinements
+);
+export const inventoryCustodyNoticeRecipientUpdateSchema = createUpdateSchema(
+  inventoryCustodyNoticeRecipient,
+  inventoryCustodyNoticeRecipientColumnRefinements
+);
+
+const inventoryCustodyRequestColumnRefinements = {
+  id: () => inventoryCustodyRequestIdSchema,
+  itemId: () => inventoryItemIdSchema,
+  requesterStaffId: () => userIdSchema,
+  custodianStaffId: () => userIdSchema,
+  status: () => custodyRequestStatusSchema,
+  decidedByStaffId: () => userIdSchema,
+};
+
+export const inventoryCustodyRequestSelectSchema = createSelectSchema(
+  inventoryCustodyRequest,
+  inventoryCustodyRequestColumnRefinements
+);
+export const inventoryCustodyRequestInsertSchema = createInsertSchema(
+  inventoryCustodyRequest,
+  inventoryCustodyRequestColumnRefinements
+);
+export const inventoryCustodyRequestUpdateSchema = createUpdateSchema(
+  inventoryCustodyRequest,
+  inventoryCustodyRequestColumnRefinements
+);
+
 const inventoryTransactionColumnRefinements = {
   id: () => inventoryTransactionIdSchema,
-  actorStaffId: () => staffIdSchema,
+  actorStaffId: () => userIdSchema,
   action: () => inventoryActionSchema,
   itemId: () => inventoryItemIdSchema,
   qtyBefore: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
@@ -1580,7 +1976,7 @@ export const inventoryTransactionUpdateSchema = createUpdateSchema(
 
 const inventoryAuditLogColumnRefinements = {
   id: () => inventoryAuditLogIdSchema,
-  actorStaffId: () => staffIdSchema,
+  actorStaffId: () => userIdSchema,
   // `action` and `entityType` are free text by design (see the table comment);
   // `actorName` is not a closed set either, but it is not allowed to be blank,
   // because the CHECK pairs it with `actorStaffId` and a row of spaces would

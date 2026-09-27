@@ -49,17 +49,14 @@ import {
 import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
 import {
   IconAlertTriangle,
-  IconCategoryPlus,
   IconInfoCircle,
   IconPackageExport,
   IconSwitchHorizontal,
   IconTrash,
   IconUserCheck,
 } from "@tabler/icons-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type * as React from "react";
-import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useMemo, useState } from "react";
 import * as v from "valibot";
 
 import type {
@@ -67,15 +64,33 @@ import type {
   InventoryItemView,
 } from "@/components/staff/inventory/inventory-types";
 import {
-  invalidateInventory,
   MoneyField,
   StaffComboboxField,
 } from "@/components/staff/inventory/shared";
-import { formatApiErrorMessage, validationFieldErrors } from "@/lib/api-error";
-import { orpc } from "@/utils/orpc";
+import { validationFieldErrors } from "@/lib/api-error";
 
 /** `createItem`'s own ceiling on `qty`, restated so the input can enforce it. */
 const MAX_ITEM_QTY = 1000;
+
+/**
+ * The units a school's store actually counts things in. `unit` is a free
+ * `text` column with no CHECK behind it — a school that counts something in
+ * "reams" is still allowed to — so this is a picklist of common answers,
+ * not a closed set: `CUSTOM_UNIT` is always the last option, and choosing it
+ * reveals a plain text field for anything not on the list.
+ */
+const UNIT_PRESETS = [
+  "unit",
+  "box",
+  "set",
+  "pair",
+  "pack",
+  "dozen",
+  "roll",
+  "kg",
+  "litre",
+] as const;
+const CUSTOM_UNIT = "__custom__";
 
 /** `inventory_item_sku_format` — the CHECK the column itself carries. */
 const SKU_PATTERN = /^INV-\d{5}$/u;
@@ -311,6 +326,14 @@ const AssetTagFields = ({
   return (
     <FieldSet>
       <FieldLegend>Asset tags</FieldLegend>
+      <FieldDescription>
+        Optional, and it decides how this line is tracked. Leave every row blank
+        for a bulk-counted line — 20 office chairs sharing one QR code and a
+        quantity of 20. Fill in one tag per row to track each unit by its own QR
+        code instead — 3 projectors, each its own asset tag and its own history.
+        It is all-or-nothing: fill in as many as there are units, or leave all
+        of them blank.
+      </FieldDescription>
       <FieldGroup>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-muted-foreground text-xs tabular-nums">
@@ -396,7 +419,82 @@ const AssetTagFields = ({
   );
 };
 
-// ─── Category picker ────────────────────────────────────────────────────────
+// --- Unit field ---
+
+interface UnitFieldProps {
+  formId: string;
+  value: string;
+  error: string | undefined;
+  disabled: boolean;
+  onChange: (unit: string) => void;
+}
+
+/**
+ * The unit of measure, as a select over the common answers plus a "Custom"
+ * escape hatch — the same shape `CategoryPicker` uses for a value the
+ * database does not close off. A value that already isn't one of the presets
+ * (an item edited before this select existed, or a school's own word for
+ * something) opens straight into the custom text field, pre-filled, rather
+ * than silently swapping it for the nearest preset.
+ */
+const UnitField = ({
+  formId,
+  value,
+  error,
+  disabled,
+  onChange,
+}: UnitFieldProps) => {
+  const isPreset = (UNIT_PRESETS as readonly string[]).includes(value);
+  const [isCustom, setIsCustom] = useState(!isPreset && value.length > 0);
+
+  return (
+    <Field data-invalid={Boolean(error)}>
+      <FieldLabel htmlFor={`${formId}-unit`}>Unit</FieldLabel>
+      <Select
+        value={isCustom ? CUSTOM_UNIT : value}
+        onValueChange={(next) => {
+          if (next === CUSTOM_UNIT) {
+            setIsCustom(true);
+            return;
+          }
+          setIsCustom(false);
+          onChange(next ?? "unit");
+        }}
+      >
+        <SelectTrigger disabled={disabled} id={`${formId}-unit`}>
+          <SelectValue placeholder="unit" />
+        </SelectTrigger>
+        <SelectContent>
+          {UNIT_PRESETS.map((preset) => (
+            <SelectItem key={preset} value={preset}>
+              {preset}
+            </SelectItem>
+          ))}
+          <SelectItem value={CUSTOM_UNIT}>Custom…</SelectItem>
+        </SelectContent>
+      </Select>
+      {isCustom ? (
+        <Input
+          aria-describedby={error ? `${formId}-unit-error` : undefined}
+          aria-invalid={error ? true : undefined}
+          className="mt-2"
+          disabled={disabled}
+          maxLength={40}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Type your own, e.g. reams"
+          value={isPreset ? "" : value}
+        />
+      ) : null}
+      <FieldDescription>
+        What one of these is counted in — unit, chair, box, set. It is what the
+        quantity is read as.
+      </FieldDescription>
+      <FieldError id={`${formId}-unit-error`}>{error}</FieldError>
+    </Field>
+  );
+};
+
+// --- Category picker ---
 
 interface CategoryPickerProps {
   formId: string;
@@ -405,22 +503,18 @@ interface CategoryPickerProps {
   onChange: (category: CategoryOption | null) => void;
   error: string | undefined;
   disabled: boolean;
-  onCreateCategory: (name: string) => Promise<CategoryOption | null>;
-  isCreatingCategory: boolean;
 }
 
 /**
- * The category, as a combobox with a way out of the dead end.
+ * The category, as a combobox.
  *
- * **The inline "New category" row exists because the create form is otherwise a
- * trap on a store that has not been set up.** `createItem` requires a `categoryId`
- * behind a `restrict` foreign key, so a storekeeper who needs a category that does
- * not exist has exactly one route out of this dialog, and it used to be "cancel,
- * open the category panel, add it, come back, start again". Creating it from here
- * costs one line of typing and the new category is selected on the spot, so the
- * form ends up filled in rather than half filled. Duplicates are the server's call:
- * `categories.create` answers `CONFLICT` with the offending name, and that sentence
- * says which of the two entries to merge into.
+ * There used to be an inline "New category" row here, because `createItem`
+ * requires a `categoryId` behind a `restrict` foreign key and a store with
+ * nothing set up had no other way in. Categories are a closed set now —
+ * the eight seeded ones, see `inventoryCategory`'s schema doc comment —
+ * and `categories.create` no longer exists, so there is nothing left for this
+ * picker to create. If the category picker is empty, the fix is the register's
+ * own "Seed the eight starter categories" action, not a form typed here.
  *
  * Filtering is left to the combobox rather than sent to the server, unlike every
  * other picker in this feature — and that is because `categories.list` deliberately
@@ -434,20 +528,7 @@ const CategoryPicker = ({
   onChange,
   error,
   disabled,
-  onCreateCategory,
-  isCreatingCategory,
-}: CategoryPickerProps) => {
-  const [newName, setNewName] = useState("");
-
-  const handleCreate = async () => {
-    const created = await onCreateCategory(newName);
-    if (created) {
-      onChange(created);
-      setNewName("");
-    }
-  };
-
-  return (
+}: CategoryPickerProps) => (
     <Field data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={`${formId}-category`}>Category *</FieldLabel>
       <Combobox<CategoryOption>
@@ -467,7 +548,7 @@ const CategoryPicker = ({
         <ComboboxContent>
           <ComboboxEmpty>
             {categories.length === 0
-              ? "No categories yet — add one below"
+              ? "No categories yet — seed the eight starters from the register"
               : "No category matches that"}
           </ComboboxEmpty>
           <ComboboxList>
@@ -488,52 +569,13 @@ const CategoryPicker = ({
       </Combobox>
       <FieldDescription>
         Every item belongs to exactly one category, and the register&rsquo;s
-        category filter reads this list. If the one you need is not here, create
-        it below rather than leaving this form.
+        category filter reads this same fixed list.
       </FieldDescription>
       {error ? (
         <FieldError id={`${formId}-category-error`}>{error}</FieldError>
       ) : null}
-
-      <div className="mt-2 flex items-end gap-2">
-        <Field className="flex-1">
-          <FieldLabel htmlFor={`${formId}-new-category`}>
-            New category
-          </FieldLabel>
-          <Input
-            id={`${formId}-new-category`}
-            value={newName}
-            maxLength={80}
-            autoComplete="off"
-            placeholder="e.g. Music Equipment"
-            disabled={disabled || isCreatingCategory}
-            onChange={(event) => setNewName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void handleCreate();
-              }
-            }}
-          />
-        </Field>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={
-            disabled || isCreatingCategory || newName.trim().length === 0
-          }
-          onClick={() => {
-            void handleCreate();
-          }}
-          data-icon="inline-start"
-        >
-          <IconCategoryPlus data-icon="inline-start" />
-          {isCreatingCategory ? "Adding..." : "Add"}
-        </Button>
-      </div>
     </Field>
   );
-};
 
 // ─── Valuation ──────────────────────────────────────────────────────────────
 
@@ -665,7 +707,117 @@ interface FormValues {
   location: string;
   purchaseValue: string;
   currentValue: string;
+  imageFileId: string | null;
 }
+
+interface ImageUploadFieldProps {
+  formId: string;
+  disabled: boolean;
+  initialImageUrl: string | null;
+  onChange: (imageFileId: string | null) => void;
+}
+
+/**
+ * A single item photo: pick a file, it uploads immediately to
+ * `/api/files/upload`, and the returned `fileId` is what the form submits as
+ * `imageFileId` — the item row itself is never sent binary data, only the
+ * pointer. Uploading eagerly (rather than deferring to form submit) is what
+ * lets the preview show the photo that was actually saved rather than a local
+ * object URL that could still fail to upload after the item itself was created.
+ */
+const ImageUploadField = ({
+  formId,
+  disabled,
+  initialImageUrl,
+  onChange,
+}: ImageUploadFieldProps) => {
+  const [previewUrl, setPreviewUrl] = useState(initialImageUrl);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = `${formId}-image`;
+
+  const handleFile = async (file: File) => {
+    setIsUploading(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      const response = await fetch("/api/files/upload", {
+        method: "POST",
+        body,
+        credentials: "include",
+      });
+      const result = (await response.json()) as {
+        fileId?: string;
+        url?: string;
+        message?: string;
+      };
+      if (!response.ok || !result.fileId || !result.url) {
+        setError(result.message ?? "Could not upload that image");
+        setIsUploading(false);
+        return;
+      }
+      setPreviewUrl(result.url);
+      onChange(result.fileId);
+      setIsUploading(false);
+    } catch {
+      setError("Could not reach the server to upload that image");
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={inputId}>Photo</FieldLabel>
+      <div className="flex items-center gap-3">
+        {previewUrl ? (
+          <img
+            alt=""
+            className="border-primary/14 size-16 border object-cover"
+            src={previewUrl}
+          />
+        ) : (
+          <div className="border-primary/14 text-muted-foreground flex size-16 items-center justify-center border text-xs">
+            None
+          </div>
+        )}
+        <div className="flex flex-col gap-1">
+          <Input
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            disabled={disabled || isUploading}
+            id={inputId}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleFile(file);
+              }
+              event.target.value = "";
+            }}
+            type="file"
+          />
+          {previewUrl ? (
+            <Button
+              disabled={disabled || isUploading}
+              onClick={() => {
+                setPreviewUrl(null);
+                onChange(null);
+              }}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              Remove photo
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <FieldDescription>
+        Optional. PNG, JPEG, WEBP or GIF, up to 8 MB.
+      </FieldDescription>
+      {error ? <FieldError>{error}</FieldError> : null}
+    </Field>
+  );
+};
 
 interface IdentityFieldsetProps {
   formId: string;
@@ -679,8 +831,8 @@ interface IdentityFieldsetProps {
   onChange: (patch: Partial<FormValues>) => void;
   onCategoryChange: (category: CategoryOption | null) => void;
   onSkuChange: (sku: string) => void;
-  onCreateCategory: (name: string) => Promise<CategoryOption | null>;
-  isCreatingCategory: boolean;
+  /** The item's current photo, if it already has one — absent on create. */
+  initialImageUrl?: string | null;
 }
 
 /**
@@ -704,8 +856,7 @@ const IdentityFieldset = ({
   onChange,
   onCategoryChange,
   onSkuChange,
-  onCreateCategory,
-  isCreatingCategory,
+  initialImageUrl,
 }: IdentityFieldsetProps) => (
   <FieldSet>
     <FieldLegend>Identity</FieldLegend>
@@ -732,8 +883,6 @@ const IdentityFieldset = ({
         onChange={onCategoryChange}
         error={errors.categoryId}
         disabled={isLoading}
-        onCreateCategory={onCreateCategory}
-        isCreatingCategory={isCreatingCategory}
       />
 
       {isEdit ? null : (
@@ -767,24 +916,13 @@ const IdentityFieldset = ({
         </Field>
       )}
 
-      <Field data-invalid={Boolean(errors.unit)}>
-        <FieldLabel htmlFor={`${formId}-unit`}>Unit</FieldLabel>
-        <Input
-          id={`${formId}-unit`}
-          value={values.unit}
-          maxLength={40}
-          placeholder="unit"
-          disabled={isLoading}
-          aria-invalid={errors.unit ? true : undefined}
-          aria-describedby={errors.unit ? `${formId}-unit-error` : undefined}
-          onChange={(event) => onChange({ unit: event.target.value })}
-        />
-        <FieldDescription>
-          What one of these is counted in — unit, chair, box, set. It is what
-          the quantity is read as.
-        </FieldDescription>
-        <FieldError id={`${formId}-unit-error`}>{errors.unit}</FieldError>
-      </Field>
+      <UnitField
+        disabled={isLoading}
+        error={errors.unit}
+        formId={formId}
+        onChange={(unit) => onChange({ unit })}
+        value={values.unit}
+      />
 
       <Field data-invalid={Boolean(errors.description)}>
         <FieldLabel htmlFor={`${formId}-description`}>Description</FieldLabel>
@@ -809,6 +947,13 @@ const IdentityFieldset = ({
           {errors.description}
         </FieldError>
       </Field>
+
+      <ImageUploadField
+        disabled={isLoading}
+        formId={formId}
+        initialImageUrl={initialImageUrl ?? null}
+        onChange={(imageFileId) => onChange({ imageFileId })}
+      />
     </FieldGroup>
   </FieldSet>
 );
@@ -1424,6 +1569,7 @@ const buildSubmitOutcome = ({
       values: {
         ...result.output,
         categoryId: v.parse(inventoryCategoryIdSchema, category.id),
+        imageFileId: values.imageFileId,
       },
     };
   }
@@ -1465,6 +1611,7 @@ const buildSubmitOutcome = ({
       categoryId: v.parse(inventoryCategoryIdSchema, category.id),
       ...(trimmedSku === "" ? {} : { sku: trimmedSku }),
       uniqueIds: enteredTags(tagRows),
+      ...(values.imageFileId ? { imageFileId: values.imageFileId } : {}),
       ...(managerStaffId
         ? { managerStaffId: v.parse(staffIdSchema, managerStaffId) }
         : {}),
@@ -1496,6 +1643,7 @@ const initialFormValues = (item: InventoryItemView | undefined): FormValues => {
       location: "",
       purchaseValue: "",
       currentValue: "",
+      imageFileId: null,
     };
   }
 
@@ -1509,6 +1657,7 @@ const initialFormValues = (item: InventoryItemView | undefined): FormValues => {
     location: item.location,
     purchaseValue: item.purchaseValue ?? "",
     currentValue: item.currentValue ?? "",
+    imageFileId: item.imageFileId,
   };
 };
 
@@ -1552,8 +1701,6 @@ interface InventoryItemFormProps {
   initialData?: InventoryItemView;
   isLoading: boolean;
   serverErrors: ItemFormErrors;
-  onCreateCategory: (name: string) => Promise<CategoryOption | null>;
-  isCreatingCategory: boolean;
   onSubmit: (values: Record<string, unknown>) => Promise<void>;
   /** Only supplied in edit mode — the create form has nothing to point at. */
   editActions?: EditActionProps;
@@ -1573,8 +1720,6 @@ const InventoryItemForm = ({
   initialData,
   isLoading,
   serverErrors,
-  onCreateCategory,
-  isCreatingCategory,
   onSubmit,
   editActions,
 }: InventoryItemFormProps) => {
@@ -1663,8 +1808,7 @@ const InventoryItemForm = ({
         onChange={handleValuesChange}
         onCategoryChange={setCategory}
         onSkuChange={setSku}
-        onCreateCategory={onCreateCategory}
-        isCreatingCategory={isCreatingCategory}
+        initialImageUrl={initialData?.imageUrl ?? null}
       />
 
       <StockFieldset
@@ -1759,53 +1903,8 @@ export const InventoryItemDialogs = ({
   onEditSubmit,
   editActions,
 }: InventoryItemDialogsProps) => {
-  const queryClient = useQueryClient();
   const [createErrors, setCreateErrors] = useState<ItemFormErrors>({});
   const [editErrors, setEditErrors] = useState<ItemFormErrors>({});
-
-  /**
-   * The inline "New category" write. It lives here rather than only on the category
-   * panel because the item form is where a missing category is discovered, and a
-   * storekeeper who has to abandon a twenty-field form to fix a dropdown will not
-   * fix the dropdown.
-   *
-   * The invalidation is `invalidateInventory(…, "category")` rather than a
-   * hand-rolled `categories.list` key, for the reason the shared module exists at
-   * all: a category is named by every register row that uses it, so the register
-   * has to re-read too — and the scope is the one place that says so.
-   */
-  const createCategoryMutation = useMutation(
-    orpc.inventory.categories.create.mutationOptions({
-      onSuccess: async (created) => {
-        toast.success(`Category "${created.name}" added`);
-        await invalidateInventory(queryClient, "category");
-      },
-      onError: (error) => {
-        toast.error(
-          formatApiErrorMessage(error, "Could not add that category")
-        );
-      },
-    })
-  );
-
-  const handleCreateCategory = useCallback(
-    async (name: string): Promise<CategoryOption | null> => {
-      const trimmed = name.trim();
-      if (trimmed.length === 0) {
-        return null;
-      }
-
-      try {
-        return await createCategoryMutation.mutateAsync({ name: trimmed });
-      } catch {
-        // The mutation's own `onError` has already toasted the server's sentence,
-        // which names the duplicate. Returning null leaves the form open with what
-        // was typed instead of closing it over a failure.
-        return null;
-      }
-    },
-    [createCategoryMutation]
-  );
 
   /**
    * Server-side validation, mapped back onto the fields — and nothing else.
@@ -1875,8 +1974,6 @@ export const InventoryItemDialogs = ({
               categories={categories}
               isLoading={isCreatePending}
               serverErrors={createErrors}
-              onCreateCategory={handleCreateCategory}
-              isCreatingCategory={createCategoryMutation.isPending}
               onSubmit={handleCreateSubmit}
             />
           </div>
@@ -1929,8 +2026,6 @@ export const InventoryItemDialogs = ({
                 initialData={selectedItem}
                 isLoading={isEditPending}
                 serverErrors={editErrors}
-                onCreateCategory={handleCreateCategory}
-                isCreatingCategory={createCategoryMutation.isPending}
                 onSubmit={handleEditSubmit}
                 editActions={editActions}
               />

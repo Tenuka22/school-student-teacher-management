@@ -14,8 +14,8 @@ import { itemConditionSchema } from "@school-student-teacher-management/db/const
 import {
   inventoryCategoryIdSchema,
   inventoryItem,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { staffIdSchema } from "@school-student-teacher-management/db/schema/staff";
 import type { SQL } from "drizzle-orm";
 import { and, count, desc, eq, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import * as v from "valibot";
@@ -110,8 +110,8 @@ export const listItems = adminProcedure
       categoryId: v.optional(inventoryCategoryIdSchema),
       condition: v.optional(itemConditionSchema),
       status: v.optional(itemStatusSchema),
-      custodianStaffId: v.optional(staffIdSchema),
-      managerStaffId: v.optional(staffIdSchema),
+      custodianStaffId: v.optional(userIdSchema),
+      managerStaffId: v.optional(userIdSchema),
       lowStockOnly: v.optional(v.boolean()),
       includeDeleted: v.optional(v.boolean()),
       limit: v.optional(
@@ -145,6 +145,12 @@ export const listItems = adminProcedure
     // `and(...)` skips the undefined entries — which is the behaviour we want,
     // since a filter the caller did not ask for must not narrow anything.
     const filters: (SQL | undefined)[] = [];
+
+    // Voided rows (a mistaken entry, not a retirement) never appear here,
+    // with or without `includeDeleted` — there is no "show voided" toggle,
+    // because a voided row is not a piece of the school's history somebody
+    // legitimately wants to browse, the way a retired item is.
+    filters.push(isNull(inventoryItem.voidedAt));
 
     if (!input.includeDeleted) {
       filters.push(isNull(inventoryItem.deletedAt));

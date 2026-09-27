@@ -50,6 +50,8 @@ const RouteComponent = () => {
   const [isHandBackOpen, setIsHandBackOpen] = useState(false);
   const [handBackNote, setHandBackNote] = useState("");
   const [handBackCondition, setHandBackCondition] = useState<string>("");
+  const [isRequestOpen, setIsRequestOpen] = useState(false);
+  const [requestNote, setRequestNote] = useState("");
 
   const itemQuery = useQuery(
     orpc.inventory.items.getForScan.queryOptions({ input: { itemId } })
@@ -85,6 +87,24 @@ const RouteComponent = () => {
         toast.error(
           formatApiErrorMessage(error, "Could not hand this item back")
         );
+      },
+    })
+  );
+
+  const requestMutation = useMutation(
+    orpc.inventory.custody.requests.create.mutationOptions({
+      onSuccess: async () => {
+        toast.success("Request sent — you'll be notified when it's decided");
+        setIsRequestOpen(false);
+        setRequestNote("");
+        await queryClient.invalidateQueries({
+          queryKey: orpc.inventory.items.getForScan.queryOptions({
+            input: { itemId },
+          }).queryKey,
+        });
+      },
+      onError: (error) => {
+        toast.error(formatApiErrorMessage(error, "Could not send the request"));
       },
     })
   );
@@ -212,6 +232,69 @@ const RouteComponent = () => {
     );
   };
 
+  /**
+   * The request affordance, mirroring `renderHandBack`'s shape: whether the
+   * reader may request this item at all (`item.canRequest`) and whether the
+   * note form is open are two different questions.
+   */
+  const renderRequest = () => {
+    if (!item.canRequest) {
+      return null;
+    }
+
+    if (!isRequestOpen) {
+      return (
+        <Button
+          data-icon="inline-start"
+          onClick={() => setIsRequestOpen(true)}
+          type="button"
+        >
+          <IconPackageExport data-icon="inline-start" />
+          Request this item from {item.custodianName ?? "its holder"}
+        </Button>
+      );
+    }
+
+    return (
+      <div className="border-primary/14 flex flex-col gap-3 border p-4">
+        <Field>
+          <FieldLabel htmlFor="scan-request-note">
+            Note to {item.custodianName ?? "the holder"} (optional)
+          </FieldLabel>
+          <Textarea
+            id="scan-request-note"
+            onChange={(event) => setRequestNote(event.target.value)}
+            placeholder="Need it for period 3 on Thursday"
+            rows={2}
+            value={requestNote}
+          />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button
+            disabled={requestMutation.isPending}
+            onClick={() => setIsRequestOpen(false)}
+            type="button"
+            variant="ghost"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={requestMutation.isPending}
+            onClick={() =>
+              requestMutation.mutate({
+                itemId: item.id,
+                note: requestNote || undefined,
+              })
+            }
+            type="button"
+          >
+            {requestMutation.isPending ? "Sending…" : "Send request"}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <div>
@@ -266,7 +349,9 @@ const RouteComponent = () => {
 
       {renderHandBack()}
 
-      {!item.canTake && !item.canHandBack ? (
+      {renderRequest()}
+
+      {!item.canTake && !item.canHandBack && !item.canRequest ? (
         <p className="text-muted-foreground text-sm">
           You are in charge of this item, but it is currently held by{" "}
           {item.custodianName ?? "nobody"}.

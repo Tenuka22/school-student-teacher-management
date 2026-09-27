@@ -74,6 +74,7 @@ export const seedCategories = adminOnlyProcedure.handler(
             name: entry.name,
             normalizedName: normalizeInventoryKey(entry.name),
             color: entry.color,
+            icon: entry.icon,
           }))
         )
         .onConflictDoNothing({ target: inventoryCategory.normalizedName })
@@ -96,6 +97,7 @@ export const seedCategories = adminOnlyProcedure.handler(
           name: inventoryCategory.name,
           normalizedName: inventoryCategory.normalizedName,
           color: inventoryCategory.color,
+          icon: inventoryCategory.icon,
         })
         .from(inventoryCategory)
         .where(inArray(inventoryCategory.normalizedName, SEED_KEYS));
@@ -118,7 +120,7 @@ export const seedCategories = adminOnlyProcedure.handler(
           return [];
         }
 
-        return [{ id: row.id, name: row.name, color: row.color }];
+        return [{ id: row.id, name: row.name, color: row.color, icon: row.icon }];
       });
 
       // `inserted` can never exceed the number of seed keys: one value per key,

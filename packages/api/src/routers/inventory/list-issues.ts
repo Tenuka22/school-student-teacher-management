@@ -20,7 +20,7 @@ import {
   inventoryUnit,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import { staff } from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -256,7 +256,7 @@ export const listIssues = adminProcedure
           expectedReturnDate: inventoryIssue.expectedReturnDate,
           note: inventoryIssue.note,
           issuedByStaffId: inventoryIssue.issuedByStaffId,
-          issuedByName: staff.name,
+          issuedByName: user.name,
           issuedAt: inventoryIssue.issuedAt,
         })
         .from(inventoryIssue)
@@ -268,7 +268,7 @@ export const listIssues = adminProcedure
         // inner join here would silently delete every historic issue whose
         // storekeeper has since left the school — the rows an audit is most
         // likely to ask about.
-        .leftJoin(staff, eq(inventoryIssue.issuedByStaffId, staff.id))
+        .leftJoin(user, eq(inventoryIssue.issuedByStaffId, user.id))
         .where(where)
         // `id` breaks ties so the order is total. Two hand-overs recorded in
         // the same transaction share a `defaultNow()` `issuedAt`, and an

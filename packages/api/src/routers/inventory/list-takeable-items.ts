@@ -23,7 +23,7 @@ import {
   inventoryCategoryIdSchema,
   inventoryItem,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { and, asc, count, eq, ilike, isNull, ne, or } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
   integer,
@@ -42,7 +42,7 @@ import {
   calculateAvailableQuantity,
   itemStatusExpression,
 } from "./inventory-calculations";
-import { countersOf, getInventoryActor } from "./inventory-database";
+import { countersOf } from "./inventory-database";
 
 /**
  * The one status arm this catalogue offers.
@@ -198,18 +198,17 @@ const TAKEABLE_SELECTION = {
  *     take it. If the school ever decides a repair-in-progress must not be handed
  *     out, the change belongs in `calculateItemStatus` **and** here, in the same
  *     commit, so both the badge and the refusal move together.
- * - **`custodianStaffId IS DISTINCT FROM me`** — `takeItem` refuses "This item is
- *   already assigned to you", and `custodianStaffId` is not an input to the
- *   status ladder, so without this predicate a teacher who already holds an item
- *   would be offered that same item. Two `ne`-safe arms rather than one, because
- *   `col <> me` is `NULL` for an unheld item and a `WHERE` that evaluated to
- *   `NULL` would throw away every item in the store.
- *
- *   This predicate is the one place the catalogue is scoped to the caller, and it
- *   is the only scoping it does. It is also the one that cannot leak: it compares
- *   against the caller's **own** staff id, so excluding the rows where it matches
- *   discloses nothing about any other person — the caller already knows what they
- *   are holding, which is what `custody.myItems` is for.
+ * - **`custodianStaffId IS NULL`** — nobody is holding it. This is stricter than
+ *   an earlier version of this filter, which read `IS DISTINCT FROM me` and let a
+ *   colleague's already-claimed item stand in this "free to take instantly"
+ *   catalogue on the strength of `calculateItemStatus` not looking at custody at
+ *   all. `takeItem` carries the identical guard now (see its own comment), so the
+ *   two cannot drift back apart: an item somebody already holds is never
+ *   "available", whatever its stock counters say, and asking for it goes through
+ *   `custody.requests.create` instead — the one door that asks the holder first.
+ *   This predicate discloses nothing about any other person: it excludes rows
+ *   rather than naming who they belong to, which is what `custody.myItems` and
+ *   `custody.requests.listRequestable` are for.
  *
  * ## What is deliberately *not* a filter: the no-staff-row refusal
  *
@@ -235,18 +234,7 @@ export const listTakeableItems = requireInventoryPermission("read")
     })
   )
   .handler(async ({ input, context }) => {
-    const actor = await getInventoryActor(context);
 
-    // Same honest empty result `listMyItems` gives, and for the same reason: the
-    // seeded `admin` / `principal` / `vicePrincipal` seats are users with no
-    // staff identity by design, and a caller with no staff row can pass the gate
-    // and can never claim an item. Returning the shelf here would be offering a
-    // catalogue to somebody whose every use of it is refused.
-    if (!actor.staffId) {
-      return { items: [], total: 0 };
-    }
-
-    const { staffId } = actor;
     const limit = input.limit ?? DEFAULT_LIMIT;
     const search = input.search?.trim();
 
@@ -258,10 +246,7 @@ export const listTakeableItems = requireInventoryPermission("read")
       isNull(inventoryItem.deletedAt),
       eq(inventoryItem.borrowable, true),
       eq(itemStatusExpression(), AVAILABLE_STATUS),
-      or(
-        isNull(inventoryItem.custodianStaffId),
-        ne(inventoryItem.custodianStaffId, staffId)
-      ),
+      isNull(inventoryItem.custodianStaffId),
       input.categoryId
         ? eq(inventoryItem.categoryId, input.categoryId)
         : undefined,

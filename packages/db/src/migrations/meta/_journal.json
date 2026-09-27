@@ -22,6 +22,27 @@
       "when": 1790420375460,
       "tag": "0002_faithful_captain_universe",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790427575936,
+      "tag": "0003_cynical_abomination",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790444575968,
+      "tag": "0004_oval_susan_delgado",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790446539067,
+      "tag": "0005_big_wiccan",
+      "breakpoints": true
     }
   ]
 }

@@ -129,6 +129,16 @@ export type AuditLogRecord = ElementOf<
   InventoryOutput["ledger"]["auditLogs"]["auditLogs"]
 >;
 
+/** One row of `orpc.inventory.custody.requests.listIncoming` / `.listOutgoing`. */
+export type CustodyRequestView = ElementOf<
+  InventoryOutput["custody"]["requests"]["listIncoming"]["requests"]
+>;
+
+/** One row of `orpc.inventory.custody.requests.listRequestable`. */
+export type RequestableItemView = ElementOf<
+  InventoryOutput["custody"]["requests"]["listRequestable"]["items"]
+>;
+
 /**
  * The filter state the register and the asset-tag register share.
  *

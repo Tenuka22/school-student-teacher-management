@@ -24,11 +24,9 @@ import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import {
-  staff,
-  staffIdSchema,
-} from "@school-student-teacher-management/db/schema/staff";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -57,9 +55,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: staff.name })
-    .from(staff)
-    .where(eq(staff.id, staffId))
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -69,7 +67,7 @@ export const transferCustody = adminOnlyProcedure
   .input(
     object({
       itemId: inventoryItemIdSchema,
-      newCustodianStaffId: staffIdSchema,
+      newCustodianStaffId: userIdSchema,
       /**
        * Required unconditionally by this input, which is **stricter** than the
        * database. `inventory_custody_history_reason_required` only demands a
@@ -158,7 +156,7 @@ export const transferCustody = adminOnlyProcedure
           changeType,
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.staffId,
+          changedByStaffId: actor.userId,
         })
         .returning();
 

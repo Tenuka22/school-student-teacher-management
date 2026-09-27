@@ -483,6 +483,7 @@ const ensureInventoryCategories = async (database: Database) => {
         name: entry.name,
         normalizedName: normalizeInventoryKey(entry.name),
         color: entry.color,
+        icon: entry.icon,
       }))
     )
     .onConflictDoNothing({ target: inventoryCategory.normalizedName })

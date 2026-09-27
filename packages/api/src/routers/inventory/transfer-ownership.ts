@@ -72,13 +72,11 @@ import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import {
-  staff,
-  staffIdSchema,
-} from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 
 import { requireInventoryPermission } from "../../index";
 import type { Executor } from "./inventory-database";
@@ -87,6 +85,7 @@ import {
   countersOf,
   getInventoryActor,
   getLockedItem,
+  insertCustodyNoticeRecipients,
   insertInventoryAuditLog,
   insertInventoryTransaction,
   iso,
@@ -113,9 +112,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: staff.name })
-    .from(staff)
-    .where(eq(staff.id, staffId))
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -141,9 +140,9 @@ const resolveStaffName = async (
 const mayReassignOwner = (
   role: string,
   ownerStaffId: string | null,
-  actorStaffId: string | null
+  actorUserId: string
 ): boolean =>
-  (ownerStaffId !== null && ownerStaffId === actorStaffId) ||
+  (ownerStaffId !== null && ownerStaffId === actorUserId) ||
   ADMIN_ROLES.has(role);
 
 export const transferOwnership = requireInventoryPermission("manageOwn")
@@ -158,7 +157,7 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
        * it is an ordinary thing to want and the holder is cleared either way.
        * Clearing the owner instead is `assignManager({ newManagerStaffId: null })`.
        */
-      newOwnerStaffId: staffIdSchema,
+      newOwnerStaffId: userIdSchema,
       /**
        * Required unconditionally, and it is not free text — it is a member of the
        * closed `INVENTORY_TRANSFER_REASONS` vocabulary, so a report can group
@@ -210,7 +209,7 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
         !mayReassignOwner(
           context.session?.user.role ?? "",
           existing.managerStaffId,
-          actor.staffId
+          actor.userId
         )
       ) {
         throw new ORPCError("FORBIDDEN", {
@@ -293,7 +292,7 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
           changeType: "manager_changed",
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.staffId,
+          changedByStaffId: actor.userId,
         },
         // The release of the holder, written **only when there was a holder**. An
         // item sitting unheld in the store has nothing to release, and a
@@ -312,10 +311,10 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
                 changeType: "custody_released",
                 reason: input.reason,
                 note: input.note ?? null,
-                changedByStaffId: actor.staffId,
+                changedByStaffId: actor.userId,
               },
             ]
-          : []),
+          : [])
       ];
 
       const historyRows = await tx
@@ -337,6 +336,21 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
       );
       if (!managerHistory || (existing.custodianStaffId && !releaseHistory)) {
         throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      if (releaseHistory) {
+        // The new owner, not `existing.managerStaffId` — the item's
+        // `managerStaffId` column was just moved to `input.newOwnerStaffId` in
+        // the update above, and "who is the manager" for a notice always means
+        // the item as it stands now, the same live read every other custody
+        // notice uses.
+        await insertCustodyNoticeRecipients(tx, {
+          custodyHistoryId: releaseHistory.id,
+          itemId: existing.id,
+          previousCustodianStaffId: existing.custodianStaffId,
+          managerStaffId: input.newOwnerStaffId,
+          changedByStaffId: actor.userId,
+        });
       }
 
       // `before` and `after` are the same pair on purpose: ownership moved, stock
