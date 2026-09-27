@@ -3,7 +3,7 @@ import { user } from "@school-student-teacher-management/db/schema/auth";
 import { and, asc, eq, ilike, isNull, ne, or } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 
 /** The combobox page size. 50 is roughly two screens of a school roll. */
 const DEFAULT_ASSIGNABLE_STAFF_LIMIT = 50;
@@ -117,7 +117,7 @@ const escapeLikePattern = (term: string): string =>
  * of an unfiltered request is the alphabetically-first 50 members of staff and
  * paging or raising the limit is additive rather than reshuffling.
  *
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -132,7 +132,7 @@ const escapeLikePattern = (term: string): string =>
  * 200 ceiling turn it into a directory of the whole establishment. The predicate
  * above no longer calls that directory a teaching roster, but the exposure is
  * the same one the gate was moved for: the audience, not the filter, is the
- * reason this is `adminProcedure`.
+ * reason this is `inventoryOverseerProcedure`.
  *
  * The property this file's own comment above relies on is the reason it must not
  * be reachable by a teacher: it is the source for every manager, custodian and
@@ -140,10 +140,10 @@ const escapeLikePattern = (term: string): string =>
  * handed the list of people school property is given to — and each of them is a
  * colleague, not an abstraction. Narrowing it to the caller would be worse than
  * useless (a teacher has nobody to assign to, and the combobox is only ever
- * populated by a storekeeper), so it is `adminProcedure`, and it now satisfies
+ * populated by a storekeeper), so it is `inventoryOverseerProcedure`, and it now satisfies
  * the `teacher` statement's contract that `read` reaches no school-wide list.
  */
-export const listAssignableStaff = adminProcedure
+export const listAssignableStaff = inventoryOverseerProcedure
   .input(
     v.object({
       search: v.optional(v.pipe(v.string(), v.maxLength(80))),
@@ -171,9 +171,7 @@ export const listAssignableStaff = adminProcedure
         and(
           or(eq(user.banned, false), isNull(user.banned)),
           ne(user.role, "admin"),
-          term
-            ? ilike(user.name, pattern)
-            : undefined
+          term ? ilike(user.name, pattern) : undefined
         )
       )
       .orderBy(asc(user.name))

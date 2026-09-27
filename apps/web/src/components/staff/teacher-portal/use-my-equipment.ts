@@ -1,14 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import type {
-  InventoryItemView,
-  TransferReason,
-} from "@/components/staff/inventory/inventory-types";
-import { invalidateInventory } from "@/components/staff/inventory/shared";
-import { formatApiErrorMessage } from "@/lib/api-error";
+import type { InventoryItemView } from "@/components/staff/inventory/inventory-types";
 import { orpc } from "@/utils/orpc";
 
 /**
@@ -47,37 +42,33 @@ const asString = (value: unknown): string =>
 /**
  * Everything the "My Equipment" page does, apart from drawing it.
  *
- * ## The four reads, and the one that is not on this page
+ * ## The three reads, and the one that is not on this page
  *
- * A `teacher` holds `inventory: ["read", "take", "manageOwn"]`, which says
+ * A `teacher` holds `inventory: ["read", "acknowledge"]` \u2014 read-only, plus the
+ * narrow notice-acknowledgement action. Custody itself \u2014 who holds what, when
+ * it moves, when it comes back \u2014 is set exclusively by the seeded Inventory
+ * Administrator account (`packages/auth/src/permissions.ts`); this page has no
+ * mutation of its own left in it. `read`, on its own, says
  * nothing about *which rows* any of those reach; every read below is scoped to
  * the caller in its own query, and that scoping is the whole of its security. The
- * page makes four of them:
+ * page makes three of them:
  *
- * - `custody.myItems` — `managerStaffId = me OR custodianStaffId = me`.
- * - `custody.lent` — `managerStaffId = me AND custodianStaffId IS NOT NULL AND
+ * - `custody.myItems` \u2014 `managerStaffId = me OR custodianStaffId = me`.
+ * - `custody.lent` \u2014 `managerStaffId = me AND custodianStaffId IS NOT NULL AND
  *   custodianStaffId <> me`. The third section, and the only read here that names
  *   a colleague; unavoidable, because you cannot act on a colleague's custody of
  *   your own equipment without knowing whose custody it is.
- * - `custody.history` — one item at a time, and only once the teacher has asked.
- * - `custody.takeable` — the shelf, and **no person at all**: nine fields, none
- *   of them a name, a valuation or somebody's holding.
+ * - `custody.history` \u2014 one item at a time, and only once the teacher has asked.
  *
  * **`items.list` is the school-wide register and is not called from here**, by
  * any of them. It is `adminProcedure`, and a picker built on it would hand a
- * teacher the whole storebook — every item with every manager's and custodian's
- * name beside it — through a search box. `inventory.options.teachers` is
+ * teacher the whole storebook \u2014 every item with every manager's and custodian's
+ * name beside it \u2014 through a search box. `inventory.options.teachers` is
  * `adminProcedure` for the same reason and is **not** called from here either;
- * see the note on the hand-on dialog for what that costs and what the honest
- * alternative is.
- *
- * The takeable query lives in `take-item-dialog.tsx` rather than here, because
- * the catalogue is only wanted while that dialog is open — asking for it on page
- * load would be a request the page makes before the teacher has expressed any
- * interest in it.
+ * a teacher has no reason to see it now that assignment is the Inventory
+ * Administrator's job, not theirs.
  */
 export const useMyEquipment = () => {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const routeSearch = useSearch({ strict: false }) as RouteSearch;
 
@@ -165,10 +156,6 @@ export const useMyEquipment = () => {
   const myItemsQuery = useQuery(
     orpc.inventory.custody.myItems.queryOptions({ input: myItemsInput })
   );
-
-  const myItemsQueryKey = orpc.inventory.custody.myItems.queryOptions({
-    input: myItemsInput,
-  }).queryKey;
 
   const items = useMemo(
     () => myItemsQuery.data?.items ?? [],
@@ -310,10 +297,6 @@ export const useMyEquipment = () => {
    * the search term looking at a lent list that still contains it.
    *
    * `custody.lent` has no entry in `inventoryQueryKeys` — that table was written
-   * for the admin screens — so it is invalidated by hand here, for the same
-   * stated reason the takeable catalogue is invalidated by hand below.
-   */
-  const lentQueryKey = orpc.inventory.custody.lent.queryOptions({
     input: {},
   }).queryKey;
 
@@ -355,251 +338,6 @@ export const useMyEquipment = () => {
     await Promise.all([refetchMyItems(), refetchLent()]);
   }, [refetchLent, refetchMyItems]);
 
-  // ─── Calling an item back off a colleague ─────────────────────────────────
-
-  /**
-   * The owner's authority, and a different act from a hand-back.
-   *
-   * `releaseCustody` is the holder's own voluntary act and it sits on the `take`
-   * grant, narrowed to the caller's own custody. This is somebody who is *not*
-   * holding the item using their standing as the person answerable for it to take
-   * it back off somebody who is, so it is a different verb, a different gate
-   * (`manageOwn`), and — the reason it is the only act on this page behind a
-   * confirm — it removes a colleague's possession without their consent.
-   *
-   * The state is reset on open rather than surviving the dialog, so a reclaim
-   * reason is never a copy of the last one's and the next call-back is not made
-   * with yesterday's words still in the box.
-   */
-  const [reclaimItem, setReclaimItem] = useState<InventoryItemView | null>(
-    null
-  );
-  const [reclaimReason, setReclaimReason] = useState("");
-  const [reclaimNote, setReclaimNote] = useState("");
-
-  const openReclaim = useCallback(
-    (item: InventoryItemView) => {
-      setReclaimItem(item);
-      setReclaimReason("");
-      setReclaimNote("");
-    },
-    [setReclaimItem, setReclaimNote, setReclaimReason]
-  );
-
-  const closeReclaim = useCallback(() => {
-    setReclaimItem(null);
-    setReclaimReason("");
-    setReclaimNote("");
-  }, [setReclaimItem, setReclaimNote, setReclaimReason]);
-
-  const reclaimMutation = useMutation(
-    orpc.inventory.custody.reclaimCustody.mutationOptions({
-      onSuccess: async (result, variables) => {
-        /*
-         * The toast names the person it was taken from and repeats the half that
-         * owners most often get wrong: the item did not change owner. The server
-         * clears `custodianStaffId` and leaves `managerStaffId` exactly as it
-         * was — the whole difference between "call it back" and "hand it on" —
-         * and a teacher who has just reached into a colleague's hands deserves to
-         * be told that they are still the one answerable for it.
-         */
-        toast.success(
-          result.previousCustodianName
-            ? `Called back from ${result.previousCustodianName} — you are still in charge of it`
-            : "Called back — you are still in charge of it"
-        );
-        setReclaimItem(null);
-        setReclaimReason("");
-        setReclaimNote("");
-
-        await invalidateInventory(queryClient, "custody");
-
-        /*
-         * `custody.lent` is not in the `custody` scope's key set — that table was
-         * written for the admin screens, whose `custody` scope is a register and
-         * a detail read — so the section's own read is invalidated by hand. It
-         * is the one key this write must reach: the row leaving `lent` **is** the
-         * visible consequence of the reclaim, and a page that still shows it after
-         * the colleague's name has been cleared is describing a possession that no
-         * longer exists.
-         */
-        await queryClient.invalidateQueries({ queryKey: lentQueryKey });
-
-        // The trail has a row on it, for the same reason the hand-back re-reads it.
-        await queryClient.invalidateQueries({
-          queryKey: orpc.inventory.custody.history.queryOptions({
-            input: { itemId: variables.itemId },
-          }).queryKey,
-        });
-      },
-      onError: (error) => {
-        /**
-         * The server's own sentence, and there are three distinct ones that send
-         * the reader to three different places: the item is not in anybody's
-         * custody (a CONFLICT, and the holder handed it back in the meantime), the
-         * item is out on a dated loan and has to come back through the borrow
-         * return flow (a CONFLICT, and a process, not a permission), and the
-         * caller is not in charge of it (a FORBIDDEN naming the owner who is).
-         * Guessing at one of them would be the UI inventing a policy the server
-         * already states, so the confirm stays open on failure and the refusal is
-         * shown as written.
-         */
-        toast.error(
-          formatApiErrorMessage(error, "Could not call this item back")
-        );
-      },
-    })
-  );
-
-  /**
-   * The write, with the note the confirm collected, and **trimmed and dropped
-   * when empty** for the reason the hand-back does it: the server declares
-   * `note` as `optional(pipe(string(), minLength(1)))`, so an empty string is not
-   * "no note", it is a validation failure on a call-back that otherwise worked.
-   * Omitting the key is how "no note" is spelled on this wire.
-   *
-   * `mutateAsync`, not `mutate`, because the dialog is a *form* and has to be
-   * able to keep its reason, its note and its item on a refusal. The rejection
-   * arrives after `onError` has toasted the server's sentence, so the dialog's
-   * `catch` swallowing it swallows nothing that would otherwise be reported —
-   * and the outcome is still toasted exactly once, from the one place that owns
-   * the mutation.
-   */
-  const confirmReclaim = useCallback(
-    async (values: { reason: TransferReason; note?: string }) => {
-      await reclaimMutation.mutateAsync({
-        itemId: reclaimItem?.id ?? "",
-        ...values,
-      });
-    },
-    [reclaimItem, reclaimMutation]
-  );
-
-  const handleReclaimOpenChange = useCallback(
-    (open: boolean) => {
-      // A pending reclaim is not dismissable: this confirm is the only thing on
-      // screen that says a colleague is about to lose school property, and
-      // closing it mid-write would leave the outcome unknown.
-      if (!open && !reclaimMutation.isPending) {
-        closeReclaim();
-      }
-    },
-    [closeReclaim, reclaimMutation.isPending]
-  );
-
-  // ─── Handing the whole thing on ───────────────────────────────────────────
-
-  /**
-   * Only the *item* is lifted. The reason and the note are not, and the reason for
-   * that is the difference between this and the call-back above: that one is an
-   * `AlertDialog` with no `<form>`, so its fields have nowhere to live except here,
-   * whereas `TransferOwnershipDialog` is a `Dialog` with a real form, and a form
-   * that owns its own fields and resets them on success is the folder's own
-   * arrangement (`TransferCustodyDialog` does exactly this). Lifting two more
-   * pieces of state for a form that can hold them would be the only state on this
-   * page with no consumer.
-   */
-  const [transferItem, setTransferItem] = useState<InventoryItemView | null>(
-    null
-  );
-
-  const openTransfer = useCallback((item: InventoryItemView) => {
-    setTransferItem(item);
-  }, []);
-
-  const closeTransfer = useCallback(() => {
-    setTransferItem(null);
-  }, []);
-
-  const transferMutation = useMutation(
-    orpc.inventory.custody.transferOwnership.mutationOptions({
-      onSuccess: async (result, variables) => {
-        /*
-         * "Moved on", and not "moved": the item is in the same cupboard it was
-         * in. `transferOwnership` writes `managerStaffId` and clears
-         * `custodianStaffId` — no counter, no unit, no loan — and a toast that said
-         * the item had been handed over would be describing a movement that did not
-         * happen. The second half is the half the owner needs: the successor is
-         * named, because the next time anybody asks where it is, that is the name
-         * they will be given.
-         */
-        toast.success(
-          `${result.managerName} is now in charge of it — the item has not moved`
-        );
-        setTransferItem(null);
-
-        await invalidateInventory(queryClient, "custody");
-
-        /*
-         * `custody.lent` again, and for a **double** reason here: the row leaves
-         * this section because the holder is cleared, and the same write also ends
-         * the caller's own row in `myItems` — which the `custody` scope does cover.
-         * The section left holding a row the caller no longer owns anything about
-         * is the one the scope table forgot.
-         */
-        await queryClient.invalidateQueries({ queryKey: lentQueryKey });
-
-        // Two history rows, not one: the change of who is in charge, and the
-        // release of the holder. Both land on the same item's trail, and a teacher
-        // who reopens History within `staleTime` must not read a trail that
-        // predates the change they just made.
-        await queryClient.invalidateQueries({
-          queryKey: orpc.inventory.custody.history.queryOptions({
-            input: { itemId: variables.itemId },
-          }).queryKey,
-        });
-      },
-      onError: (error) => {
-        /**
-         * `transferOwnership` has two refusals worth naming and both are
-         * consequential enough that a paraphrase would lose the point: the item
-         * is out on a dated loan and the loan has to be closed through the borrow
-         * return flow first (a CONFLICT, and a *process*), and the named successor
-         * is not somebody school property may be given to — a terminated or
-         * office-category staff record, which is `assertStaffIsAssignable`
-         * refusing. Both are shown as written.
-         */
-        toast.error(
-          formatApiErrorMessage(error, "Could not hand this item on")
-        );
-      },
-    })
-  );
-
-  /**
-   * The write.
-   *
-   * `newOwnerStaffId` arrives from the dialog rather than being read here, and
-   * that is the point rather than convenience: the successor is the row's own
-   * `custodianStaffId`, the dialog is the thing that *names* it in the preview and
-   * the notice above it, and a page that went looking for it separately would be
-   * trusting a second copy of the same row. It is also the field the server cannot
-   * do without — `newOwnerStaffId` is non-nullable, and this verb has no way to
-   * say "nobody" (that is `assignManager`, and it is `update`).
-   */
-  const confirmTransfer = useCallback(
-    async (values: {
-      newOwnerStaffId: string;
-      reason: TransferReason;
-      note?: string;
-    }) => {
-      await transferMutation.mutateAsync({
-        itemId: transferItem?.id ?? "",
-        ...values,
-      });
-    },
-    [transferItem, transferMutation]
-  );
-
-  const handleTransferOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open && !transferMutation.isPending) {
-        closeTransfer();
-      }
-    },
-    [closeTransfer, transferMutation.isPending]
-  );
-
   // ─── Custody history ──────────────────────────────────────────────────────
 
   const [historyItem, setHistoryItem] = useState<InventoryItemView | null>(
@@ -620,235 +358,6 @@ export const useMyEquipment = () => {
     }),
     enabled: Boolean(historyItem),
   });
-
-  // ─── Handing an item back ─────────────────────────────────────────────────
-
-  const [releaseItem, setReleaseItem] = useState<InventoryItemView | null>(
-    null
-  );
-
-  /**
-   * The one piece of free text a teacher can attach to a self-service write.
-   *
-   * `releaseCustody` has collected an optional `note` since it shipped, and it
-   * lands in two permanent places: the `inventory_custody_history` row and the
-   * ledger transaction. Nothing on this page collected it, so the field existed
-   * only for the administrator's dialog — and the one person who actually knows
-   * why a projector went back to the store early is the teacher returning it.
-   *
-   * Reset on open and on close rather than surviving the dialog, so the next
-   * hand-back is never a copy of the last one's note.
-   */
-  const [releaseNote, setReleaseNote] = useState("");
-
-  const openRelease = useCallback(
-    (item: InventoryItemView) => {
-      setReleaseItem(item);
-      setReleaseNote("");
-    },
-    [setReleaseItem, setReleaseNote]
-  );
-
-  const releaseMutation = useMutation(
-    orpc.inventory.custody.release.mutationOptions({
-      onSuccess: async (_released, variables) => {
-        toast.success("Handed back to the store");
-        setReleaseItem(null);
-        await queryClient.invalidateQueries({ queryKey: myItemsQueryKey });
-        // The trail for this item now has a row on it. Leaving the cached read
-        // alone would let a teacher who reopens History within `staleTime` read
-        // a history that predates the change they just made.
-        await queryClient.invalidateQueries({
-          queryKey: orpc.inventory.custody.history.queryOptions({
-            input: { itemId: variables.itemId },
-          }).queryKey,
-        });
-      },
-      onError: (error) => {
-        /**
-         * The server's own sentence, not a paraphrase.
-         *
-         * `releaseCustody` distinguishes "it is on loan, close the borrow
-         * record first" (a CONFLICT) from "you are not the holder" (a
-         * FORBIDDEN) from "it is not in anyone's custody", and those three send
-         * a teacher to three different places. Guessing at one of them here
-         * would be the UI inventing a policy the server already states, so the
-         * dialog stays open on failure and the refusal is shown as written.
-         */
-        toast.error(
-          formatApiErrorMessage(error, "Could not hand this item back")
-        );
-      },
-    })
-  );
-
-  /**
-   * The write, with the note the dialog collected.
-   *
-   * Trimmed here and dropped when empty, because the server declares the field
-   * `optional(pipe(string(), minLength(1)))`: an empty string is not "no note",
-   * it is a validation failure, and a teacher who typed a space would be shown
-   * one for a hand-back that otherwise worked. Omitting the key is how "no note"
-   * is spelled on this wire.
-   */
-  const confirmRelease = useCallback(
-    (condition?: string) => {
-      if (!releaseItem) {
-        return;
-      }
-      const note = releaseNote.trim();
-      releaseMutation.mutate({
-        itemId: releaseItem.id,
-        ...(note ? { note } : {}),
-        ...(condition ? { condition: condition as never } : {}),
-      });
-    },
-    [releaseItem, releaseNote, releaseMutation]
-  );
-
-  const handleReleaseOpenChange = useCallback(
-    (open: boolean) => {
-      // A pending release is not dismissable: the dialog is the only thing
-      // telling the teacher what is about to happen to school property, and
-      // closing it mid-write would leave the outcome unknown.
-      if (!open && !releaseMutation.isPending) {
-        setReleaseItem(null);
-        setReleaseNote("");
-      }
-    },
-    [releaseMutation, setReleaseItem, setReleaseNote]
-  );
-
-  // ─── Taking an item off the shelf ─────────────────────────────────────────
-
-  /**
-   * The fourth verb, and a page-level action rather than a section one.
-   *
-   * "In my charge", "In my hands" and "Lent out by me" are the three relationships
-   * the page is built to teach, and all three are statements about a tie that
-   * **already exists**. Taking something is the opposite: it is how a tie starts.
-   * So the state lives here, at the page level, and the catalogue lives in the
-   * dialog — the page never holds a list of things the teacher does not have, and
-   * putting the action under "In my charge" would teach the wrong taxonomy before
-   * the teacher had even chosen an item.
-   */
-  /**
-   * Named `takeOpen` rather than `isTakeOpen`, which is a rename with a reason and
-   * not a style preference: the repo's `hook-use-state` rule is `[thing, setThing]`,
-   * and `isTakeOpen` / `setTakeOpen` is the one shape that does not satisfy it. The
-   * boolean is a plain flag, and the `is` was carrying no information the name
-   * `takeOpen` does not.
-   */
-  const [takeOpen, setTakeOpen] = useState(false);
-
-  const openTake = useCallback(() => {
-    setTakeOpen(true);
-  }, []);
-
-  const closeTake = useCallback(() => {
-    setTakeOpen(false);
-  }, []);
-
-  const takeMutation = useMutation(
-    orpc.inventory.custody.take.mutationOptions({
-      onSuccess: async () => {
-        /*
-         * The toast is a possession, not a transfer. The register's dialog says
-         * "Custody moved to S. Fernando"; there is nobody to name here but the
-         * reader, and the useful half of the sentence is the obligation — this
-         * is the one row that will now be under "In my hands" with a **Hand
-         * back** button beside it, and saying so is what turns a confirmation
-         * into an instruction.
-         */
-        toast.success("It is yours to hold — hand it back when you are done");
-        setTakeOpen(false);
-
-        /**
-         * By scope, like every other inventory write in this app. `custody`
-         * covers the register, the detail read, `myItems`, `custodyHistory` and
-         * both ledger tabs, which is the whole of what `takeItem` dirties.
-         */
-        await invalidateInventory(queryClient, "custody");
-
-        /*
-         * The catalogue is the one key the scope does not carry, and it is
-         * invalidated by hand for a stated reason rather than left stale.
-         *
-         * `inventoryQueryKeys` has no entry for `custody.takeable`, because that
-         * key was written before this catalogue existed and its table is
-         * documented as the exact set a *screen* dirties — the teacher portal is
-         * not one of the screens it was built for. Leaving it out is a real
-         * omission though: the query carries the app's 60-second `staleTime`, so
-         * a teacher who took the projector and reopened the dialog inside a
-         * minute would be shown the projector again, and the server would refuse
-         * it with "This item is already assigned to you" — the guaranteed failure
-         * this feature was built to remove, arriving through the cache instead of
-         * through a missing filter. `input: {}` for the same partial-match reason
-         * `inventoryQueryKeys` documents, so every search and category is
-         * covered, not just the one that happened to be on screen.
-         */
-        await queryClient.invalidateQueries({
-          queryKey:
-            orpc.inventory.custody.takeable.listTakeableItems.queryOptions({
-              input: {},
-            }).queryKey,
-        });
-
-        /*
-         * **`custody.lent` is deliberately *not* invalidated here, and the reason
-         * is that no row can enter or leave it.** Its predicate needs
-         * `managerStaffId = me` and a `custodianStaffId` that is not me, and
-         * `takeItem` writes exactly one thing: `custodianStaffId = me`. A write
-         * that can only produce the one predicate the section excludes cannot
-         * change its result, and invalidating it anyway would be a request whose
-         * response is known to be identical.
-         */
-      },
-      onError: (error) => {
-        /**
-         * The server's own sentence, for the same reason as the hand-back, and
-         * for a sharper reason here. Between the catalogue read and the click, an
-         * item can be taken by somebody else, or go out on loan, and
-         * `takeItem` refuses both with a message that names which. "This item is
-         * already out on loan, so it cannot be taken from the store" tells the
-         * teacher the shelf changed under them; "Could not take this item" tells
-         * them nothing and leaves the catalogue on screen looking wrong.
-         */
-        toast.error(formatApiErrorMessage(error, "Could not take this item"));
-      },
-    })
-  );
-
-  /**
-   * The write, as a promise, for the same reason the call-back's is.
-   *
-   * The catalogue is a form with a selection in it, and a selection is what the
-   * teacher has to change after reading the server's sentence — the shelf moved
-   * under them, the item went out on loan, somebody else got there first. So the
-   * dialog has to be able to keep the list, the term and the row it had chosen,
-   * which means it has to be able to await the outcome. `mutateAsync` rejects
-   * *after* `onError` has toasted the refusal, so the dialog's `catch` swallows a
-   * rejection whose report has already been given exactly once.
-   */
-  const confirmTake = useCallback(
-    async (itemId: string) => {
-      await takeMutation.mutateAsync({ itemId });
-    },
-    [takeMutation]
-  );
-
-  const handleTakeOpenChange = useCallback(
-    (open: boolean) => {
-      // A pending take is not dismissable for the same reason a pending
-      // hand-back is: the dialog is the only thing on screen that says what is
-      // about to happen to school property, and closing it mid-write would leave
-      // the outcome unknown.
-      if (!open && !takeMutation.isPending) {
-        setTakeOpen(false);
-      }
-    },
-    [takeMutation]
-  );
 
   // ─── The no-staff-record ask ──────────────────────────────────────────────
 
@@ -976,50 +485,6 @@ export const useMyEquipment = () => {
     historyError: historyQuery.error,
     history: historyQuery.data ?? [],
     refetchHistory: historyQuery.refetch,
-
-    // Hand-back dialog
-    releaseItem,
-    releaseNote,
-    setReleaseNote,
-    openRelease,
-    handleReleaseOpenChange,
-    confirmRelease,
-    isReleasePending: releaseMutation.isPending,
-
-    // Call-back dialog
-    reclaimItem,
-    reclaimReason,
-    setReclaimReason,
-    reclaimNote,
-    setReclaimNote,
-    openReclaim,
-    handleReclaimOpenChange,
-    confirmReclaim,
-    isReclaimPending: reclaimMutation.isPending,
-
-    // Hand-on dialog. Only the item, and the reason for that is on the state.
-    transferItem,
-    openTransfer,
-    handleTransferOpenChange,
-    confirmTransfer,
-    isTransferPending: transferMutation.isPending,
-
-    // Take dialog
-    //
-    // `isStaffRecordMissing` is the gate the page uses and it is deliberately
-    // not duplicated as a `staffId` boolean here: `listMyItems` answers a
-    // successful read with `staffId: null` for an account with no staff row, and
-    // `takeItem` refuses that account outright ("Your account has no staff record,
-    // so equipment cannot be assigned to you"). A button shown in that state is a
-    // button that always fails, so the page does not render it — and the catalogue
-    // answers `{ items: [], total: 0 }` for the same caller, so the two guards
-    // agree rather than one contradicting the other.
-    takeOpen,
-    openTake,
-    closeTake,
-    handleTakeOpenChange,
-    confirmTake,
-    isTakePending: takeMutation.isPending,
   };
 };
 

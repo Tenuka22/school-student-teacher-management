@@ -6,7 +6,7 @@
  * self-service path was built, and for a long time it was a door with no room
  * behind it — a `teacher` was authorised to take an item and was handed nothing
  * to take one from. `items.list` is the school-wide register and is
- * `adminProcedure` for a reason that has not changed: it is every item in the
+ * `inventoryOverseerProcedure` for a reason that has not changed: it is every item in the
  * school with every manager's and custodian's name, valuation, location and
  * condition beside it, and no filter on the input can un-leak that, because a
  * caller who wants the school simply asks for the unfiltered set.
@@ -234,7 +234,6 @@ export const listTakeableItems = requireInventoryPermission("read")
     })
   )
   .handler(async ({ input, context }) => {
-
     const limit = input.limit ?? DEFAULT_LIMIT;
     const search = input.search?.trim();
 

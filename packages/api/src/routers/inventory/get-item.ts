@@ -18,7 +18,7 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { itemViewJoins, toItemView } from "./inventory-database";
 
 /**
@@ -41,7 +41,7 @@ import { itemViewJoins, toItemView } from "./inventory-database";
  * depend on the caller's role, which is how a list page ends up rendering three
  * different tables from one component.
  *
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -62,7 +62,7 @@ import { itemViewJoins, toItemView } from "./inventory-database";
  * contract in `packages/auth/src/permissions.ts`, which says `read` reaches no
  * school-wide register.
  */
-export const getItem = adminProcedure
+export const getItem = inventoryOverseerProcedure
   .input(v.object({ itemId: inventoryItemIdSchema }))
   .handler(async ({ input, context }) => {
     const [row] = await itemViewJoins(context.db)
@@ -71,7 +71,7 @@ export const getItem = adminProcedure
           eq(inventoryItem.id, input.itemId),
           isNull(inventoryItem.deletedAt),
           isNull(inventoryItem.voidedAt)
-      )
+        )
       )
       .limit(1);
 

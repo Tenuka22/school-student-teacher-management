@@ -2,7 +2,7 @@
  * Sign off that a proposed write-off *should* happen. **Still nothing moves.**
  *
  * The second of the two stages, and the one that needs the stronger gate. The
- * source app used `adminProcedure` here and `managementProcedure` on the create
+ * source app used `inventoryOverseerProcedure` here and `managementProcedure` on the create
  * side, and this port keeps that split rather than reaching for
  * `requireInventoryPermission("approve")` — see the note on the export below for
  * why the two are not as different as they look today, stated plainly rather
@@ -36,7 +36,7 @@ import {
 import { eq } from "drizzle-orm";
 import { object, optional, string } from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   countersOf,
@@ -71,7 +71,7 @@ const getLockedDisposal = async (db: Executor, disposalId: string) => {
 };
 
 /**
- * **`adminProcedure`, not `requireInventoryPermission("approve")` — and it does
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("approve")` — and it does
  * not, on its own, buy separation of duties.**
  *
  * A write-off is a financial certificate: it removes real money from the
@@ -90,7 +90,7 @@ const getLockedDisposal = async (db: Executor, disposalId: string) => {
  * a security control. A `teacher` account reaches neither, which is the only
  * thing both gates actually guarantee today.
  *
- * `adminProcedure` is chosen anyway, for the property that survives the next
+ * `inventoryOverseerProcedure` is chosen anyway, for the property that survives the next
  * change to the grants table: it admits the three leadership seats **by
  * construction**, as a literal role list, and it keeps admitting them if a
  * future storekeeper or clerk role is granted `inventory: ["approve"]` — which is
@@ -101,7 +101,7 @@ const getLockedDisposal = async (db: Executor, disposalId: string) => {
  * **The actual separation of duties is the check in the handler below**, not this
  * procedure level, and it is also not airtight — see the comment there.
  */
-export const approveDisposal = adminOnlyProcedure
+export const approveDisposal = inventoryManagerProcedure
   .input(
     object({
       disposalId: inventoryDisposalIdSchema,
@@ -133,7 +133,6 @@ export const approveDisposal = adminOnlyProcedure
           message: `This request is ${disposalStatusLabel(existing.status)} — only a request that is still awaiting approval can be signed off`,
         });
       }
-
 
       /**
        * Refuse the requester signing their own request.
@@ -200,7 +199,7 @@ export const approveDisposal = adminOnlyProcedure
         fromStatus: existing.status,
         toStatus: "approved",
         note: input.note ?? "Disposal approved",
-      changedByStaffId: actor.userId,
+        changedByStaffId: actor.userId,
       });
 
       // The item is read (not locked) for its name, SKU and counters: the ledger
@@ -247,7 +246,7 @@ export const approveDisposal = adminOnlyProcedure
         entityType: "inventory_disposal",
         entityId: existing.id,
         before: { status: existing.status, approvedAt: null },
-      after: { status: updated.status, approvedByStaffId: actor.userId },
+        after: { status: updated.status, approvedByStaffId: actor.userId },
       });
 
       return {

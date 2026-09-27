@@ -30,6 +30,7 @@
  */
 import { ORPCError } from "@orpc/server";
 import { inventoryBorrowStatusSchema } from "@school-student-teacher-management/db/constants/inventory";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryBorrow,
   inventoryBorrowUnit,
@@ -43,7 +44,6 @@ import {
   studentIdSchema,
 } from "@school-student-teacher-management/db/schema/marking";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   and,
   asc,
@@ -74,7 +74,7 @@ import {
 } from "valibot";
 import type { InferOutput } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { normalizeText, todayIsoDate } from "./inventory-calculations";
 import {
   iso,
@@ -166,7 +166,7 @@ const escapeLikePattern = (value: string): string =>
 const studentSearchName = sql<string>`${student.firstName} || ' ' || ${student.lastName}`;
 
 /**
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -313,7 +313,7 @@ const borrowConditions = (
   return conditions.length > 0 ? and(...conditions) : undefined;
 };
 
-export const listBorrows = adminProcedure
+export const listBorrows = inventoryOverseerProcedure
   .input(listBorrowsInput)
   .handler(async ({ input, context }) => {
     const today = todayIsoDate();

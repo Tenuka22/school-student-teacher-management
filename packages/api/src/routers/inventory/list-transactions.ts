@@ -19,14 +19,14 @@ import {
   inventoryActionSchema,
 } from "@school-student-teacher-management/db/constants/inventory";
 import type { InventoryAction } from "@school-student-teacher-management/db/constants/inventory";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryItem,
   inventoryItemIdSchema,
   inventoryTransaction,
+  userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import { user } from "@school-student-teacher-management/db/schema/auth";
-import { userIdSchema } from "@school-student-teacher-management/db/schema/inventory";
 import { and, count, desc, eq, gte, ilike, lt, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -41,7 +41,7 @@ import {
   string,
 } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { addDaysIsoDate } from "./inventory-calculations";
 import type { Executor } from "./inventory-database";
 import { iso } from "./inventory-database";
@@ -188,7 +188,7 @@ const toTransactionRow = (row: LedgerRow) => {
 };
 
 /**
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -209,7 +209,7 @@ const toTransactionRow = (row: LedgerRow) => {
  * is. What this list now satisfies is the `teacher` statement's own contract,
  * which names the school-wide ledger as something that grant must not reach.
  */
-export const listTransactions = adminProcedure
+export const listTransactions = inventoryOverseerProcedure
   .input(
     object({
       itemId: optional(inventoryItemIdSchema),

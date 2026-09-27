@@ -146,9 +146,9 @@ const isItemCondition = (value: string): value is ItemCondition =>
  * The QR encodes a full URL (`{origin}/inventory/{itemId}?u=N`) rather than a bare
  * id, so a phone's own camera app — no scanner in this app at all — can open the
  * item on a browser and show the same page. `export-qr-sheet.ts` builds the payload
- * and `qr-scan-dialog.tsx` in the teacher's folder reads it; this is the third
- * reader, and it has to agree with the other two or a scan of a valid label is
- * refused for looking like the wrong item.
+ * and the `/inventory/$itemId` route reads it; this is the second reader, and it
+ * has to agree with the first or a scan of a valid label is refused for looking
+ * like the wrong item.
  *
  * A bare id is also accepted, because a label read off a dead battery or copied out
  * of a spreadsheet is a bare id, and refusing it would be a second thing to learn at

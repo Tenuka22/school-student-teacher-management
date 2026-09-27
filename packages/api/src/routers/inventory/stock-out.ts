@@ -37,7 +37,7 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import {
   assertSufficientAvailableQuantity,
   assertUnitsNotPendingDisposal,
@@ -50,7 +50,7 @@ import {
   insertInventoryTransaction,
 } from "./inventory-database";
 
-export const stockOut = adminOnlyProcedure
+export const stockOut = inventoryManagerProcedure
   .input(
     v.object({
       itemId: inventoryItemIdSchema,

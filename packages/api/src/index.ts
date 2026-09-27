@@ -94,6 +94,31 @@ export const teacherProcedure = publicProcedure.use(
   requireRole(...ADMIN_ROLES, "teacher")
 );
 
+/**
+ * The inventory register's admin-tier reads: the school-wide item list, the
+ * assignable-staff picker, borrow/issue/disposal ledgers. Same audience as
+ * `adminProcedure` (admin, principal, vicePrincipal) **plus** the seeded
+ * `inventoryAdmin` seat, which has no reason to reach any other admin
+ * surface but is exactly who this register is for.
+ */
+export const inventoryOverseerProcedure = publicProcedure.use(
+  requireRole(...ADMIN_ROLES, "inventoryAdmin")
+);
+
+/**
+ * The inventory register's admin-tier writes: registering/editing items and
+ * units, moving custody between named people, appointing a manager, stock
+ * in/out, closing a dated loan, signing off a write-off. Narrower than
+ * `inventoryOverseerProcedure` the same way `adminOnlyProcedure` is narrower
+ * than `adminProcedure` — literally "admin" or the seeded `inventoryAdmin`
+ * seat — not the leadership roles — because these are the writes that decide
+ * who is holding school property, and that is this seat's whole job, not a
+ * leadership one.
+ */
+export const inventoryManagerProcedure = publicProcedure.use(
+  requireRole("admin", "inventoryAdmin")
+);
+
 // ─── Permission-based middleware ─────────────────────────────────────────────
 
 type PermissionResource = string;

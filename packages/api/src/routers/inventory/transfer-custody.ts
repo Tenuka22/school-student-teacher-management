@@ -20,17 +20,17 @@
  */
 import { ORPCError } from "@orpc/server";
 import { inventoryTransferReasonSchema } from "@school-student-teacher-management/db/constants/inventory";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
   userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   assertStaffIsAssignable,
@@ -63,7 +63,7 @@ const resolveStaffName = async (
   return record?.name ?? null;
 };
 
-export const transferCustody = adminOnlyProcedure
+export const transferCustody = inventoryManagerProcedure
   .input(
     object({
       itemId: inventoryItemIdSchema,

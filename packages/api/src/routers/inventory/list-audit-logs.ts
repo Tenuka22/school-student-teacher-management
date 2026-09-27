@@ -1,3 +1,4 @@
+import { user } from "@school-student-teacher-management/db/schema/auth";
 /**
  * The entity audit trail, read: *"what did this row look like before and after
  * it was changed?"*
@@ -19,10 +20,11 @@
  * `entityId` matches an id that is unique within one table and meaningless
  * across ten, so it can return several unrelated entities at once.
  */
-import { inventoryAuditLog } from "@school-student-teacher-management/db/schema/inventory";
+import {
+  inventoryAuditLog,
+  userIdSchema,
+} from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import { user } from "@school-student-teacher-management/db/schema/auth";
-import { userIdSchema } from "@school-student-teacher-management/db/schema/inventory";
 import { and, count, desc, eq, gte, lt } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -37,7 +39,7 @@ import {
   string,
 } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { addDaysIsoDate } from "./inventory-calculations";
 import { iso } from "./inventory-database";
 
@@ -82,7 +84,7 @@ const auditSelection = {
 } as const;
 
 /**
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -107,7 +109,7 @@ const auditSelection = {
  * satisfies is the `teacher` statement's own contract, which names the
  * school-wide register and ledger as things that grant must not reach.
  */
-export const listAuditLogs = adminProcedure
+export const listAuditLogs = inventoryOverseerProcedure
   .input(
     object({
       entityType: optional(pipe(string(), maxLength(60))),

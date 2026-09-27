@@ -15,7 +15,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { InventoryItemRow } from "./inventory-database";
 import {
   countersOf,
@@ -37,7 +37,7 @@ const toAuditSnapshot = (row: InventoryItemRow): Record<string, unknown> => ({
   voidedAt: isoOrNull(row.voidedAt),
 });
 
-export const unvoidItem = adminOnlyProcedure
+export const unvoidItem = inventoryManagerProcedure
   .input(v.object({ itemId: inventoryItemIdSchema }))
   .handler(({ input, context }) =>
     context.db.transaction(async (tx) => {

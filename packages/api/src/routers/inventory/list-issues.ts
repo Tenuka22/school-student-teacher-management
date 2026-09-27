@@ -12,6 +12,7 @@
  *    issue is terminal and this list must not pretend otherwise.
  */
 import { ORPCError } from "@orpc/server";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryIssue,
   inventoryIssueUnit,
@@ -20,7 +21,6 @@ import {
   inventoryUnit,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -35,7 +35,7 @@ import {
   string,
 } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { addDaysIsoDate, todayIsoDate } from "./inventory-calculations";
 import { iso } from "./inventory-database";
 
@@ -136,7 +136,7 @@ const listIssuesInput = object({
 });
 
 /**
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -158,7 +158,7 @@ const listIssuesInput = object({
  * is the `teacher` statement's own contract, which names the school-wide
  * movement and write-off lists as things that grant must not reach.
  */
-export const listIssues = adminProcedure
+export const listIssues = inventoryOverseerProcedure
   .input(listIssuesInput)
   .handler(async ({ input, context }): Promise<IssueListResult> => {
     /**

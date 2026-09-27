@@ -14,7 +14,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { InventoryItemRow } from "./inventory-database";
 import {
   assertCategoryExists,
@@ -81,7 +81,7 @@ const toAuditSnapshot = (row: InventoryItemRow): Record<string, unknown> => ({
  * writes to both.
  */
 
-export const updateItem = adminOnlyProcedure
+export const updateItem = inventoryManagerProcedure
   .input(
     v.object({
       itemId: inventoryItemIdSchema,
@@ -149,12 +149,14 @@ export const updateItem = adminOnlyProcedure
           // question, and it is not answered here.
           purchaseValue: input.purchaseValue ?? existing.purchaseValue,
           currentValue: input.currentValue ?? existing.currentValue,
-          purchaseDate:
-            input.purchaseDate === undefined
-              ? existing.purchaseDate
-              : input.purchaseDate === null
-                ? null
-              : new Date(input.purchaseDate),
+          purchaseDate: (() => {
+            if (input.purchaseDate === undefined) {
+              return existing.purchaseDate;
+            }
+            return input.purchaseDate === null
+              ? null
+              : new Date(input.purchaseDate);
+          })(),
           depreciationRatePercent:
             input.depreciationRatePercent ?? existing.depreciationRatePercent,
           // `null` clears the photo (the field sends it explicitly when a

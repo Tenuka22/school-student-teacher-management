@@ -23,10 +23,17 @@ import { object } from "valibot";
 import { requireInventoryPermission } from "../../index";
 import { getInventoryActor } from "./inventory-database";
 
-/** Restated from `release-custody.ts`/`list-custody-history.ts` — see either. */
-const ADMIN_ROLES = new Set(["admin", "principal", "vicePrincipal"]);
+/** Restated from `release-custody.ts`/`list-custody-history.ts` \u2014 see either. */
+const ADMIN_ROLES = new Set([
+  "admin",
+  "principal",
+  "vicePrincipal",
+  "inventoryAdmin",
+]);
 
-export const acknowledgeCustodyNotice = requireInventoryPermission("take")
+export const acknowledgeCustodyNotice = requireInventoryPermission(
+  "acknowledge"
+)
   .input(object({ id: inventoryCustodyNoticeRecipientIdSchema }))
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);

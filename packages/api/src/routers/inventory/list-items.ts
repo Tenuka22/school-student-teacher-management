@@ -20,7 +20,7 @@ import type { SQL } from "drizzle-orm";
 import { and, count, desc, eq, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import type { InventoryItemStatus } from "./inventory-calculations";
 import { itemStatusExpression } from "./inventory-calculations";
 import { itemViewJoins, toItemView } from "./inventory-database";
@@ -81,7 +81,7 @@ const escapeLikePattern = (value: string): string =>
  * list header renders "showing 50 of 312" and a total that silently counted the
  * page rather than the match set makes that line a lie.
  *
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -103,7 +103,7 @@ const escapeLikePattern = (value: string): string =>
  * school-wide register, ledger, movement and write-off lists as things that
  * grant must not reach.
  */
-export const listItems = adminProcedure
+export const listItems = inventoryOverseerProcedure
   .input(
     v.object({
       search: v.optional(v.pipe(v.string(), v.maxLength(120))),
@@ -144,13 +144,11 @@ export const listItems = adminProcedure
     // `SQL | undefined` because drizzle types the combinators that way, and
     // `and(...)` skips the undefined entries — which is the behaviour we want,
     // since a filter the caller did not ask for must not narrow anything.
-    const filters: (SQL | undefined)[] = [];
-
     // Voided rows (a mistaken entry, not a retirement) never appear here,
-    // with or without `includeDeleted` — there is no "show voided" toggle,
+    // with or without `includeDeleted` \u2014 there is no "show voided" toggle,
     // because a voided row is not a piece of the school's history somebody
     // legitimately wants to browse, the way a retired item is.
-    filters.push(isNull(inventoryItem.voidedAt));
+    const filters: (SQL | undefined)[] = [isNull(inventoryItem.voidedAt)];
 
     if (!input.includeDeleted) {
       filters.push(isNull(inventoryItem.deletedAt));

@@ -1,32 +1,7 @@
 "use client";
 
-import {
-  ITEM_CONDITIONS,
-  itemConditionLabel,
-} from "@school-student-teacher-management/db/constants/inventory";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Button } from "@school-student-teacher-management/ui/components/button";
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from "@school-student-teacher-management/ui/components/field";
 import { Input } from "@school-student-teacher-management/ui/components/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@school-student-teacher-management/ui/components/select";
 import {
   Sheet,
   SheetContent,
@@ -42,24 +17,19 @@ import {
   TableHeader,
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
-import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
 import {
   IconClipboard,
   IconHistory,
   IconMessageReport,
-  IconPackageExport,
-  IconQrcode,
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
 import { formatDistanceToNow } from "date-fns";
-import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type {
   CustodyHistoryEntry,
   InventoryItemView,
-  TransferReason,
 } from "@/components/staff/inventory/inventory-types";
 import {
   ConditionBadge,
@@ -74,20 +44,8 @@ import {
 } from "@/components/staff/inventory/stock-dialogs";
 import { CustodyNotices } from "@/components/staff/teacher-portal/custody-notices";
 import { LentOutSection } from "@/components/staff/teacher-portal/lent-out-section";
-import { QrScanDialog } from "@/components/staff/teacher-portal/qr-scan-dialog";
-import { ReclaimDialog } from "@/components/staff/teacher-portal/reclaim-dialog";
-import { TakeItemDialog } from "@/components/staff/teacher-portal/take-item-dialog";
-import { TransferOwnershipDialog } from "@/components/staff/teacher-portal/transfer-ownership-dialog";
 import type { MyEquipmentApi } from "@/components/staff/teacher-portal/use-my-equipment";
 import { useMyEquipment } from "@/components/staff/teacher-portal/use-my-equipment";
-
-/**
- * The cap on the hand-back note, matching the administrator's `TakeOrReleaseDialog`
- * and the 500 the field has always been given. A sentence is the target; a
- * paragraph is a letter, and a letter to the next person is a different
- * instrument from a note on a custody row.
- */
-const RELEASE_NOTE_MAX_LENGTH = 500;
 
 /**
  * One person's name on a custody-history row is `PartyName`, imported from the
@@ -236,14 +194,12 @@ const EquipmentRow = ({
   isHeldByViewer,
   canReportProblem,
   onOpenHistory,
-  onOpenRelease,
   onReportProblem,
 }: {
   item: InventoryItemView;
   isHeldByViewer: boolean;
   canReportProblem: boolean;
   onOpenHistory: (item: InventoryItemView) => void;
-  onOpenRelease: (item: InventoryItemView) => void;
   onReportProblem: (item: InventoryItemView) => void;
 }) => (
   <TableRow className="cursor-pointer" onClick={() => onOpenHistory(item)}>
@@ -300,20 +256,6 @@ const EquipmentRow = ({
           <IconHistory data-icon="inline-start" />
           History
         </Button>
-        {isHeldByViewer ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label={`Hand back ${item.name}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenRelease(item);
-            }}
-          >
-            Hand back
-          </Button>
-        ) : null}
       </div>
     </TableCell>
   </TableRow>
@@ -352,7 +294,6 @@ const EquipmentSection = ({
   canReportProblem,
   holdsItem,
   onOpenHistory,
-  onOpenRelease,
   onReportProblem,
 }: {
   id: string;
@@ -365,7 +306,6 @@ const EquipmentSection = ({
   canReportProblem: boolean;
   holdsItem: (item: InventoryItemView) => boolean;
   onOpenHistory: (item: InventoryItemView) => void;
-  onOpenRelease: (item: InventoryItemView) => void;
   onReportProblem: (item: InventoryItemView) => void;
 }) => {
   let body: ReactNode;
@@ -438,7 +378,6 @@ const EquipmentSection = ({
               isHeldByViewer={holdsItem(item)}
               canReportProblem={canReportProblem}
               onOpenHistory={onOpenHistory}
-              onOpenRelease={onOpenRelease}
               onReportProblem={onReportProblem}
             />
           ))}
@@ -649,55 +588,14 @@ const CustodyHistorySheet = ({
 const EquipmentHeader = ({
   title,
   subtitle,
-  canTakeFromTheShelf,
-  onTake,
-  onScan,
 }: {
   title: string;
   subtitle: string;
-  canTakeFromTheShelf: boolean;
-  onTake: () => void;
-  onScan: () => void;
 }) => (
   <div className="flex flex-wrap items-start justify-between gap-4">
     <div>
       <h1 className="font-heading text-4xl font-semibold">{title}</h1>
       <p className="text-muted-foreground mt-2 max-w-prose">{subtitle}</p>
-    </div>
-
-    <div className="flex flex-wrap gap-2">
-      {/*
-        Scanning is offered whenever taking is — the same account that
-        cannot be assigned an item cannot borrow one by scanning it either,
-        since both end at the same `takeItem` refusal. It is also how a
-        hand-back reaches this page from a scan: `/inventory/$itemId` decides
-        which of the two the scanned item actually offers.
-    */}
-      {canTakeFromTheShelf ? (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onScan}
-          data-icon="inline-start"
-        >
-          <IconQrcode data-icon="inline-start" />
-          Scan QR
-        </Button>
-      ) : null}
-      {/*
-      Gated on the account having a staff record rather than on a role, and the
-      reason is `take-item.ts`: it refuses an account with no `staff` row before it
-      opens a transaction, and the seeded `admin` / `principal` / `vicePrincipal`
-      seats are exactly that by design. A button rendered in that state is a button
-        that always fails — the defect this page had to remove twice already. See
-      `canTakeFromTheShelf` for the `isError` half of the gate.
-    */}
-      {canTakeFromTheShelf ? (
-        <Button type="button" onClick={onTake} data-icon="inline-start">
-          <IconPackageExport data-icon="inline-start" />
-          Take an item
-        </Button>
-      ) : null}
     </div>
   </div>
 );
@@ -819,180 +717,13 @@ const EquipmentSearchBar = ({
  * the safe option until the teacher deliberately leaves it, and the ref lives here
  * with the markup that uses it.
  */
-const ReleaseDialog = ({
-  item,
-  note,
-  onNoteChange,
-  condition,
-  onConditionChange,
-  onOpenChange,
-  onConfirm,
-  isPending,
-}: {
-  item: InventoryItemView | null;
-  note: string;
-  onNoteChange: (note: string) => void;
-  condition: string;
-  onConditionChange: (condition: string) => void;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-  isPending: boolean;
-}) => {
-  const cancelRef = useRef<HTMLButtonElement>(null);
-
-  return (
-    <AlertDialog open={Boolean(item)} onOpenChange={onOpenChange}>
-      <AlertDialogContent initialFocus={cancelRef} className="sm:max-w-md">
-        <AlertDialogTitle>Hand this item back?</AlertDialogTitle>
-        <AlertDialogDescription>
-          {item
-            ? `${item.name} (${item.sku}) goes back to the store and stops being in your hands. It stays on the register, and the change is recorded with your name and the time. You can be given it again afterwards, but nothing here brings it back on its own.`
-            : "This item goes back to the store and stops being in your hands."}
-        </AlertDialogDescription>
-        <Field>
-          <FieldLabel htmlFor="my-equipment-release-condition">
-            Condition (optional)
-          </FieldLabel>
-          <Select
-            value={condition}
-            onValueChange={(value) => onConditionChange(value ?? "")}
-          >
-            <SelectTrigger id="my-equipment-release-condition">
-              <SelectValue placeholder="Leave unchanged" />
-            </SelectTrigger>
-            <SelectContent>
-              {ITEM_CONDITIONS.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {itemConditionLabel(option)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldDescription>
-            Only set this if it changed while it was with you — most hand-backs
-            leave it as it was.
-          </FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="my-equipment-release-note">
-            Add a note (optional)
-          </FieldLabel>
-          <Textarea
-            id="my-equipment-release-note"
-            rows={2}
-            maxLength={RELEASE_NOTE_MAX_LENGTH}
-            disabled={isPending}
-            placeholder="Where it is going back to, or anything the next person should know."
-            value={note}
-            onChange={(event) => onNoteChange(event.target.value)}
-          />
-          <FieldDescription>
-            Goes onto this item&rsquo;s custody history, permanently, where the
-            next person to look will read it.
-          </FieldDescription>
-        </Field>
-        <AlertDialogFooter>
-          <AlertDialogCancel ref={cancelRef} disabled={isPending}>
-            Keep holding it
-          </AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} disabled={isPending}>
-            {isPending ? "Handing back..." : "Hand it back"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-};
-
-/**
- * The owner's two verbs over an item a colleague is holding.
- *
- * Each dialog owns nothing but its own markup: the state is in `useMyEquipment`
- * next to the mutation, and the outcome is toasted exactly once, from there. Two
- * things about the arrangement are worth stating rather than leaving to be
- * discovered:
- *
- * - **Only one of the two can be open at a time, for the same reason
- *   `CustodyDialogs` gives.** `TransferReasonField` renders a `useId`-derived id
- *   today, so a collision is no longer possible — but a confirm stacked on top of a
- *   dialog is still a dialog on top of a dialog, and Base UI does not arbitrate
- *   between them. The page opens one per action, and neither of these can be
- *   reached while the other is up, because both are opened from a row and the row is
- *   behind the dialog.
- * - **Neither needs a role check in this page, and adding one would be worse than
- *   useless.** Both are opened from a row whose `managerStaffId` is the reader's, by
- *   the predicate of the read that produced it. `manageOwn` is a *grant*, not a
- *   scope, so a client-side role test could only ever be a guess at the handler's
- *   own `isOwner` check — and it would hide the action from exactly the three
- *   leadership seats that are also allowed to use it.
- */
-const OwnerVerbDialogs = ({
-  reclaimItem,
-  reclaimReason,
-  onReclaimReasonChange,
-  reclaimNote,
-  onReclaimNoteChange,
-  onReclaimOpenChange,
-  onReclaimSubmit,
-  isReclaimPending,
-  transferItem,
-  ownerName,
-  onTransferOpenChange,
-  onTransferSubmit,
-  isTransferPending,
-}: {
-  reclaimItem: InventoryItemView | null;
-  reclaimReason: string;
-  onReclaimReasonChange: (reason: string) => void;
-  reclaimNote: string;
-  onReclaimNoteChange: (note: string) => void;
-  onReclaimOpenChange: (open: boolean) => void;
-  onReclaimSubmit: (values: {
-    reason: TransferReason;
-    note?: string;
-  }) => Promise<void>;
-  isReclaimPending: boolean;
-  transferItem: InventoryItemView | null;
-  ownerName: string | null;
-  onTransferOpenChange: (open: boolean) => void;
-  onTransferSubmit: (values: {
-    newOwnerStaffId: string;
-    reason: TransferReason;
-    note?: string;
-  }) => Promise<void>;
-  isTransferPending: boolean;
-}) => (
-  <>
-    <ReclaimDialog
-      open={Boolean(reclaimItem)}
-      onOpenChange={onReclaimOpenChange}
-      item={reclaimItem}
-      isPending={isReclaimPending}
-      reason={reclaimReason}
-      onReasonChange={onReclaimReasonChange}
-      note={reclaimNote}
-      onNoteChange={onReclaimNoteChange}
-      onSubmit={onReclaimSubmit}
-    />
-
-    <TransferOwnershipDialog
-      open={Boolean(transferItem)}
-      onOpenChange={onTransferOpenChange}
-      item={transferItem}
-      ownerName={ownerName}
-      isPending={isTransferPending}
-      onSubmit={onTransferSubmit}
-    />
-  </>
-);
-
-type EquipmentSectionFilter = "all" | "in-charge" | "in-hands" | "lent-out";
-
 /**
  * Module scope, not per-render: the copy for a section is fixed, so rebuilding
  * the record on every render hands memoized children a new `headerCopy` each
  * time and makes the header look like it changed when nothing did.
  */
+type EquipmentSectionFilter = "all" | "in-charge" | "in-hands" | "lent-out";
+
 const HEADER_COPY: Record<
   EquipmentSectionFilter,
   { title: string; subtitle: string }
@@ -1030,21 +761,8 @@ const HEADER_COPY: Record<
  * back. Passing the hook's whole result keeps the prop list from being a
  * forty-line transcription of the hook's return type.
  */
-const EquipmentDialogs = ({
-  equipment,
-  isScanOpen,
-  onScanOpenChange,
-  releaseCondition,
-  onReleaseConditionChange,
-}: {
-  equipment: MyEquipmentApi;
-  isScanOpen: boolean;
-  onScanOpenChange: (open: boolean) => void;
-  releaseCondition: string;
-  onReleaseConditionChange: (condition: string) => void;
-}) => {
+const EquipmentDialogs = ({ equipment }: { equipment: MyEquipmentApi }) => {
   const {
-    accountName,
     historyItem,
     closeHistory,
     isHistoryLoading,
@@ -1052,85 +770,18 @@ const EquipmentDialogs = ({
     historyError,
     history,
     refetchHistory,
-    releaseItem,
-    releaseNote,
-    setReleaseNote,
-    handleReleaseOpenChange,
-    confirmRelease,
-    isReleasePending,
-    reclaimItem,
-    reclaimReason,
-    setReclaimReason,
-    reclaimNote,
-    setReclaimNote,
-    handleReclaimOpenChange,
-    confirmReclaim,
-    isReclaimPending,
-    transferItem,
-    handleTransferOpenChange,
-    confirmTransfer,
-    isTransferPending,
-    takeOpen,
-    handleTakeOpenChange,
-    confirmTake,
-    isTakePending,
   } = equipment;
 
   return (
-    <>
-      <CustodyHistorySheet
-        item={historyItem}
-        entries={history}
-        isLoading={isHistoryLoading}
-        isError={isHistoryError}
-        error={historyError}
-        onClose={closeHistory}
-        onRetry={refetchHistory}
-      />
-
-      <ReleaseDialog
-        item={releaseItem}
-        note={releaseNote}
-        onNoteChange={setReleaseNote}
-        condition={releaseCondition}
-        onConditionChange={onReleaseConditionChange}
-        onOpenChange={(open) => {
-          if (!open) {
-            onReleaseConditionChange("");
-          }
-          handleReleaseOpenChange(open);
-        }}
-        onConfirm={() => {
-          void confirmRelease(releaseCondition || undefined);
-        }}
-        isPending={isReleasePending}
-      />
-
-      <OwnerVerbDialogs
-        reclaimItem={reclaimItem}
-        reclaimReason={reclaimReason}
-        onReclaimReasonChange={setReclaimReason}
-        reclaimNote={reclaimNote}
-        onReclaimNoteChange={setReclaimNote}
-        onReclaimOpenChange={handleReclaimOpenChange}
-        onReclaimSubmit={confirmReclaim}
-        isReclaimPending={isReclaimPending}
-        transferItem={transferItem}
-        ownerName={accountName}
-        onTransferOpenChange={handleTransferOpenChange}
-        onTransferSubmit={confirmTransfer}
-        isTransferPending={isTransferPending}
-      />
-
-      <TakeItemDialog
-        open={takeOpen}
-        onOpenChange={handleTakeOpenChange}
-        isPending={isTakePending}
-        onSubmit={confirmTake}
-      />
-
-      <QrScanDialog open={isScanOpen} onOpenChange={onScanOpenChange} />
-    </>
+    <CustodyHistorySheet
+      item={historyItem}
+      entries={history}
+      isLoading={isHistoryLoading}
+      isError={isHistoryError}
+      error={historyError}
+      onClose={closeHistory}
+      onRetry={refetchHistory}
+    />
   );
 };
 
@@ -1166,10 +817,6 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
     hasActiveFilters,
     clearFilters,
     openHistory,
-    openRelease,
-    openReclaim,
-    openTransfer,
-    openTake,
   } = equipment;
 
   const showInCharge = section === "all" || section === "in-charge";
@@ -1192,7 +839,6 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
    * to "can I take something?" is then "not until that is fixed" rather than a
    * guess.
    */
-  const canTakeFromTheShelf = !isStaffRecordMissing && !isError;
 
   /**
    * The two numbers behind "Showing X of Y", and **both count items rather than
@@ -1231,9 +877,6 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
 
   const headerCopy = HEADER_COPY[section];
 
-  const [isScanOpen, setIsScanOpen] = useState(false);
-  const [releaseCondition, setReleaseCondition] = useState("");
-
   return (
     <div className="space-y-6">
       <CustodyNotices />
@@ -1241,9 +884,6 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
       <EquipmentHeader
         title={headerCopy.title}
         subtitle={headerCopy.subtitle}
-        canTakeFromTheShelf={canTakeFromTheShelf}
-        onTake={openTake}
-        onScan={() => setIsScanOpen(true)}
       />
 
       <ThreeIdeasNotice hidden={isStaffRecordMissing || section !== "all"} />
@@ -1314,15 +954,14 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
             <EquipmentSection
               id="in-charge"
               title="In my charge"
-              description="You are the person responsible for these. They may be on a shelf, in a store room or in use — you would be the one asked about them."
+              description="You are the person responsible for these. They may be on a shelf, in a store room or in use \ you would be the one asked about them."
               items={inCharge}
               isLoading={isLoading}
               canReportProblem
               holdsItem={holdsItem}
               emptyTitle="Nothing is entrusted to you"
-              emptyDescription="No item on the register names you as the person responsible for it. When an administrator puts you in charge of something, it will appear here — along with the obligation that comes with it: knowing where it is, and reporting it if it breaks or goes missing."
+              emptyDescription="No item on the register names you as the person responsible for it. When an administrator puts you in charge of something, it will appear here \ along with the obligation that comes with it: knowing where it is, and reporting it if it breaks or goes missing."
               onOpenHistory={openHistory}
-              onOpenRelease={openRelease}
               onReportProblem={(item) => {
                 void copyProblemReport(item);
               }}
@@ -1341,7 +980,6 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
               emptyTitle="You are not holding anything"
               emptyDescription="You have not signed for any equipment, so there is nothing here for you to return. When the store gives you something to take, it will appear in this list until it goes back."
               onOpenHistory={openHistory}
-              onOpenRelease={openRelease}
               onReportProblem={(item) => {
                 void copyProblemReport(item);
               }}
@@ -1370,23 +1008,12 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
             two altitudes.
           */}
           {showLentOut && (
-            <LentOutSection
-              items={lentOut}
-              onOpenHistory={openHistory}
-              onOpenReclaim={openReclaim}
-              onOpenTransfer={openTransfer}
-            />
+            <LentOutSection items={lentOut} onOpenHistory={openHistory} />
           )}
         </>
       ) : null}
 
-      <EquipmentDialogs
-        equipment={equipment}
-        isScanOpen={isScanOpen}
-        onScanOpenChange={setIsScanOpen}
-        releaseCondition={releaseCondition}
-        onReleaseConditionChange={setReleaseCondition}
-      />
+      <EquipmentDialogs equipment={equipment} />
     </div>
   );
 };

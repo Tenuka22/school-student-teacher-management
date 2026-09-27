@@ -21,7 +21,7 @@
  * which is unavoidable for the list to mean anything and is already disclosed by
  * `listCustodyHistory` to the same caller. It is not a way to learn about
  * anybody else's equipment, and the school-wide register (`items.list`) remains
- * `adminProcedure`.
+ * `inventoryOverseerProcedure`.
  *
  * **What is deliberately excluded, and why:**
  *
@@ -119,7 +119,6 @@ export const listLentByMe = requireInventoryPermission("read")
   )
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
-
 
     const { userId } = actor;
     const search = input.search?.trim();

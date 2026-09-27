@@ -18,6 +18,7 @@ import { assertOtpSendAllowed, recordOtpSend } from "./otp-throttle";
 import {
   ac,
   admin,
+  inventoryAdmin,
   isSeededAccount,
   principal,
   teacher,
@@ -29,6 +30,7 @@ import {
 export {
   ac,
   admin,
+  inventoryAdmin,
   isAdminRole,
   isLeadershipRole,
   isSeededAccount,
@@ -66,6 +68,8 @@ export {
   ADMIN_USERNAME,
   PRINCIPAL_USERNAME,
   DEPUTY_PRINCIPAL_USERNAME,
+  INVENTORY_ADMIN_EMAIL,
+  INVENTORY_ADMIN_USERNAME,
 } from "./admin";
 export type { SeededLeadershipRole } from "./admin";
 export {
@@ -96,6 +100,8 @@ export interface AuthConfig {
   DEPUTY_PRINCIPAL_NAME?: string;
   ADMIN_PASSWORD: string;
   ADMIN_NAME?: string;
+  INVENTORY_ADMIN_PASSWORD: string;
+  INVENTORY_ADMIN_NAME?: string;
 }
 
 export const AUTH_COOKIE_PREFIX = "school-student-teacher-management";
@@ -220,6 +226,7 @@ const buildAuthOptions = (
         admin,
         principal,
         vicePrincipal,
+        inventoryAdmin,
         teacher,
         teacherRequester,
         user,

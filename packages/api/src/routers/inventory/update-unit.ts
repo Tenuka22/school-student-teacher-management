@@ -42,7 +42,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import {
   calculateAvailableQuantity,
   calculateItemStatus,
@@ -393,7 +393,7 @@ const applyStatusChange = async (
   return toUpdateResult(updatedUnit, itemRow);
 };
 
-export const updateUnit = adminOnlyProcedure
+export const updateUnit = inventoryManagerProcedure
   .input(
     v.object({
       unitId: inventoryUnitIdSchema,

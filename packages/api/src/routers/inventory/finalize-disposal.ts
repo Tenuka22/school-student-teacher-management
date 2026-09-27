@@ -9,9 +9,9 @@
  * the `disposal_finalized` ledger row is the one place in the flow where the two
  * sides of the counter genuinely differ.
  *
- * The procedure level is `adminProcedure`, the same gate as `approveDisposal` and
+ * The procedure level is `inventoryOverseerProcedure`, the same gate as `approveDisposal` and
  * for the same reason, and the argument for it is written out on that export: the
- * two gates (`adminProcedure` versus `requireInventoryPermission("approve")`)
+ * two gates (`inventoryOverseerProcedure` versus `requireInventoryPermission("approve")`)
  * happen to admit the same three leadership seats today, the tighter of the two is
  * chosen because it is written as a literal role list rather than as a mutable
  * grants table, and the genuine separation of duties lives in the handler's
@@ -55,7 +55,7 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import { object, optional, string } from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import {
   calculateAvailableQuantity,
   calculateItemStatus,
@@ -201,7 +201,7 @@ const pinFreshlyClaimedUnits = async (
   }
 };
 
-export const finalizeDisposal = adminOnlyProcedure
+export const finalizeDisposal = inventoryManagerProcedure
   .input(
     object({
       disposalId: inventoryDisposalIdSchema,
@@ -255,7 +255,6 @@ export const finalizeDisposal = adminOnlyProcedure
             : `This request is already ${disposalStatusLabel(existing.status)}`,
         });
       }
-
 
       // FOR UPDATE, and deliberately *after* the disposal lock above so the two
       // rows are always taken in the same order by this flow. A soft-deleted item

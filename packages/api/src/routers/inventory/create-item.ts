@@ -23,7 +23,7 @@ import {
 import { count, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import { generateSku, normalizeLabel } from "./inventory-calculations";
 import type { Executor, InventoryItemRow } from "./inventory-database";
 import {
@@ -235,10 +235,22 @@ const assertInitialHoldersAssignable = (
 ): Promise<unknown> =>
   Promise.all([
     ...(managerStaffId
-      ? [assertStaffIsAssignable(db, managerStaffId, "staff member in charge of the item")]
+      ? [
+          assertStaffIsAssignable(
+            db,
+            managerStaffId,
+            "staff member in charge of the item"
+          ),
+        ]
       : []),
     ...(custodianStaffId
-      ? [assertStaffIsAssignable(db, custodianStaffId, "staff member holding the item")]
+      ? [
+          assertStaffIsAssignable(
+            db,
+            custodianStaffId,
+            "staff member holding the item"
+          ),
+        ]
       : []),
   ]);
 
@@ -459,7 +471,7 @@ const insertUnits = async (
  * both; its only CHECK is `min_qty >= 0`.
  */
 
-export const createItem = adminOnlyProcedure
+export const createItem = inventoryManagerProcedure
   .input(
     v.object({
       ...v.pick(inventoryItemInsertSchema, [
@@ -507,8 +519,8 @@ export const createItem = adminOnlyProcedure
       // day zero either, or the item sits in the register with a holder no later
       // procedure would ever have allowed. See `assertInitialHoldersAssignable`.
       await assertInitialHoldersAssignable(
-                tx,
-                input.managerStaffId,
+        tx,
+        input.managerStaffId,
         input.custodianStaffId
       );
 
@@ -525,7 +537,9 @@ export const createItem = adminOnlyProcedure
       const location = input.location ?? "";
       const purchaseValue = input.purchaseValue ?? null;
       const currentValue = input.currentValue ?? null;
-      const purchaseDate = input.purchaseDate ? new Date(input.purchaseDate) : null;
+      const purchaseDate = input.purchaseDate
+        ? new Date(input.purchaseDate)
+        : null;
       const depreciationRatePercent = input.depreciationRatePercent ?? null;
       const managerStaffId = input.managerStaffId ?? null;
       const custodianStaffId = input.custodianStaffId ?? null;
@@ -568,7 +582,7 @@ export const createItem = adminOnlyProcedure
             id: crypto.randomUUID(),
             newItemId: itemId,
             retiredItemId,
-        createdByStaffId: actor.userId,
+            createdByStaffId: actor.userId,
           }))
         );
       }

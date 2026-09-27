@@ -124,31 +124,6 @@ export const inventoryQueryKeys = {
   }),
   /** A teacher's own holdings, on the teacher portal. */
   myItems: orpc.inventory.custody.myItems.queryOptions({ input: {} }).queryKey,
-  /**
-   * The narrow "what is free right now" catalogue behind a teacher's "take one
-   * off the shelf" picker.
-   *
-   * **This entry did not exist, and the omission was live rather than
-   * theoretical.** It is read by `teacher-portal/take-item-dialog.tsx` and it
-   * carries the app's 60-second `staleTime`, so any write that changes who is
-   * holding something has to invalidate it. `custody.take` did — but by hand, in
-   * `use-my-equipment.ts`, with a comment explaining that the key table had no
-   * entry for it. **`custody.transferOwnership` and `custody.release` did not**,
-   * and both of them *release* the item: `transferOwnership` clears
-   * `custodianStaffId` and `release` nulls it. So a teacher who hands a projector
-   * back and reopens the picker inside a minute was shown a catalogue with no
-   * projector in it, and one who handed an item on was shown a catalogue still
-   * offering it — a request whose response is a lie, cached.
-   *
-   * It belongs in the `custody` scope for exactly the reason `myItems` does: it is
-   * the same predicate read from the other side. A write that moves an item
-   * between "held" and "free" dirties both lists, and the fix is a scope entry
-   * rather than three hand-written invalidations in a folder this table was not
-   * built for.
-   */
-  takeable: orpc.inventory.custody.takeable.listTakeableItems.queryOptions({
-    input: {},
-  }).queryKey,
 } as const;
 
 /**
@@ -267,18 +242,14 @@ const SCOPE_KEYS: Record<
    * `custody` — transfer, transferOwnership, reclaimCustody, assignManager, take,
    * release. The register and the detail read because the two current pointers are
    * columns on the item; `myItems` because a teacher's own holdings change the
-   * moment the item changes hands; **`takeable` for the same reason and in the
-   * opposite direction** — it is the list of what is *free*, so it is dirtied by
-   * every one of these procedures, and by the releasing ones (`transferOwnership`
-   * clears the custodian, `release` nulls it) more than by the taking ones;
-   * `custodyHistory` because every one of these writes a history row. The ledger
+   * moment the item changes hands; `custodyHistory` because every one of these
+   * writes a history row. The ledger
    * tabs are in because these are audited and counted movements.
    */
   custody: [
     "items",
     "item",
     "myItems",
-    "takeable",
     "custodyHistory",
     "transactions",
     "auditLogs",

@@ -146,7 +146,8 @@ const resolveSidebarYear = (
 const resolveHome = (
   isAdmin: boolean,
   isPrincipal: boolean,
-  isDeputy: boolean
+  isDeputy: boolean,
+  isInventoryAdmin: boolean
 ): { base: HomeBase; title: string } => {
   if (isPrincipal) {
     return { base: "/principal", title: "Principal's Desk" };
@@ -156,6 +157,14 @@ const resolveHome = (
   }
   if (isAdmin) {
     return { base: "/admin", title: "Admin Dashboard" };
+  }
+  // The Inventory Administrator has no dashboard of its own \u2014 every other
+  // widget on `/admin/$year` (staff roster, class roster, leave queue) runs on
+  // `adminProcedure`, which this seat does not hold, so landing there would
+  // paint several broken widgets. The register itself is this seat's whole
+  // job, so it is also its home.
+  if (isInventoryAdmin) {
+    return { base: "/admin", title: "Inventory Register" };
   }
   return { base: "/teacher", title: "My Dashboard" };
 };
@@ -179,6 +188,7 @@ const useSidebarRole = (user: AppSidebarProps["user"]) => {
     isDeputy: role === "vicePrincipal",
     isPrincipal: role === "principal",
     isLeader: role === "principal" || role === "vicePrincipal",
+    isInventoryAdmin: role === "inventoryAdmin",
     currentYear,
     // Every workspace link below is built from the active year, so until this
     // read lands the links are not yet the ones that will be rendered. The
@@ -235,6 +245,7 @@ const useSidebarYear = (currentYear: AcademicYear | undefined) => {
 interface SidebarGroupsProps {
   isAdmin: boolean;
   isLeader: boolean;
+  isInventoryAdmin: boolean;
   usersUrl: string;
   staffRequestsUrl: string;
   staffRequestsCount?: string;
@@ -279,6 +290,7 @@ interface SidebarGroupsProps {
 const SidebarGroups = ({
   isAdmin,
   isLeader,
+  isInventoryAdmin,
   usersUrl,
   staffRequestsUrl,
   staffRequestsCount,
@@ -291,6 +303,15 @@ const SidebarGroups = ({
   adminSelfNav,
   academicNav,
 }: SidebarGroupsProps) => {
+  if (isInventoryAdmin) {
+    return (
+      <>
+        <NavMain label="Platform" items={platformNav} />
+        <NavMain label="Inventory" items={adminInventoryNav} />
+      </>
+    );
+  }
+
   if (isLeader) {
     return (
       <>
@@ -357,6 +378,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     isDeputy,
     isLeader,
     isPrincipal,
+    isInventoryAdmin,
     currentYear,
     yearsPending,
   } = useSidebarRole(user);
@@ -396,12 +418,16 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   const deputy = (...rest: string[]) =>
     workspaceLink("/deputy-principal", ...rest);
 
-  const home = resolveHome(isAdmin, isPrincipal, isDeputy);
-
+  const home = resolveHome(isAdmin, isPrincipal, isDeputy, isInventoryAdmin);
   // Platform is identical for everyone, so nobody gets a duplicate link to
   // a workspace that a lower group already lists.
   const platformNav: NavItem[] = [
-    { title: home.title, url: yearPath(home.base, year) },
+    {
+      title: home.title,
+      url: isInventoryAdmin
+        ? admin("staff", "inventory")
+        : yearPath(home.base, year),
+    },
     { title: "Account", url: "/account" },
   ];
 
@@ -597,6 +623,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
           <SidebarGroups
             isAdmin={isAdmin}
             isLeader={isLeader}
+            isInventoryAdmin={isInventoryAdmin}
             usersUrl={admin("users")}
             staffRequestsUrl={admin("teacher-requests")}
             staffRequestsCount={

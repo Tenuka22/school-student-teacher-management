@@ -33,6 +33,7 @@ import {
   disposalStatusLabel,
   disposalStatusSchema,
 } from "@school-student-teacher-management/db/constants/inventory";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryDisposal,
   inventoryDisposalStatusHistory,
@@ -42,7 +43,6 @@ import {
   inventoryUnit,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   and,
   asc,
@@ -73,7 +73,7 @@ import {
 import type { InferOutput } from "valibot";
 
 import type { Context } from "../../context";
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { iso, isoOrNull } from "./inventory-database";
 
 type Database = Context["db"];
@@ -420,7 +420,7 @@ const toDisposalRow = (
 });
 
 /**
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -429,7 +429,7 @@ const toDisposalRow = (
  * procedure built on it MUST scope its own result set to the caller", and the
  * `teacher` role's own statement in `packages/auth/src/permissions.ts` says the
  * same thing harder: "The school-wide ledger, stock movements, **write-offs** and
- * custody transfers stay behind `adminProcedure`."
+ * custody transfers stay behind `inventoryOverseerProcedure`."
  *
  * This list is exactly that. A disposal certificate carries what was written
  * off, why, at what estimated value, who signed it and, for a cancelled one, the
@@ -444,7 +444,7 @@ const toDisposalRow = (
  * `requirePermission` short-circuits all of them — so nothing that was meant to
  * reach this page is refused by the change.
  */
-export const listDisposals = adminProcedure
+export const listDisposals = inventoryOverseerProcedure
   .input(listDisposalsInput)
   .handler(async ({ input, context }) => {
     /**

@@ -28,7 +28,7 @@ import {
 } from "@school-student-teacher-management/db/schema/inventory";
 import { array, object, optional, pick, string } from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import {
   assertSufficientAvailableQuantity,
   assertUnitsNotPendingDisposal,
@@ -41,7 +41,7 @@ import {
   iso,
 } from "./inventory-database";
 
-export const createDisposal = adminOnlyProcedure
+export const createDisposal = inventoryManagerProcedure
   .input(
     object({
       /**

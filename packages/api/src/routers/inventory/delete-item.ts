@@ -20,7 +20,7 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { InventoryItemRow } from "./inventory-database";
 import {
   countersOf,
@@ -73,7 +73,7 @@ const IN_FLIGHT_UNIT_STATUSES = ["borrowed", "issued", "disposed"] as const;
  * history stop reconciling.
  */
 
-export const deleteItem = adminOnlyProcedure
+export const deleteItem = inventoryManagerProcedure
   .input(v.object({ itemId: inventoryItemIdSchema }))
   .handler(({ input, context }) =>
     context.db.transaction(async (tx) => {

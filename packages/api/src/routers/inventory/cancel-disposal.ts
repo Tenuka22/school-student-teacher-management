@@ -52,7 +52,7 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import { maxLength, minLength, object, pipe, string } from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   countersOf,
@@ -88,7 +88,7 @@ const getLockedDisposal = async (db: Executor, disposalId: string) => {
 const isFinalOutcome = (status: string): boolean =>
   (DISPOSAL_FINAL_STATUSES as readonly string[]).includes(status);
 
-export const cancelDisposal = adminOnlyProcedure
+export const cancelDisposal = inventoryManagerProcedure
   .input(
     object({
       disposalId: inventoryDisposalIdSchema,
@@ -130,7 +130,6 @@ export const cancelDisposal = adminOnlyProcedure
           message: `This request was already cancelled on ${isoOrNull(existing.cancelledAt) ?? "an earlier occasion"}`,
         });
       }
-
 
       // Reaching here means `existing.status` is `pending_approval` or
       // `approved`, which are the only two the ladder's `cancelled` arm accepts
@@ -263,7 +262,7 @@ export const cancelDisposal = adminOnlyProcedure
         fromStatus: existing.status,
         toStatus: "cancelled",
         note: input.reason,
-      changedByStaffId: actor.userId,
+        changedByStaffId: actor.userId,
       });
 
       /**
@@ -315,7 +314,7 @@ export const cancelDisposal = adminOnlyProcedure
         after: {
           status: updated.status,
           cancellationReason: updated.cancellationReason,
-        cancelledByStaffId: actor.userId,
+          cancelledByStaffId: actor.userId,
         },
       });
 

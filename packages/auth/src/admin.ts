@@ -51,6 +51,14 @@ export const PRINCIPAL_USERNAME = "principal";
 export const DEPUTY_PRINCIPAL_USERNAME = "deputy-principal";
 
 /**
+ * The Inventory Administrator's seat. Custody of every item \u2014 who has it,
+ * when it moves, when it comes back to the store \u2014 is set exclusively from
+ * this account; see `packages/auth/src/permissions.ts` for why the `teacher`
+ * role carries no custody-changing grant at all.
+ */
+export const INVENTORY_ADMIN_USERNAME = "inventory-admin";
+
+/**
  * Real, deliverable addresses for the seeded accounts. Unlike ordinary staff
  * — whose accounts carry the email they typed at sign-up — these are fixed
  * institutional addresses, so one-time codes for elevated actions have
@@ -61,6 +69,7 @@ export const DEPUTY_PRINCIPAL_USERNAME = "deputy-principal";
 export const ADMIN_EMAIL = "admin@aloysiuscollege.lk";
 export const PRINCIPAL_EMAIL = "principal@aloysiuscollege.lk";
 export const DEPUTY_PRINCIPAL_EMAIL = "deputy-principal@aloysiuscollege.lk";
+export const INVENTORY_ADMIN_EMAIL = "inventory-admin@aloysiuscollege.lk";
 
 /** Synthetic internal email backing a username login (never shown). */
 export const internalEmailForUsername = (accountUsername: string) =>
@@ -535,6 +544,13 @@ export const ensureBootstrapUsers = async (
       password: env.DEPUTY_PRINCIPAL_PASSWORD,
       name: env.DEPUTY_PRINCIPAL_NAME || "Deputy Principal",
       role: leadershipRoleForPosition(DEPUTY_PRINCIPAL_POSITION) ?? "admin",
+    }),
+    ensureBootstrapAccount(database, {
+      username: INVENTORY_ADMIN_USERNAME,
+      email: INVENTORY_ADMIN_EMAIL,
+      password: env.INVENTORY_ADMIN_PASSWORD,
+      name: env.INVENTORY_ADMIN_NAME || "Inventory Administrator",
+      role: "inventoryAdmin",
     }),
   ]);
 

@@ -115,8 +115,6 @@ const WhoHasIt = ({ item }: { item: InventoryItemView }) => (
 interface LentOutSectionProps {
   items: InventoryItemView[];
   onOpenHistory: (item: InventoryItemView) => void;
-  onOpenReclaim: (item: InventoryItemView) => void;
-  onOpenTransfer: (item: InventoryItemView) => void;
 }
 
 /**
@@ -149,8 +147,6 @@ interface LentOutSectionProps {
 const LentRow = ({
   item,
   onOpenHistory,
-  onOpenReclaim,
-  onOpenTransfer,
 }: {
   item: InventoryItemView;
 } & Omit<LentOutSectionProps, "items">) => (
@@ -190,30 +186,6 @@ const LentRow = ({
         >
           <IconHistory data-icon="inline-start" />
           History
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-label={`Call ${item.name} back from ${item.custodianName ?? "the person holding it"}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenReclaim(item);
-          }}
-        >
-          Call it back
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-label={`Hand ${item.name} on to somebody else`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenTransfer(item);
-          }}
-        >
-          Transfer ownership
         </Button>
       </div>
     </TableCell>
@@ -275,8 +247,6 @@ const LentRow = ({
 export const LentOutSection = ({
   items,
   onOpenHistory,
-  onOpenReclaim,
-  onOpenTransfer,
 }: LentOutSectionProps) => {
   // The one rule this component enforces about itself, stated once so that a
   // caller cannot render an empty section by passing an empty array.
@@ -351,8 +321,6 @@ export const LentOutSection = ({
                 key={item.id}
                 item={item}
                 onOpenHistory={onOpenHistory}
-                onOpenReclaim={onOpenReclaim}
-                onOpenTransfer={onOpenTransfer}
               />
             ))}
           </TableBody>

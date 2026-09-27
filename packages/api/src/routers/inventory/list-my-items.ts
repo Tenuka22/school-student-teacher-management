@@ -8,7 +8,7 @@
  * me)` predicate must never be lifted, and it now matches against user.id
  * instead of staff.id.** `requireInventoryPermission("read")`
  * is reachable by the `teacher` role and grants nothing about *which* rows are
- * visible; a school-wide item list is `adminProcedure` work. The scope lives
+ * visible; a school-wide item list is `inventoryOverseerProcedure` work. The scope lives
  * here and nowhere else, which is why an account with no staff row gets an
  * honest empty result rather than an unfiltered one.
  */
@@ -79,7 +79,6 @@ export const listMyItems = requireInventoryPermission("read")
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
 
-
     const { userId } = actor;
     const search = input.search?.trim();
     const limit = input.limit ?? DEFAULT_LIMIT;
@@ -117,7 +116,7 @@ export const listMyItems = requireInventoryPermission("read")
       itemViewJoins(context.db)
         .where(where)
         .orderBy(
-        sql`case when ${inventoryItem.managerStaffId} = ${userId} then 0 else 1 end`,
+          sql`case when ${inventoryItem.managerStaffId} = ${userId} then 0 else 1 end`,
           asc(inventoryItem.name)
         )
         .limit(limit),

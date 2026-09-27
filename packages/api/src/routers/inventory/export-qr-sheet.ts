@@ -45,7 +45,7 @@ import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import QRCode from "qrcode";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { buildPdfExport } from "../../lib/export";
 
 /** A4 in `pt`. No page margin: the grid runs to every edge, so a straight cut down any gridline separates two whole labels rather than leaving a paper border. */
@@ -202,7 +202,7 @@ const chunkIntoRows = <T>(items: T[], size: number): (T | null)[][] => {
   return rows;
 };
 
-export const exportQrSheet = adminProcedure
+export const exportQrSheet = inventoryOverseerProcedure
   .input(
     v.object({
       items: v.pipe(

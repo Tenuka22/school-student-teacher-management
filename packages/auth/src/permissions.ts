@@ -68,6 +68,7 @@ export const statement = {
     "approve",
     "take",
     "manageOwn",
+    "acknowledge",
   ],
 } as const;
 
@@ -103,6 +104,7 @@ export const admin = ac.newRole({
     "approve",
     "take",
     "manageOwn",
+    "acknowledge",
   ],
 });
 
@@ -130,6 +132,7 @@ export const principal = ac.newRole({
     "approve",
     "take",
     "manageOwn",
+    "acknowledge",
   ],
 });
 
@@ -147,7 +150,30 @@ export const vicePrincipal = ac.newRole({
     "approve",
     "take",
     "manageOwn",
+    "acknowledge",
   ],
+});
+
+/**
+ * Inventory Administrator \u2014 a seeded, inventory-only seat (see
+ * `packages/auth/src/admin.ts`). Everything the school-wide register, custody
+ * ledger, borrows, issues and disposals need, so this account is the one place
+ * custody is assigned, transferred and returned to the store \u2014 never the
+ * teacher on the other end of the assignment.
+ *
+ * Deliberately **no** `take` or `manageOwn`: those two actions exist only so a
+ * teacher can claim/hand back their own custody or reassign what they already
+ * manage, and this redesign removes that self-service entirely. Everything
+ * `take`/`manageOwn` used to do for a teacher, this seat does instead through
+ * `update`-gated `transferCustody` (assign to a named teacher) and
+ * `assignManager` (appoint who is in charge) \u2014 both `adminOnlyProcedure`
+ * today, widened in `packages/api/src/index.ts` to also admit this role.
+ *
+ * Not in `ADMIN_ROLES`: this seat does not reach staff management, leave
+ * review, academic years or any other admin surface \u2014 only inventory.
+ */
+export const inventoryAdmin = ac.newRole({
+  inventory: ["create", "read", "update", "delete", "approve", "acknowledge"],
 });
 
 // Role names and guards live in `./roles` so isomorphic code (routes,
@@ -360,7 +386,19 @@ export const teacher = ac.newRole({
   mark: ["create", "read", "update"],
   exam: ["read"],
   assignment: ["read"],
-  inventory: ["read", "take", "manageOwn"],
+  // Read-only. Custody \u2014 who has what, when it moves, when it comes back \u2014
+  // is set exclusively by the seeded Inventory Administrator account (see
+  // `inventoryAdmin` above); a teacher can see their own equipment but never
+  // claim, hand back, transfer or reassign it themselves. `take` and
+  // `manageOwn` are deliberately absent.
+  //
+  // `acknowledge` is the one exception, and it is not a custody action: it
+  // reaches exactly two procedures, `acknowledgeCustodyNotice` and
+  // `disputeCustodyNotice`, both scoped in-handler to the caller's own
+  // notice row. Marking "I saw this" (or disputing it) about a change someone
+  // else already made moves nothing \u2014 it is the teacher's own read receipt,
+  // not a lever over who holds anything.
+  inventory: ["read", "acknowledge"],
 });
 
 /**

@@ -22,7 +22,7 @@ import { and, asc, count, eq, ilike, isNull, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { inventoryOverseerProcedure } from "../../index";
 import { iso } from "./inventory-database";
 
 /** How many tags a screen can show before pagination is somebody else's problem. */
@@ -41,7 +41,7 @@ const escapeLikePattern = (value: string): string =>
   value.replaceAll(/[\\%_]/gu, (character) => `\\${character}`);
 
 /**
- * **`adminProcedure`, not `requireInventoryPermission("read")`** — a deliberate
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
  * deviation from the obvious gate, and the reason is written down in two other
  * places in this repo.
  *
@@ -64,7 +64,7 @@ const escapeLikePattern = (value: string): string =>
  * list now satisfies is the `teacher` statement's own contract, which names the
  * school-wide register as something that grant must not reach.
  */
-export const listUnits = adminProcedure
+export const listUnits = inventoryOverseerProcedure
   .input(
     v.object({
       itemId: v.optional(inventoryItemIdSchema),

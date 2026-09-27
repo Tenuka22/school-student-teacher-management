@@ -40,6 +40,12 @@ export const getHomeBase = (input: {
   if (input.role === "admin") {
     return "/admin";
   }
+  // The Inventory Administrator lands in the same workspace shell as `admin`
+  // — see `getHomePath` below for why its full path skips the bare
+  // dashboard and goes straight to the register.
+  if (input.role === "inventoryAdmin") {
+    return "/admin";
+  }
   if (input.role === "teacher") {
     return "/teacher";
   }
@@ -88,7 +94,17 @@ export const getHomePath = (input: {
     return "/account";
   }
 
-  return input.year === null ? base : `${base}/${input.year}`;
+  const path = input.year === null ? base : `${base}/${input.year}`;
+
+  // Every other widget on the bare `/admin/$year` dashboard runs on
+  // `adminProcedure`, which the Inventory Administrator does not hold (see
+  // `packages/api/src/index.ts`), so it never lands there — it goes
+  // straight to the one page that is its whole job.
+  if (input.role === "inventoryAdmin") {
+    return `${path}/staff/inventory` as unknown as HomePath;
+  }
+
+  return path;
 };
 
 /**

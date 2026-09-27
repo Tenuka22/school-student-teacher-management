@@ -18,12 +18,12 @@
  */
 import { ORPCError } from "@orpc/server";
 import { itemConditionSchema } from "@school-student-teacher-management/db/constants/inventory";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -46,7 +46,12 @@ import {
  * list is not exported from there, so it is restated with a pointer rather than
  * imported from a module that already has a reason to own it.
  */
-const ADMIN_ROLES = new Set(["admin", "principal", "vicePrincipal"]);
+const ADMIN_ROLES = new Set([
+  "admin",
+  "principal",
+  "vicePrincipal",
+  "inventoryAdmin",
+]);
 
 /** The name behind a `staff` pointer, or null once that staff row is gone. */
 const resolveStaffName = async (

@@ -1,6 +1,6 @@
 /**
  * One item, read for a QR scan — the narrow, teacher-reachable sibling of
- * `get-item.ts`, which is deliberately `adminProcedure` and refuses a teacher
+ * `get-item.ts`, which is deliberately `inventoryOverseerProcedure` and refuses a teacher
  * outright.
  *
  * `getItem` cannot be widened for this: it hands back any item in the school
@@ -74,8 +74,8 @@ export const getItemForScan = requireInventoryPermission("read")
     const isLeadership = ADMIN_ROLES.has(role);
 
     const isInvolved =
-      (row.managerStaffId === actor.userId ||
-        row.custodianStaffId === actor.userId);
+      row.managerStaffId === actor.userId ||
+      row.custodianStaffId === actor.userId;
 
     const status = calculateItemStatus(countersOf(row), row.condition);
     const isTakeable =

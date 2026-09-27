@@ -23,7 +23,7 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { InventoryItemRow } from "./inventory-database";
 import {
   countersOf,
@@ -50,7 +50,7 @@ const toAuditSnapshot = (row: InventoryItemRow): Record<string, unknown> => ({
  *  genuinely out in the world, or "this was never real stock" would be a lie. */
 const IN_FLIGHT_UNIT_STATUSES = ["borrowed", "issued", "disposed"] as const;
 
-export const voidItem = adminOnlyProcedure
+export const voidItem = inventoryManagerProcedure
   .input(
     v.object({
       itemId: inventoryItemIdSchema,

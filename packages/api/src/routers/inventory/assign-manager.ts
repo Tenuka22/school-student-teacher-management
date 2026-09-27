@@ -21,19 +21,17 @@
  */
 import { ORPCError } from "@orpc/server";
 import { inventoryTransferReasonSchema } from "@school-student-teacher-management/db/constants/inventory";
+import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
   userIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import {
-  user,
-} from "@school-student-teacher-management/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { minLength, nullable, object, optional, pipe, string } from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
 import {
   assertStaffIsAssignable,
@@ -99,7 +97,7 @@ const managerAuditAction = (
   return changeType === "manager_changed" ? "manager.change" : "manager.clear";
 };
 
-export const assignManager = adminOnlyProcedure
+export const assignManager = inventoryManagerProcedure
   .input(
     object({
       itemId: inventoryItemIdSchema,

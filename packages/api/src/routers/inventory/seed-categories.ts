@@ -5,7 +5,7 @@ import {
 import { inventoryCategory } from "@school-student-teacher-management/db/schema/inventory";
 import { inArray } from "drizzle-orm";
 
-import { adminOnlyProcedure } from "../../index";
+import { inventoryManagerProcedure } from "../../index";
 import {
   getInventoryActor,
   insertInventoryAuditLog,
@@ -61,7 +61,7 @@ const SEED_KEYS = DEFAULT_INVENTORY_CATEGORIES.map((entry) =>
  * the first one did.
  */
 
-export const seedCategories = adminOnlyProcedure.handler(
+export const seedCategories = inventoryManagerProcedure.handler(
   async ({ context }) => {
     const actor = await getInventoryActor(context);
 
@@ -120,7 +120,9 @@ export const seedCategories = adminOnlyProcedure.handler(
           return [];
         }
 
-        return [{ id: row.id, name: row.name, color: row.color, icon: row.icon }];
+        return [
+          { id: row.id, name: row.name, color: row.color, icon: row.icon },
+        ];
       });
 
       // `inserted` can never exceed the number of seed keys: one value per key,
