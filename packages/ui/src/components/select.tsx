@@ -5,10 +5,144 @@ import { IconSelector, IconCheck, IconChevronUp, IconChevronDown } from "@tabler
 
 import { useFieldControlProps } from "@school-student-teacher-management/ui/components/field"
 
-const Select = SelectPrimitive.Root
-
 const selectPlaceholderInk =
   "data-placeholder:text-[color-mix(in_oklab,var(--foreground)_72%,transparent)]"
+
+/**
+ * The text inside a node, as one string.
+ *
+ * A `SelectItem`'s children are usually a single string, but they are allowed to
+ * be an icon and a string, a fragment, or an array from a `.map()`. Anything
+ * that is not text contributes nothing, because a label made of an icon is not a
+ * label.
+ */
+function nodeText(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node)
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(nodeText).join("")
+  }
+
+  if (React.isValidElement(node)) {
+    const { children } = node.props as { children?: React.ReactNode }
+    return nodeText(children)
+  }
+
+  return ""
+}
+
+/**
+ * Walks the element tree and reads off every `SelectItem`'s value and its text.
+ *
+ * **Why the tree is walked at all**, since base-ui can resolve a selected item's
+ * label on its own: it cannot, not before the popup has been opened. The options
+ * live inside a portalled popup that is unmounted while the trigger is closed,
+ * so base-ui has nothing to read a label out of and `Select.Value` falls back to
+ * printing the **stored value**. Every closed select in this app therefore said
+ * `all`, `teacher` or `2026-01-01` where it should have said "Any status",
+ * "Teacher" or "2026" — the value is an internal identity, not something to show
+ * a person.
+ *
+ * `items` is base-ui's supported answer to this (a `{ value: label }` map, or an
+ * array of `{ value, label }`), and the props were always forwarded — they were
+ * simply never passed, by thirty-odd call sites that render their options as
+ * children. Deriving the map here means no call site can forget it, and a new one
+ * gets it right by writing `<SelectItem value="x">X</SelectItem>` and nothing
+ * else.
+ *
+ * Two things are deliberately *not* claimed. A value with no derivable text (its
+ * children are a component this cannot see into, or are empty) falls back to
+ * base-ui's own behaviour of printing the value, which is what happened before —
+ * no worse, and never a wrong label. And an explicit `items` prop always wins,
+ * so a caller who needs labels this walk cannot reach has a way to say so.
+ */
+function collectItemLabels(
+  node: React.ReactNode,
+  into: Record<string, string>
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectItemLabels(child, into)
+    }
+    return
+  }
+
+  if (!React.isValidElement(node)) {
+    return
+  }
+
+  const element = node as React.ReactElement<{
+    value?: unknown
+    children?: React.ReactNode
+  }>
+
+  // Recursed before the check below, because an item is almost always inside a
+  // `SelectGroup` or inside the array a `.map()` returned.
+  collectItemLabels(element.props.children, into)
+
+  if (element.type !== SelectItem) {
+    return
+  }
+
+  const { value } = element.props
+  if (typeof value !== "string" && typeof value !== "number") {
+    return
+  }
+
+  const label = nodeText(element.props.children).replace(/\s+/gu, " ").trim()
+  if (label) {
+    into[String(value)] = label
+  }
+}
+
+/** Two label maps with the same entries, so a re-render need not change identity. */
+function hasSameLabels(
+  left: Record<string, string>,
+  right: Record<string, string>
+): boolean {
+  const keys = Object.keys(left)
+  if (keys.length !== Object.keys(right).length) {
+    return false
+  }
+  return keys.every((key) => left[key] === right[key])
+}
+
+/**
+ * The select's root, and the reason every select in this app shows a label.
+ *
+ * It is a wrapper rather than the bare primitive for one reason: it supplies
+ * `items`, the map base-ui reads a selected item's label out of. Everything else
+ * is the primitive's own props, passed straight through.
+ *
+ * The map is held in state and refreshed **during render** when the children
+ * change, rather than in an effect or a `useMemo` keyed on `children`. Both
+ * alternatives were wrong here: an effect would show one frame of raw values
+ * whenever the options arrive, and `children` is a new array on every render of
+ * every parent, so a memo would hand base-ui a new object each time and make it
+ * re-resolve a label that has not changed. Adjusting state in render is the
+ * documented way to derive state from props, and it settles in one extra pass.
+ */
+function Select({ children, items, ...props }: SelectPrimitive.Root.Props) {
+  const derived: Record<string, string> = {}
+  collectItemLabels(children, derived)
+
+  const [labels, setLabels] = React.useState<Record<string, string>>(derived)
+  if (!hasSameLabels(labels, derived)) {
+    setLabels(derived)
+  }
+
+  // `labels` is the stale map on the render that set it, and that render's
+  // output is thrown away; `derived` is what the next pass will compare equal to.
+  const resolved = items ?? derived
+
+  return (
+    <SelectPrimitive.Root items={resolved} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

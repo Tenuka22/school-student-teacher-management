@@ -17,6 +17,7 @@ import { getHistoricalData } from "./historical-data";
 import { leavesRouter } from "./leaves";
 import { seedLeaveEntitlements } from "./leaves/entitlements";
 import { listAcademicYears } from "./list-academic-years";
+import { listAccounts } from "./list-accounts";
 import { listClassTeacherHistory } from "./list-class-teacher-history";
 import { listClasses } from "./list-classes";
 import { listGrades } from "./list-grades";
@@ -88,6 +89,7 @@ export const staffRouter = {
   approveTeacherRequest,
 
   // Account housekeeping
+  listAccounts,
   previewUnverifiedPurge,
   purgeUnverified,
 

@@ -277,6 +277,8 @@ Most feature folders contain a `UI.md` file — `teacher-management`, `subject-a
 **shadcn Component Usage (Maximize Coverage):**
 
 - **Tables:** Use shadcn `Table` (composition-based) + optional `DataTable` helper pattern for sorting/filtering. Never hand-roll table markup.
+  - **A server-side list table is the accounts pattern, not a local invention.** `apps/web/src/components/admin/users-*` is the reference implementation: a `tableFeatures()` object naming exactly the features used, `createColumnHelper` columns with `columnMeta.label` for the Columns menu, `useTable` with `manualSorting` + `manualPagination` + `rowCount`, and the list state in the URL (see **URL state** above). A `sortedRowModel`/`paginatedRowModel`/filter function in a table whose data came from a paged request would order or filter fifty rows and call the answer the whole list.
+
 - **Forms:** All form controls wrapped in `FieldGroup` + `Field` + `FieldLabel` + `FieldError` (already in UI package). Never use raw `input` + `label`.
 - **Dialogs/Modals:** Use `Dialog` (centered modal) or `Sheet` (side panel slide-in) for create/edit flows. Keep users on the list page during mutations.
 - **Dropdowns/Selects:** Use shadcn `Select` (with `Combobox` pattern for search) for filtering and form controls.
@@ -356,8 +358,9 @@ Explicitly: Do **NOT** design phone layouts. Only ensure dialogs are full-screen
 
 - **URL state:** TanStack Router owns exactly two kinds of thing today, and nothing else is in the URL:
   - **Academic year: a path segment**, not a query param — `/admin/2027/staff/teachers`. The sidebar switcher rewrites the segment and the `$year` guard forwards a stale one.
-  - **Two search params:** `?tab=` on the inventory register (`register` / `records`) and `?search=` on the three equipment pages.
-  - The register's other filters (status, category, condition, custodian, low stock, "no manager") are component state, deliberately — see the inventory `UI.md`, which argues why. A previous version of this list claimed `?status=`, `?grade=`, `?compare=` and `#table`; none of them exist.
+  - **Search params, and there are two families of them.** The _pane_ params — `?tab=` on the inventory register (`register` / `records`) and `?search=` on the three equipment pages — are plain `validateSearch` declarations read through `useSearch({ strict: false })`.
+  - **The accounts list is a full list state in the URL** (`apps/web/src/routes/_auth/admin/$year/users.tsx`, contract in `apps/web/src/components/admin/users-search.ts`): `?q=`, `?role=`, `?status=`, `?sort=`, `?dir=`, `?page=`, `?size=`. This is the **pattern to copy for a new server-side list table**: one `validateSearch` that both the route's `loader` and the page's hook call, the loader fetching through `context.queryClient.ensureQueryData(orpc.<router>.<list>.queryOptions({ input }))` so the first paint is the answer and a refresh, a shared link and Back all arrive populated, every value clamped on the way in, and every default left **off** the URL. The page reads the validated object as a prop and writes changes by navigating — it must not import the route file, and it must not keep a second copy in `useState`.
+  - The register's other filters (status, category, condition, custodian, low stock, "no manager") are component state, deliberately — see the inventory `UI.md`, which argues why. A previous version of this list claimed `?status=`, `?grade=`, `?compare=` and `#table` on those pages; none of them exist. `?status=` exists now, but only on the accounts list, where it is a different thing: a server-side filter with a picklist, not a pane.
 
 - **Form state:** Use React's `useState` for simple forms, or `@tanstack/react-form` if complex multi-step forms needed (not required for MVP).
   - Form validation: Client-side via valibot schemas (same schemas generated from DB).
