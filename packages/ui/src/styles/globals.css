@@ -28,16 +28,22 @@
  * a manifest edit, recorded as cross-cutting rather than made here.
  */
 @import "@fontsource-variable/roboto";
-@import "@fontsource-variable/manrope";
-@import "@fontsource/cormorant-garamond/500.css";
-@import "@fontsource/cormorant-garamond/600.css";
-@import "@fontsource/cormorant-garamond/400-italic.css";
+
 @source "../../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
+/*
+ * The app ships one light theme (no toggle exists). The variant is kept so
+ * the `dark:` classes inside the shadcn primitives stay inert: without it,
+ * Tailwind would fall back to `prefers-color-scheme` and half-apply them for
+ * anyone whose OS is in dark mode.
+ */
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
+
+  /* Brand palette — College green, gold, cream, crimson. */
   --background: #fdf8ec;
   --foreground: #013405;
   --card: #fffdf6;
@@ -46,113 +52,51 @@
   --popover-foreground: #013405;
   --primary: #013405;
   --primary-foreground: #fff8e7;
-  /** Pressed/hover shade of the brand green, used by every primary button. */
+
   --primary-hover: #064a12;
   --secondary: #f3f1e9;
   --secondary-foreground: #013405;
   --muted: #f3f1e9;
-  /**
-   * The quiet ink: field labels, card descriptions, table meta, and every
-   * `placeholder:text-muted-foreground` in `packages/ui`.
-   *
-   * This token used to be `color-mix(in oklab, #013405 60%, transparent)`.
-   * A translucent token cannot be given a contrast ratio at all, because its
-   * ratio depends on whatever it is composited over, and the product has four
-   * light grounds it lands on. Composited in sRGB — which is what the browser
-   * does with the alpha — 60% came out at **4.07:1** on `--card` and **3.91:1**
-   * on `--background`. Both are below the 4.5:1 that `PRODUCT.md` calls the
-   * floor for body and placeholder text, on the single most-used secondary ink
-   * in the app.
-   *
-   * The fix is not a darker percentage, it is an **opaque** value: an opaque
-   * ink has one ratio, measurable, and it is the same ratio everywhere. The
-   * hue is unchanged, so this is a legibility correction and not a re-tint.
-   *
-   * Measured (WCAG 2.1 relative luminance, ratio = `(Llight + 0.05) /
-   * (Ldark + 0.05)`): `#4e6a52` → L = 0.125440, giving **6.14:1** on white,
-   * **6.00:1** on `--card` (#fffdf6), **5.65:1** on `--background` (#fdf8ec),
-   * **5.29:1** on `--muted`/`--secondary` (#f3f1e9) — the darkest ground it
-   * sits on, and the binding constraint — and **5.21:1** on the `bg-accent/20`
-   * of a `Borrowed` badge. Worst case 17% above the AA line.
-   *
-   * The `-default` alias exists so the sidebar and the sidebar's cream search
-   * field can each name a *different* one of the two inks below without either
-   * assignment becoming a self-reference.
-   */
-  --muted-foreground-default: #4e6a52;
-  --muted-foreground: var(--muted-foreground-default);
-  /** The same quiet ink for the deep-green sidebar, where it would vanish. */
-  --muted-foreground-inverse: color-mix(in oklab, #fff8e7 72%, #013405);
+  /* 70% green on cream ≈ 5.4:1 (AA). 60% measured 4.0:1 and failed. */
+  --muted-foreground: color-mix(in oklab, #013405 70%, transparent);
   --accent: #ffb203;
   --accent-foreground: #013405;
-  /** Lighter gold, for the hover state of amber controls. */
   --accent-hover: #ffd45a;
-  /** Deep gold, for gold text and rules that must not shout. */
-  --gold: #a8730b;
-  /**
-   * Warning **ink** — the same gold hue, darkened until it is legible as text.
-   *
-   * `--gold` was drawn for fills, rules and large marks, and it is used outside
-   * that ground: `--accent` (#ffb203) as a rule on the deep green sidebar is
-   * 7.78:1 and correct, while `--gold` on the cream page is **3.87:1** and on the
-   * `bg-accent/20` of a `Borrowed` badge — the most important state in the
-   * inventory register — is **3.45:1**. Both are below the 4.5:1 WCAG AA
-   * threshold for body text. The token is *not* changed: it is used elsewhere in
-   * the app and re-tuning it is a product decision, not a bug fix. This is a new
-   * token for the one job `--gold` cannot do.
-   *
-   * The arithmetic (WCAG 2.1 relative luminance, `(c/12.92)` below 0.04045 and
-   * `((c+0.055)/1.055)**2.4` above it, L = 0.2126R + 0.7152G + 0.0722B; ratio =
-   * `(Llight + 0.05) / (Ldark + 0.05)`):
-   *
-   * - `--background` #fdf8ec → L = 0.940736. For 4.5:1 the ink needs
-   *   L <= 0.990736/4.5 - 0.05 = **0.170188**.
-   * - `--card` #fffdf6 → L = 0.981644 (badges sit on the card, not the page).
-   * - `bg-accent/20` composites #ffb203 at 20% over the card → rgb(255,238,197),
-   *   L = 0.864403. This is the **binding** constraint: L <= 0.914403/4.5 - 0.05
-   *   = **0.153201**.
-   * - `#7f5605` → L = **0.111786**, comfortably under every ceiling.
-   *
-   * Measured: 6.12:1 on `--background`, 6.38:1 on `--card`, 5.65:1 on
-   * `bg-accent/20` over the card (5.46:1 over the page), 5.79:1 on
-   * `bg-accent/10`. Every one clears AA with margin, and the worst case still has
-   * 25% headroom.
-   */
-  --warning-ink: #7f5605;
-  /** Confirmed/positive green, distinct from the brand green. */
-  --success: #0b5e1a;
+  /* Gold is 1.7:1 on cream, so gold *text* on light surfaces uses this:
+     4.8:1 on cream, 4.5:1 on muted. (The older #A97400 is only 3.8:1.) */
+  --gold-text: #936500;
   --destructive: #a51919;
-  /** Pressed shade of the destructive red. */
-  --destructive-hover: #7f1212;
+  --destructive-foreground: #fff8e7;
+  --success: #2e7d32;
+  --success-foreground: #fff8e7;
+  /* The deep green used behind the landing, 404 and auth brand panels. */
+  --surface-deep: #04220a;
+  --surface-deep-foreground: #fff8e7;
+  /* Decorative dividers only; never the sole boundary of a control. */
   --border: color-mix(in oklab, #013405 16%, transparent);
-  /**
-   * Form-control boundary: `Input`, `Textarea`, `Select`, `InputGroup`,
-   * `Checkbox`, and the ring on a focused control.
-   *
-   * 22% composited over `--card` was **1.54:1** and over `--background`
-   * **1.51:1**. WCAG 1.4.11 asks 3:1 for the visual boundary of a control you
-   * have to find, and an unlabelled cream field with a 1.5:1 edge is exactly
-   * the case it names. Raised to 60% — the same weight as the old quiet ink,
-   * so the two now form a legible pair: dividers whisper at `--border`, controls
-   * speak at `--input`. Composited: **4.07:1** on `--card`, **3.91:1** on
-   * `--background`, **3.73:1** on `--muted`. Clears 1.4.11 with margin on every
-   * ground it is used on.
-   *
-   * `--border` is deliberately **not** moved with it. At 16% it is 1.36:1 on
-   * the page, and 1.4.11's "essential" qualifier is arguable for a table rule;
-   * it also draws every card hairline and menu divider in the product, so
-   * raising it would restyle all of them at once. Recorded, not changed.
-   */
-  --input: color-mix(in oklab, #013405 60%, transparent);
+  /* Control boundaries: 55% green ≈ 3.4:1 on cream (WCAG 1.4.11). */
+  --input: color-mix(in oklab, #013405 55%, transparent);
   --ring: #013405;
   --chart-1: #013405;
   --chart-2: #ffb203;
   --chart-3: #a51919;
   --chart-4: #7bc67b;
   --chart-5: #e0a33a;
+  /* Timetable subject colours (from timetable-grid). Each measures at least
+     5:1 both behind cream text and as text on the card background. */
+  --subject-1: #013405;
+  --subject-2: #2f6b8f;
+  --subject-3: #8a5a00;
+  --subject-4: #6b3fa0;
+  --subject-5: #1f7a4d;
+  --subject-6: #a51919;
+  --subject-7: #0e5c73;
+  --subject-8: #7a4a16;
   --radius: 0.625rem;
   --sidebar: #013405;
   --sidebar-foreground: #fff8e7;
+  /* Secondary sidebar text: 60% cream on green ≈ 5.7:1. */
+  --sidebar-muted-foreground: color-mix(in oklab, #fff8e7 60%, transparent);
   --sidebar-primary: #ffb203;
   --sidebar-primary-foreground: #013405;
   --sidebar-accent: color-mix(in oklab, #fff8e7 16%, transparent);
@@ -160,89 +104,87 @@
   --sidebar-border: color-mix(in oklab, #ffb203 18%, transparent);
   --sidebar-ring: #ffb203;
 
-  /**
-   * The surfaces the browser draws, not the app.
-   *
-   * Everything above this line is a colour the product chose. Everything below
-   * is a colour the *user agent* draws: the selection highlight, the focus
-   * ring, the scrollbar, the placeholder, the caret, the print page. Those were
-   * shipping at whatever the browser in front of the staff member happened to
-   * default to, which is the cheapest way for a page to look assembled rather
-   * than built, so they are tokenised here and set once in the base layer.
-   *
-   * No rule outside `:root` names a colour literally. Where a surface needs a
-   * different value on the deep-green sidebar, the sidebar **re-points the
-   * variable** rather than restating the rule — see the base layer.
-   */
-  /** Text selection. `#013405` on `#ffb203` is 7.72:1, on any ground. */
-  --selection-background: var(--accent);
-  --selection-foreground: var(--foreground);
-  /**
-   * Focus ring. `--focus-ring-default` exists so the sidebar and the sidebar's
-   * cream search field can each point at a *different* one of these two names
-   * without either rule becoming a self-reference.
-   */
-  --focus-ring-default: var(--ring);
-  --focus-ring: var(--focus-ring-default);
-  /** Amber, because a green ring on the green sidebar is not a ring. */
-  --focus-ring-inverse: var(--sidebar-ring);
-  /**
-   * Placeholder text. Shares `--muted-foreground-default`'s value and its
-   * arithmetic: a placeholder is replacement text, not a hint, so it earns the
-   * same weight as a field label rather than the browser's ~54% grey, which is
-   * 2.6:1 on cream.
-   *
-   * Declared as its own literal rather than as `var(--muted-foreground)` so that
-   * the sidebar's re-point of `--muted-foreground` cannot reach it. Every input
-   * in the product sits on a light ground — including the sidebar's search
-   * field, which is a cream control on the green ground — so this token is
-   * always the light one and has no inverse.
-   */
-  --placeholder-foreground: #4e6a52;
-  /**
-   * Scrollbar. The track is transparent on purpose: a visible channel costs
-   * reading width on a records tool and shows up on every page.
-   *
-   * Thumb ratios are against WCAG 1.4.11's 3:1 for UI boundaries, computed on
-   * the composite (the track is the page behind it): `--background` →
-   * **3.55:1** at rest, **5.02:1** on hover; the deep-green sidebar →
-   * **3.31:1** at rest, **5.41:1** on hover.
-   */
-  --scrollbar-thumb: color-mix(in oklab, #013405 28%, transparent);
-  --scrollbar-thumb-hover: color-mix(in oklab, #013405 44%, transparent);
-  --scrollbar-track: transparent;
-  --sidebar-scrollbar-thumb: color-mix(in oklab, #fff8e7 40%, transparent);
-  --sidebar-scrollbar-thumb-hover: color-mix(
-    in oklab,
-    #fff8e7 58%,
-    transparent
-  );
+  /* Stacking layers. The primitives use `z-10` for the sidebar and `z-50`
+     for every overlay (dialogs, sheets, menus, popovers, tooltips); Base UI
+     orders overlays among themselves by mount order. */
+  --z-sticky: 10;
+  --z-overlay: 50;
+  --z-toast: 100;
 }
 
-/**
- * There is deliberately no dark palette here.
- *
- * A full `.dark` token set used to sit below this block: unreachable (nothing
- * ever set `.dark` on `<html>`, and no `dark:` utilities existed in the app),
- * unreviewed, and carrying shadcn's stock blue `--sidebar-primary` against the
- * College's amber. Dead theme code is a promise the product does not keep.
- *
- * The application is light-only, and the brand depends on it: the crest, the
- * cream paper surfaces and the deep green all assume a light ground, and the
- * system is used in daylight offices and staff rooms.
- *
- * To add a real dark theme, do it as a feature rather than a leftover: define the
- * tokens below `:root`, keep the sidebar branded green in both themes, and check
- * contrast on the cream/green pairs before shipping a switch.
+/*
+ * Dark surfaces (sidebar, landing, 404, auth brand panels) swap the focus
+ * colour to gold; a green ring is invisible on green.
  */
+.surface-deep,
+[data-slot="sidebar-inner"] {
+  --ring: var(--accent);
+}
+
 @theme inline {
-  --font-sans: "Manrope Variable", "Manrope", "Roboto Variable", sans-serif;
+  /* Manrope and Cormorant Garamond come from Google Fonts (see __root.tsx);
+     Roboto is the self-hosted fallback if that request is blocked. Neither
+     brand face has Sinhala or Tamil glyphs, so the system fonts that do
+     (Noto on Android/Linux, Nirmala UI / Iskoola Pota on Windows, Sinhala
+     Sangam on Apple) come next, before the generic family. */
+  --font-sans:
+    "Manrope", "Roboto Variable", "Noto Sans Sinhala", "Noto Sans Tamil",
+    "Nirmala UI", "Iskoola Pota", "Sinhala Sangam MN", ui-sans-serif,
+    system-ui, sans-serif;
   --color-primary-hover: var(--primary-hover);
   --color-accent-hover: var(--accent-hover);
-  --color-gold: var(--gold);
-  --color-warning-ink: var(--warning-ink);
+  --color-gold-text: var(--gold-text);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
-  --color-destructive-hover: var(--destructive-hover);
+  --color-success-foreground: var(--success-foreground);
+  --color-surface-deep: var(--surface-deep);
+  --color-surface-deep-foreground: var(--surface-deep-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-subject-1: var(--subject-1);
+  --color-subject-2: var(--subject-2);
+  --color-subject-3: var(--subject-3);
+  --color-subject-4: var(--subject-4);
+  --color-subject-5: var(--subject-5);
+  --color-subject-6: var(--subject-6);
+  --color-subject-7: var(--subject-7);
+  --color-subject-8: var(--subject-8);
+
+  /* Type scale (see DESIGN_SYSTEM.md → Type). The functional steps keep
+     Tailwind's names but get line heights tuned for Manrope; the role steps
+     below are consumed through the `type-*` utilities at the end of this
+     file, which also set family, weight and tracking. */
+  --text-xs: 0.75rem; /* 12px — metadata only */
+  --text-xs--line-height: 1.4;
+  --text-caption: 0.8125rem; /* 13px — secondary data in dense grids */
+  --text-caption--line-height: 1.45;
+  --text-sm: 0.875rem; /* 14px — controls, table cells, supporting text */
+  --text-sm--line-height: 1.5;
+  --text-body: 0.9375rem; /* 15px — running text, descriptions */
+  --text-body--line-height: 1.6;
+  --text-base: 1rem; /* 16px — inputs on phones, lead text */
+  --text-base--line-height: 1.55;
+  --text-lg: 1.125rem; /* 18px — dialog titles */
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.35;
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 0.14em;
+  --text-eyebrow--font-weight: 700;
+  --text-card-title: 1.0625rem; /* 17px */
+  --text-card-title--line-height: 1.35;
+  --text-section-title: clamp(1.1875rem, 1.1rem + 0.35vw, 1.375rem); /* 19–22px */
+  --text-section-title--line-height: 1.3;
+  --text-page-title: clamp(1.875rem, 1.5rem + 1.25vw, 2.5rem); /* 30–40px */
+  --text-page-title--line-height: 1.1;
+  --text-display: clamp(2.5rem, 1.75rem + 3vw, 4.5rem); /* 40–72px */
+  --text-display--line-height: 1.02;
+  --text-stat: clamp(1.625rem, 1.45rem + 0.6vw, 2rem); /* 26–32px */
+  --text-stat--line-height: 1.1;
+
+  /* Layout widths: `max-w-content` for app pages; `max-w-prose` (65ch,
+     Tailwind default) for running text. */
+  --container-content: 96rem;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -281,287 +223,167 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
-  --font-heading: "Cormorant Garamond", serif;
-  --color-placeholder-foreground: var(--placeholder-foreground);
+  --font-heading:
+    "Cormorant Garamond", "Noto Serif Sinhala", "Iskoola Pota",
+    "Sinhala Sangam MN", Georgia, serif;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, #013405 40%, transparent) transparent;
   }
   body {
-    @apply font-sans bg-background text-foreground;
-    /* The caret is drawn by the browser too, and it was coming out black. */
-    caret-color: var(--foreground);
+    @apply font-sans bg-background text-foreground antialiased;
   }
   html {
     @apply font-sans;
-    /**
-     * The product is light-only (see the note on the absent dark palette
-     * above), so the UA's own rendering of controls is pinned to light with it.
-     * Without this, a staff-room workstation on Windows dark mode paints date
-     * pickers, scrollbars and the form-control background in dark grey over a
-     * cream page, and nothing in the token layer can reach it.
-     */
-    color-scheme: light;
-    text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
-    /**
-     * Both of these inherit, which is the whole trick: re-pointing
-     * `--scrollbar-thumb` once on the sidebar re-themes every scroll box
-     * inside it, at any nesting depth, without a second rule.
-     */
-    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-    scrollbar-width: thin;
+    text-size-adjust: 100%;
+  }
+  /* Cormorant defaults to old-style figures ("2024" bobs up and down), which
+     look broken in years, counts and dates. */
+  .font-heading {
+    font-variant-numeric: lining-nums;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* Reserve the scrollbar's space in the signed-in app so tables and lists
+     don't shift sideways when a page grows long enough to scroll. Public
+     full-bleed pages opt out: a reserved gutter would show as a cream strip
+     beside their deep-green background. */
+  html:has([data-slot="sidebar-wrapper"]) {
+    scrollbar-gutter: stable;
+  }
+  [data-slot="sidebar-inner"] *,
+  .surface-deep * {
+    scrollbar-color: color-mix(in oklab, #fff8e7 35%, transparent) transparent;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
-
-  /**
-   * Text selection. Deep green on amber is 7.72:1 and holds on the cream page,
-   * on a card and inside the green sidebar, so a dragged selection across a
-   * timetable row reads as a deliberate brand mark instead of the browser's
-   * grey-blue.
-   */
-  ::selection {
-    background-color: var(--selection-background);
-    color: var(--selection-foreground);
-  }
-
-  /**
-   * The focus ring for everything that has not declared one of its own.
-   *
-   * It lives in `base`, not in the clear, so a component's `outline-none` or
-   * `outline-hidden` still wins — every shadcn control in `packages/ui` pairs
-   * one of those with its own `focus-visible:ring-*`, and the sidebar pairs it
-   * with a 2px amber ring at 7.72:1 on green. This rule is the floor under
-   * everything that ships *no* indicator: bare `<a>`, `<summary>`, `<option>`,
-   * table cells with `tabindex`, and the long tail of `[tabindex]` divs.
-   *
-   * 2px of solid `--ring` at a 2px offset: green on cream is 16.9:1, which is
-   * far past the 3:1 of 1.4.11 and past the 2px perimeter of WCAG 2.2 SC
-   * 2.4.13. Nothing in this file removes an outline, and `use focus-ring` (see
-   * below) is the way to *replace* one at utility specificity.
-   */
+  /* Default keyboard focus for anything that doesn't draw its own: a 2px
+     solid ring, offset so it reads against filled controls. Primitives that
+     render a `focus-visible:ring` set `outline-none`, which wins over this. */
   :focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-
-  /**
-   * Placeholder text. The floor for any control that has not themed its own;
-   * `Input`, `Textarea` and `Select` reach the same value through
-   * `placeholder:text-muted-foreground`, which resolves to the token audited
-   * above. `opacity: 1` because WebKit dims placeholders on top of whatever
-   * colour it is given, and 5.65:1 does not survive being multiplied down.
-   */
-  ::placeholder {
-    color: var(--placeholder-foreground);
-    opacity: 1;
-  }
-
-  /**
-   * Underlines, where a link has one. Manrope's descenders and the tight
-   * leading this product is set with both collide with the default offset, so
-   * the rule lifts it off the text without moving the link box.
-   */
-  a {
-    text-decoration-thickness: from-font;
-    text-underline-offset: 0.18em;
-  }
-
-  /**
-   * Tabular figures.
-   *
-   * The numerals in a staff roster, a timetable grid or a leave balance are
-   * read in columns and compared down a column; proportional digits make every
-   * row a different width and every total look misaligned. This is the one
-   * piece of browser-default typography in a product that is otherwise fully
-   * specified, and it is the most-repeated typographic complaint this kind of
-   * data invites.
-   *
-   * Scoped to containers that are *definitionally* tabular rather than applied
-   * to `body`, so prose keeps its proportional figures.
-   */
-  table,
-  [data-slot="table"],
-  figure,
-  time,
-  kbd,
-  samp,
-  [data-slot="sidebar-menu-badge"] {
-    font-variant-numeric: tabular-nums;
-  }
-
-  /**
-   * The sidebar is the one large surface in the product that is not cream, so
-   * the browser surfaces that depend on their ground are re-pointed here once
-   * instead of restated per component.
-   */
-  [data-slot="sidebar"] {
-    --focus-ring: var(--focus-ring-inverse);
-    --muted-foreground: var(--muted-foreground-inverse);
-    --scrollbar-thumb: var(--sidebar-scrollbar-thumb);
-    --scrollbar-thumb-hover: var(--sidebar-scrollbar-thumb-hover);
-  }
-  /**
-   * …and the one exception, immediately below it: the sidebar's own search
-   * field is a cream `Input` sitting on the green ground. It is a light-ground
-   * control and has to read as one, so it takes the light ink and the light
-   * focus ring back. `--input` and `--placeholder-foreground` are *not* in
-   * either list, so they stay light everywhere.
-   */
-  [data-slot="sidebar-input"] {
-    --focus-ring: var(--focus-ring-default);
-    --muted-foreground: var(--muted-foreground-default);
-  }
-}
-
-/**
- * The focus ring as a utility, for a control that opts out of the browser's
- * own indicator on purpose.
- *
- * `focus-ring` is a real *replacement*, not a removal: because it compiles to
- * `&:focus-visible` it outranks the `outline-none` / `outline-hidden` it is
- * usually written next to, so `className="outline-none focus-ring"` is a
- * complete and correct focus treatment. It reads the same `--focus-ring` the
- * base rule does, so it flips to amber inside the sidebar for free.
- */
-@utility focus-ring {
-  &:focus-visible {
-    outline: 2px solid var(--focus-ring);
+    outline-width: 2px;
+    outline-style: solid;
     outline-offset: 2px;
   }
 }
 
-/**
- * Scrollbar chrome for the engine that has no `scrollbar-color`.
+/*
+ * Typographic roles. Each sets family, size, leading, weight and tracking
+ * together, so a heading is one class rather than five that drift apart.
+ * They are plain utilities (not `text-*`), which also means tailwind-merge
+ * leaves them alone: a colour class beside them is never dropped by `cn()`.
  *
- * Firefox is served by the two inherited properties on `html` above; Chromium
- * has no equivalent, so the two vendors need the two spellings. Both read the
- * same three variables, so the sidebar re-point in the base layer themes both.
- * The 2px transparent border plus `background-clip: content-box` keeps a 10px
- * gutter from reading as a 10px thumb.
+ * Cormorant only appears at display sizes (page titles and up); below ~28px
+ * its thin hairlines stop reading well, so every functional heading is
+ * Manrope.
  */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track,
-::-webkit-scrollbar-corner {
-  background: var(--scrollbar-track);
-}
-::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
-  background-clip: content-box;
-  border: 2px solid transparent;
-}
-::-webkit-scrollbar-thumb:hover,
-::-webkit-scrollbar-thumb:active {
-  background-color: var(--scrollbar-thumb-hover);
+@utility type-display {
+  font-family: var(--font-heading);
+  font-size: var(--text-display);
+  line-height: var(--text-display--line-height);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  font-variant-numeric: lining-nums;
+  text-wrap: balance;
 }
 
-/**
- * Motion conveys state and nothing else, so none of it is load-bearing.
- *
- * This sits outside every layer on purpose: it has to beat `animate-spin` on a
- * submit button, `animate-pulse` on a `Skeleton`, the `data-[open]:animate-in`
- * transitions on `Dialog` and `Sheet`, and the plain `<style>` block in
- * `auth-layout.tsx` that applies `om-pulse` and `om-drift` without a
- * `motion-safe:` guard of its own. Animations resolve to their final frame and
- * transitions resolve instantly, which is the correct reading of the state, not
- * a loss of it — a `Skeleton` is still a `Skeleton` when it stops breathing, and
- * `aria-busy` is what announces it.
- */
+@utility type-page-title {
+  font-family: var(--font-heading);
+  font-size: var(--text-page-title);
+  line-height: var(--text-page-title--line-height);
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  font-variant-numeric: lining-nums;
+  text-wrap: balance;
+}
+
+@utility type-section-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-section-title);
+  line-height: var(--text-section-title--line-height);
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+}
+
+@utility type-card-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-card-title);
+  line-height: var(--text-card-title--line-height);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+@utility type-eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--text-eyebrow);
+  line-height: var(--text-eyebrow--line-height);
+  font-weight: var(--text-eyebrow--font-weight);
+  letter-spacing: var(--text-eyebrow--letter-spacing);
+  text-transform: uppercase;
+}
+
+/* A big figure on a dashboard: Manrope with tabular figures so columns of
+   numbers line up and don't jiggle as they update. */
+@utility type-stat {
+  font-family: var(--font-sans);
+  font-size: var(--text-stat);
+  line-height: var(--text-stat--line-height);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Running text: descriptions, help and explanatory paragraphs. */
+@utility type-body {
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+}
+
+/* Secondary data in dense tables and grids: the teacher under a subject,
+   a period's times, an email under a name. One step above `text-xs`, which
+   stays for timestamps and other true metadata. */
+@utility type-caption {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sonner injects its own unlayered stylesheet at runtime that hard-codes a
+   system font stack and 13px text. The doubled attribute out-ranks it. */
+[data-sonner-toaster][data-sonner-toaster] {
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster] [data-sonner-toast][data-sonner-toast] {
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+}
+[data-sonner-toaster] [data-sonner-toast] [data-title][data-title] {
+  font-weight: 600;
+}
+
+/* Respect the OS "reduce motion" setting everywhere, including the overlay
+   enter/exit animations from tw-animate-css and the landing's ambient glow. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
   ::after {
-    animation-delay: 0s !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-delay: 0s !important;
     transition-duration: 0.01ms !important;
-  }
-}
-
-/**
- * Printing.
- *
- * The product's real exports are server-side Excel and PDF, but the browser's
- * own print path exists — Ctrl+P on a timetable, an attendance register or a
- * leave queue — and until now it printed the shell: a deep-green sidebar down
- * the left edge, a 56px-tall header holding nothing but the sidebar toggle, and
- * a stack of toasts. So this block does three things, in order of how much they
- * matter.
- *
- * 1. **Drop the chrome.** The sidebar and its gap and rail, the trigger, the
- *    empty header that holds only that trigger (`[role="toolbar"]` and the
- *    `data-sonner-*` nodes cover toasts and filter bars), and every transient
- *    overlay. An open `Dialog` is *not* dropped — it is the thing the user is
- *    looking at — so its overlay goes and its portal is made static, which lets
- *    the card flow into the page instead of floating over page one.
- * 2. **Put ink on paper.** The ground tokens are re-pointed to white and the
- *    inks to black *in `:root`*, so every component re-themes itself through
- *    the tokens it already reads; nothing has to be restyled element by
- *    element. The cream and the green are a screen. The rules are kept, one step
- *    darker than the screen's, because a ledger is read as a grid of lines and
- *    a grid with no rules is a list of floating words.
- * 3. **Keep the grid whole.** `thead` repeats on every page and no row is
- *    split across a page break, which is the only reason a printed table is
- *    usable at all.
- */
-@media print {
-  @page {
-    margin: 14mm;
-  }
-  :root {
-    --background: #ffffff;
-    --foreground: #000000;
-    --card: #ffffff;
-    --card-foreground: #000000;
-    --popover: #ffffff;
-    --popover-foreground: #000000;
-    --secondary: #ffffff;
-    --secondary-foreground: #000000;
-    --muted: #ffffff;
-    --border: color-mix(in oklab, #000000 38%, transparent);
-  }
-  [data-sonner-toaster],
-  [data-sonner-toast],
-  [data-slot="sidebar"],
-  [data-slot="sidebar-gap"],
-  [data-slot="sidebar-rail"],
-  [data-slot="sidebar-trigger"],
-  [data-slot="sidebar-inset"] > header:has([data-slot="sidebar-trigger"]),
-  [role="toolbar"],
-  [data-slot="dialog-overlay"],
-  [data-slot="dropdown-menu-portal"],
-  [data-slot="select-content"],
-  [data-slot="combobox-content"],
-  [data-slot="popover-content"],
-  [data-slot="tooltip-content"] {
-    display: none !important;
-  }
-  [data-slot="sidebar-wrapper"] {
-    background: var(--background) !important;
-  }
-  [data-slot="sidebar-inset"] {
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    margin: 0 !important;
-  }
-  [data-slot="dialog-portal"] {
-    position: static !important;
-  }
-  thead {
-    display: table-header-group;
-  }
-  tr,
-  [data-slot="card"] {
-    break-inside: avoid;
+    scroll-behavior: auto !important;
   }
 }

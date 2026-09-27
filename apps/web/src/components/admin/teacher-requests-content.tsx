@@ -2,11 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 import { ApproveTeacherDialog } from "./approve-teacher-dialog";
 import type { TeacherRequest } from "./approve-teacher-dialog";
-import { describeBlocker } from "./request-blocker";
 
 /**
  * People waiting on a staffing decision. The Principal and the administrator
@@ -34,94 +34,69 @@ export const TeacherRequestsContent = () => {
   );
 
   const requests = requestsQuery.data ?? [];
-  const reviewable = requests.filter(
-    (request) => request.emailVerified && describeBlocker(request) === null
-  );
-  const blocked = requests.filter(
-    (request) => !request.emailVerified || describeBlocker(request) !== null
-  );
+  const waiting = requests.filter((request) => request.emailVerified);
+  const blocked = requests.filter((request) => !request.emailVerified);
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <div>
-        <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
-          Staff requests
-        </h1>
-        <p className="text-primary/65 mt-1.5 text-[13.5px]">
-          People who registered asking for teaching access. Check the person is
-          on the College establishment, then approve — that grants the{" "}
-          <strong>teacher</strong> role and opens the teacher portal.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Leadership"
+        title="Teacher requests"
+        description={
+          <>
+            Accounts that asked for staff access. Check the person is on the
+            College establishment, then approve — that grants the{" "}
+            <strong>teacher</strong> role.
+          </>
+        }
+      />
 
       {requestsQuery.isPending && (
-        <p className="text-primary/60 text-sm">Loading requests…</p>
+        <p className="text-muted-foreground text-sm">Loading requests…</p>
       )}
 
-      {requestsQuery.isError && (
-        <div className="border-destructive/30 bg-card border px-[22px] py-4">
-          <p className="text-destructive text-sm font-bold">
-            The request queue could not be loaded
-          </p>
-          <p className="text-primary/65 mt-1 text-[13px]">
-            {requestsQuery.error?.message ??
-              "The server did not return the queue."}{" "}
-            Nobody is missing from this list as far as this page knows — try
-            again.
-          </p>
-          <button
-            type="button"
-            className="border-primary/30 text-primary hover:border-primary mt-3 border px-3 py-1.5 text-xs font-bold transition-colors"
-            onClick={() => requestsQuery.refetch()}
-          >
-            Try again
-          </button>
-        </div>
+      {!requestsQuery.isPending && requests.length === 0 && (
+        <p className="text-muted-foreground text-sm">
+          Nobody is waiting to be approved.
+        </p>
       )}
 
-      {!requestsQuery.isPending &&
-        !requestsQuery.isError &&
-        requests.length === 0 && (
-          <p className="text-primary/60 text-sm">
-            Nobody is waiting to be approved.
-          </p>
-        )}
-
-      {reviewable.length > 0 && (
-        <section className="border-primary/14 bg-card">
-          <h2 className="border-primary/10 text-primary/55 border-b px-[22px] py-3 text-xs font-extrabold tracking-[0.16em]">
-            READY TO REVIEW
+      {waiting.length > 0 && (
+        <section className="border-border bg-card">
+          <h2 className="border-border text-muted-foreground type-eyebrow border-b px-[22px] py-3">
+            Ready to review
           </h2>
           <ul>
-            {reviewable.map((request) => (
+            {waiting.map((request) => (
               <li
                 key={request.id}
-                className="border-primary/8 flex flex-wrap items-center gap-3 border-b px-[22px] py-4 last:border-b-0"
+                className="border-border flex flex-wrap items-center gap-3 border-b px-[22px] py-4 last:border-b-0"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="text-primary block font-bold">
+                  <span className="text-foreground type-body block font-semibold">
                     {request.name}
                   </span>
-                  <span className="text-primary/60 block text-xs">
+                  <span className="text-muted-foreground block text-sm">
                     {request.email} · username{" "}
                     <span className="font-mono">{request.username ?? "—"}</span>
                   </span>
-                  <span className="text-success mt-1 block text-xs">
-                    Email verified · staff record linked
-                    {request.lastSignInAt === null
+                  <span className="text-success mt-1 block text-sm">
+                    Email verified ·{" "}
+                    {request.role === "teacher-requester"
+                      ? "Asked to join as staff"
+                      : "General account"}
+                    {request.lastSeenAt === null
                       ? " · never signed in"
-                      : ` · ${request.signInCount} sign-in${
-                          request.signInCount === 1 ? "" : "s"
-                        } on record`}
+                      : ` · ${request.sessionCount} active session${request.sessionCount === 1 ? "" : "s"}`}
                   </span>
                 </span>
                 <button
                   type="button"
                   disabled={approveMutation.isPending}
                   onClick={() => setReviewing(request)}
-                  className="border-primary bg-primary text-primary-foreground hover:bg-primary-hover shrink-0 border px-4 py-2 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:opacity-50"
+                  className="border-primary bg-primary text-primary-foreground hover:bg-primary-hover shrink-0 border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
                 >
-                  REVIEW &amp; APPROVE
+                  Review &amp; approve
                 </button>
               </li>
             ))}
@@ -130,26 +105,25 @@ export const TeacherRequestsContent = () => {
       )}
 
       {blocked.length > 0 && (
-        <section className="border-primary/14 bg-card">
-          <h2 className="border-primary/10 text-primary/55 border-b px-[22px] py-3 text-xs font-extrabold tracking-[0.16em]">
-            NOT READY YET
+        <section className="border-border bg-card">
+          <h2 className="border-border text-muted-foreground type-eyebrow border-b px-[22px] py-3">
+            Awaiting email verification
           </h2>
           <ul>
             {blocked.map((request) => (
               <li
                 key={request.id}
-                className="border-primary/8 border-b px-[22px] py-4 last:border-b-0"
+                className="border-border border-b px-[22px] py-4 last:border-b-0"
               >
-                <span className="text-primary block font-bold">
+                <span className="text-foreground type-body block font-semibold">
                   {request.name}
                 </span>
-                <span className="text-primary/60 block text-xs">
+                <span className="text-muted-foreground block text-sm">
                   {request.email}
                 </span>
-                <span className="text-destructive mt-1 block text-xs">
-                  {request.emailVerified
-                    ? describeBlocker(request)
-                    : "Has not entered the code sent to their address yet — they cannot be approved until they do."}
+                <span className="text-destructive mt-1 block text-sm">
+                  Has not entered the code sent to their address yet — they
+                  cannot be approved until they do.
                 </span>
               </li>
             ))}

@@ -1,13 +1,8 @@
-import type { classPeriodAssignment as periodAssignmentTable } from "@school-student-teacher-management/db/schema/periods";
+import type {
+  classPeriodAssignment as periodAssignmentTable,
+  periodConfig as periodConfigTable,
+} from "@school-student-teacher-management/db/schema/periods";
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@school-student-teacher-management/ui/components/alert-dialog";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -18,9 +13,11 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 
 import { PeriodAssignmentForm } from "@/components/staff/period-management/period-assignment-form";
+import { ConfirmDialog } from "@/components/ui-patterns/confirm-dialog";
 
 type Staff = typeof staff.$inferSelect;
 type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
+export type PeriodConfig = typeof periodConfigTable.$inferSelect;
 export interface AcademicYear {
   id: string;
   year: number;
@@ -31,42 +28,6 @@ export interface PeriodClass {
   name: string;
   gradeLevel: number;
 }
-
-const DAYS_OF_WEEK = [
-  "",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-];
-
-/**
- * A held width on the submit button.
- *
- * "Assign" becoming "Saving…" changes the button's width, which shifts Cancel
- * out from under the pointer in the middle of a save.
- */
-const SUBMIT_WIDTH = "min-w-28";
-
-/**
- * Shown when a dialog is open with nothing to edit.
- *
- * The body used to render nothing at all, leaving a Save button wired to a form
- * that was not on the page: a submit into a void. The button is disabled and the
- * body says what happened.
- */
-const NoSelection = ({ children }: { children: string }) => (
-  <div className="text-muted-foreground border-border border border-dashed px-3 py-6 text-center text-xs">
-    {children}
-  </div>
-);
-
-const describeAssignment = (assignment: PeriodAssignment): string => {
-  const day =
-    DAYS_OF_WEEK[assignment.dayOfWeek] ?? `Day ${assignment.dayOfWeek}`;
-  return `${day}, Period ${assignment.periodNumber}`;
-};
 
 export const AssignPeriodDialog = ({
   isOpen,
@@ -86,64 +47,45 @@ export const AssignPeriodDialog = ({
   selectedSlot: { dayOfWeek: number; periodNumber: number } | null;
   academicYearId: string | undefined;
   isLoading: boolean;
-}) => {
-  const hasSlot = Boolean(selectedClass && selectedSlot);
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
-        <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Assign Period</DialogTitle>
-          <DialogDescription>
-            {selectedClass && selectedSlot
-              ? `${selectedClass.name}, ${DAYS_OF_WEEK[selectedSlot.dayOfWeek] ?? `Day ${selectedSlot.dayOfWeek}`}, Period ${selectedSlot.periodNumber}.`
-              : "Assign a staff member to this time slot."}
-          </DialogDescription>
-        </DialogHeader>
-        <div
-          aria-busy={isLoading ? "true" : undefined}
-          className="flex-1 overflow-y-auto px-6 py-4"
+}) => (
+  <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
+      <DialogHeader className="shrink-0 border-b px-6 py-4">
+        <DialogTitle>Assign period</DialogTitle>
+        <DialogDescription>
+          Assign a staff member to this time slot
+        </DialogDescription>
+      </DialogHeader>
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {selectedClass && selectedSlot && (
+          <PeriodAssignmentForm
+            formId="assign-period-form"
+            gradeLevel={selectedClass.gradeLevel}
+            dayOfWeek={selectedSlot.dayOfWeek}
+            periodNumber={selectedSlot.periodNumber}
+            academicYearId={academicYearId}
+            staff={staff}
+            onSubmit={onSubmit}
+            isLoading={isLoading}
+          />
+        )}
+      </div>
+      <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+          disabled={isLoading}
         >
-          {selectedClass && selectedSlot ? (
-            <PeriodAssignmentForm
-              academicYearId={academicYearId}
-              dayOfWeek={selectedSlot.dayOfWeek}
-              formId="assign-period-form"
-              gradeLevel={selectedClass.gradeLevel}
-              isLoading={isLoading}
-              onSubmit={onSubmit}
-              periodNumber={selectedSlot.periodNumber}
-              staff={staff}
-            />
-          ) : (
-            <NoSelection>
-              No slot is selected. Close this and choose a day and period in the
-              grid.
-            </NoSelection>
-          )}
-        </div>
-        <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
-          <Button
-            disabled={isLoading}
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button
-            className={SUBMIT_WIDTH}
-            disabled={isLoading || !hasSlot}
-            form="assign-period-form"
-            type="submit"
-          >
-            {isLoading ? "Saving…" : "Assign"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
+          Cancel
+        </Button>
+        <Button type="submit" form="assign-period-form" disabled={isLoading}>
+          {isLoading ? "Saving…" : "Assign"}
+        </Button>
+      </div>
+    </DialogContent>
+  </Dialog>
+);
 
 export const EditPeriodDialog = ({
   isOpen,
@@ -167,56 +109,35 @@ export const EditPeriodDialog = ({
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
       <DialogHeader className="shrink-0 border-b px-6 py-4">
-        <DialogTitle>Edit Assignment</DialogTitle>
-        <DialogDescription>
-          {selectedAssignment
-            ? `${describeAssignment(selectedAssignment)}. Change the subject or the teacher; the slot itself cannot move.`
-            : "Update the assignment details."}
-        </DialogDescription>
+        <DialogTitle>Edit period</DialogTitle>
+        <DialogDescription>Update the assignment details</DialogDescription>
       </DialogHeader>
-      <div
-        aria-busy={isLoading ? "true" : undefined}
-        className="flex-1 overflow-y-auto px-6 py-4"
-      >
-        {selectedClass && selectedAssignment ? (
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {selectedClass && selectedAssignment && (
           <PeriodAssignmentForm
-            academicYearId={academicYearId}
-            currentAssignmentId={selectedAssignment.id}
-            dayOfWeek={selectedAssignment.dayOfWeek}
             formId="edit-period-form"
             gradeLevel={selectedClass.gradeLevel}
-            initialData={{
-              isCombinedSession: selectedAssignment.isCombinedSession,
-              staffId: selectedAssignment.staffId,
-              subjectKey: selectedAssignment.subjectKey,
-            }}
-            isLoading={isLoading}
-            onSubmit={onSubmit}
+            dayOfWeek={selectedAssignment.dayOfWeek}
             periodNumber={selectedAssignment.periodNumber}
+            academicYearId={academicYearId}
+            currentAssignmentId={selectedAssignment.id}
             staff={staff}
+            initialData={selectedAssignment}
+            onSubmit={onSubmit}
+            isLoading={isLoading}
           />
-        ) : (
-          <NoSelection>
-            The assignment to edit is no longer selected. Close this and pick
-            the slot again.
-          </NoSelection>
         )}
       </div>
       <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
         <Button
-          disabled={isLoading}
-          onClick={() => onOpenChange(false)}
           type="button"
           variant="outline"
+          onClick={() => onOpenChange(false)}
+          disabled={isLoading}
         >
           Cancel
         </Button>
-        <Button
-          className={SUBMIT_WIDTH}
-          disabled={isLoading || !selectedAssignment || !selectedClass}
-          form="edit-period-form"
-          type="submit"
-        >
+        <Button type="submit" form="edit-period-form" disabled={isLoading}>
           {isLoading ? "Saving…" : "Save"}
         </Button>
       </div>
@@ -235,23 +156,15 @@ export const DeleteConfirmDialog = ({
   onConfirm: () => Promise<void>;
   isLoading: boolean;
 }) => (
-  <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
-    <AlertDialogContent>
-      <AlertDialogTitle>Unassign this period</AlertDialogTitle>
-      <AlertDialogDescription>
-        The subject and teacher are removed from this slot, which then becomes
-        free to assign again. This cannot be undone.
-      </AlertDialogDescription>
-      <div className="flex justify-end gap-2">
-        <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-        <AlertDialogAction
-          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 min-w-28"
-          disabled={isLoading}
-          onClick={onConfirm}
-        >
-          {isLoading ? "Removing…" : "Unassign"}
-        </AlertDialogAction>
-      </div>
-    </AlertDialogContent>
-  </AlertDialog>
+  <ConfirmDialog
+    open={isOpen}
+    onOpenChange={onOpenChange}
+    title="Unassign this period?"
+    description="The teacher and subject will be removed from this timetable slot. This cannot be undone."
+    confirmLabel="Unassign"
+    pendingLabel="Unassigning…"
+    isPending={isLoading}
+    tone="destructive"
+    onConfirm={onConfirm}
+  />
 );

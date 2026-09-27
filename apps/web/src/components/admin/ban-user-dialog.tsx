@@ -35,10 +35,10 @@ interface BanUserDialogProps {
 
 const getConfirmLabel = (isPending: boolean, isUnban: boolean): string => {
   if (isPending) {
-    return "WORKING…";
+    return "Working…";
   }
 
-  return isUnban ? "UNBAN ACCOUNT" : "BAN ACCOUNT";
+  return isUnban ? "Unban account" : "Ban account";
 };
 
 /**
@@ -74,30 +74,33 @@ export const BanUserDialog = ({
       }}
       open={isOpen}
     >
-      <AlertDialogContent className="border-primary/18 bg-card max-w-[440px] border p-0">
-        <AlertDialogHeader className="border-primary/12 border-b px-6 py-5">
-          <div className="text-destructive text-[12px] font-extrabold tracking-[0.24em]">
-            {isUnban ? "RESTORE ACCESS" : "SUSPEND ACCOUNT"}
+      <AlertDialogContent className="border-border bg-card max-w-[440px] border p-0">
+        <AlertDialogHeader className="border-border border-b px-6 py-5">
+          <div className="text-destructive type-eyebrow">
+            {isUnban ? "Restore access" : "Suspend account"}
           </div>
-          <AlertDialogTitle className="font-heading text-primary text-[24px] font-semibold">
+          <AlertDialogTitle className="text-foreground text-xl">
             {isUnban ? "Unban this account?" : "Ban this account?"}
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-primary/65 text-[13px] leading-relaxed">
+          <AlertDialogDescription className="text-muted-foreground type-body">
             {isUnban ? (
               <>
-                <strong className="text-primary">{target?.name}</strong> (
+                <strong className="text-foreground">{target?.name}</strong> (
                 {target?.email}) will be able to sign in again immediately.
                 {target?.banReason && (
                   <>
                     {" "}
                     The reason on file was:
-                    <span className="text-primary"> “{target.banReason}”</span>
+                    <span className="text-foreground">
+                      {" "}
+                      “{target.banReason}”
+                    </span>
                   </>
                 )}
               </>
             ) : (
               <>
-                <strong className="text-primary">{target?.name}</strong> (
+                <strong className="text-foreground">{target?.name}</strong> (
                 {target?.email}) will be signed out and blocked from signing in
                 again until a ban is lifted. Their data is kept — this is not a
                 deletion.
@@ -109,37 +112,41 @@ export const BanUserDialog = ({
         {!isUnban && (
           <div className="px-6 py-5">
             <label className="flex flex-col gap-1.5" htmlFor="ban-reason">
-              <span className="text-primary/70 text-[12px] font-bold tracking-[0.14em]">
-                REASON FOR THE BAN
+              <span className="text-foreground text-sm font-semibold">
+                Reason for the ban
               </span>
               <textarea
-                className="border-primary/22 text-primary focus:border-primary min-h-[74px] w-full resize-y border bg-white px-3 py-2 text-[13px] leading-relaxed outline-none"
+                className="border-input text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring min-h-[74px] w-full resize-y border bg-white px-3 py-2 text-base leading-relaxed outline-none focus-visible:ring-1 sm:text-sm"
                 id="ban-reason"
+                aria-describedby="ban-reason-hint"
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="e.g. left the College — staff record closed"
                 required
                 value={reason}
               />
             </label>
-            <p className="text-primary/50 mt-2 text-[12px] leading-relaxed">
+            <p
+              id="ban-reason-hint"
+              className="text-muted-foreground mt-2 text-sm"
+            >
               The reason is stored on the account and shown wherever the ban is
               displayed, so write it for whoever reads it next.
             </p>
           </div>
         )}
 
-        <AlertDialogFooter className="border-primary/12 border-t px-6 py-4">
+        <AlertDialogFooter className="border-border border-t px-6 py-4">
           <AlertDialogCancel
-            className="border-primary/30 text-primary hover:bg-primary/5 border px-4 py-2 text-xs font-extrabold tracking-[0.04em]"
+            className="border-input text-foreground hover:bg-primary/5 border px-4 py-2 text-sm font-semibold"
             disabled={isPending}
           >
-            {isUnban ? "KEEP BANNED" : "CANCEL"}
+            {isUnban ? "Keep banned" : "Cancel"}
           </AlertDialogCancel>
           <AlertDialogAction
-            className={`text-primary-foreground px-4 py-2 text-xs font-extrabold tracking-[0.04em] disabled:opacity-60 ${
+            className={`text-primary-foreground px-4 py-2 text-sm font-semibold disabled:opacity-60 ${
               isUnban
                 ? "bg-primary hover:bg-primary-hover"
-                : "bg-destructive hover:bg-destructive-hover"
+                : "bg-destructive hover:bg-destructive/90"
             }`}
             disabled={isPending || (!isUnban && trimmedReason.length === 0)}
             onClick={() => {

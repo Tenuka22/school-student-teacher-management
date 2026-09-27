@@ -1,9 +1,5 @@
 "use client";
 
-import {
-  leavePaymentLabel,
-  leaveTypeLabel,
-} from "@school-student-teacher-management/db/constants/leave-labels";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -22,11 +18,32 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { QueryErrorPanel } from "@/components/query-error-panel";
-import { leaveStatusBadge } from "@/components/staff/leave-management/leave-status";
 import { ApplyLeaveForm } from "@/components/staff/teacher-portal/apply-leave-form";
-import { formatApiErrorMessage } from "@/lib/api-error";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
+
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  annual: "Annual",
+  casual: "Casual",
+  medical: "Medical",
+  maternity: "Maternity",
+  duty: "Official Duty",
+  other: "Other",
+};
+
+const STATUS_BADGES: Record<
+  string,
+  {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+  }
+> = {
+  pending: { label: "Pending", variant: "secondary" },
+  recommended: { label: "Recommended (DP)", variant: "outline" },
+  approved: { label: "Approved (Final)", variant: "default" },
+  rejected: { label: "Rejected", variant: "destructive" },
+  cancelled: { label: "Cancelled", variant: "outline" },
+};
 
 const formatDateRange = (start: string, end: string) =>
   start === end ? start : `${start} → ${end}`;
@@ -57,36 +74,21 @@ export const MyLeavesContent = () => {
   const requests = myLeavesQuery.data?.requests ?? [];
   const pendingRequests = requests.filter((r) => r.status === "pending");
 
-  /**
-   * Empty and failed are different facts about a person's leave.
-   *
-   * `requests` is `[]` for both, so the old `!isLoading && length === 0`
-   * branch told a teacher who could not reach the server that they had never
-   * applied for leave. The empty state is now `isSuccess && length === 0`, so
-   * it can only be reached by a request that succeeded, and the failure is
-   * stated in the server's own words with a retry that refetches.
-   */
-  const isListFailed = myLeavesQuery.isError;
-  const isListLoadedAndEmpty = myLeavesQuery.isSuccess && requests.length === 0;
-  const listErrorMessage = formatApiErrorMessage(
-    myLeavesQuery.error,
-    "The server did not return your leave requests."
-  );
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="font-heading text-4xl font-semibold">My Leave</h1>
-          <p className="text-muted-foreground mt-2">
-            Apply for leave and track the Principal&apos;s decision.
-          </p>
-        </div>
-        <Button onClick={() => setIsApplyOpen(true)}>
-          <IconPlus className="mr-2 size-4" />
-          Apply for Leave
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Teacher workspace"
+        title="My leave"
+        description={
+          <>Apply for leave and track the Principal&apos;s decision.</>
+        }
+        actions={
+          <Button onClick={() => setIsApplyOpen(true)}>
+            <IconPlus className="mr-2 size-4" />
+            Apply for leave
+          </Button>
+        }
+      />
 
       {myLeavesQuery.isLoading && (
         <div className="space-y-3">
@@ -96,17 +98,7 @@ export const MyLeavesContent = () => {
         </div>
       )}
 
-      {isListFailed && (
-        <QueryErrorPanel
-          message={listErrorMessage}
-          onRetry={() => {
-            void myLeavesQuery.refetch();
-          }}
-          title="Your leave requests could not be loaded"
-        />
-      )}
-
-      {isListLoadedAndEmpty && (
+      {!myLeavesQuery.isLoading && requests.length === 0 && (
         <Empty className="min-h-[40vh] border-dashed">
           <EmptyTitle>No leave requests yet</EmptyTitle>
           <EmptyDescription>
@@ -116,13 +108,13 @@ export const MyLeavesContent = () => {
           <EmptyContent>
             <Button onClick={() => setIsApplyOpen(true)} className="mt-4">
               <IconPlus className="mr-2 size-4" />
-              Apply for Leave
+              Apply for leave
             </Button>
           </EmptyContent>
         </Empty>
       )}
 
-      {myLeavesQuery.isSuccess && requests.length > 0 && (
+      {!myLeavesQuery.isLoading && requests.length > 0 && (
         <div className="space-y-3">
           {pendingRequests.length > 0 && (
             <p className="text-muted-foreground text-sm">
@@ -136,23 +128,13 @@ export const MyLeavesContent = () => {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">
-                      {leaveTypeLabel(request.type)}
+                      {LEAVE_TYPE_LABELS[request.type] ?? request.type}
                     </Badge>
-                    {request.type === "maternity" &&
-                      request.paymentStatus !== "notApplicable" && (
-                        <Badge variant="outline">
-                          {leavePaymentLabel(request.paymentStatus)}
-                        </Badge>
-                      )}
-                    <Badge variant={leaveStatusBadge(request.status).variant}>
-                      {leaveStatusBadge(request.status).label}
+                    <Badge variant={STATUS_BADGES[request.status].variant}>
+                      {STATUS_BADGES[request.status].label}
                     </Badge>
                     <span className="text-sm font-medium">
                       {formatDateRange(request.startDate, request.endDate)}
-                      {request.dayPart === "morning" &&
-                        " · First half (Primary)"}
-                      {request.dayPart === "afternoon" &&
-                        " · Second half (Secondary)"}
                     </span>
                   </div>
                   {request.reason && (
@@ -161,7 +143,7 @@ export const MyLeavesContent = () => {
                     </p>
                   )}
                   {request.reviewComment && (
-                    <p className="text-muted-foreground mt-1 text-xs italic">
+                    <p className="text-muted-foreground mt-1 text-sm italic">
                       Reviewer note: {request.reviewComment}
                     </p>
                   )}
@@ -173,7 +155,7 @@ export const MyLeavesContent = () => {
                     disabled={cancelMutation.isPending}
                     onClick={() => cancelMutation.mutate({ id: request.id })}
                   >
-                    Cancel Request
+                    Cancel request
                   </Button>
                 )}
               </CardContent>

@@ -12,6 +12,7 @@ import * as React from "react";
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
 import { AcademicYearSwitcher } from "@/components/staff/academic-year-switcher/academic-year-switcher";
+import { CollegeCrest } from "@/components/ui-patterns/college-crest";
 import type { HomeBase } from "@/functions/get-home-path";
 import { yearPath, useActiveYear } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
@@ -62,9 +63,9 @@ interface NavItem {
 }
 
 const SOON_NAV: NavItem[] = [
-  { title: "Students", url: "#", disabled: true, tag: "SOON" },
-  { title: "Marks & Exams", url: "#", disabled: true, tag: "SOON" },
-  { title: "Reports", url: "#", disabled: true, tag: "SOON" },
+  { title: "Students", url: "#", disabled: true, tag: "Soon" },
+  { title: "Marks & Exams", url: "#", disabled: true, tag: "Soon" },
+  { title: "Reports", url: "#", disabled: true, tag: "Soon" },
 ];
 
 /**
@@ -555,35 +556,25 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     <Sidebar variant="inset" {...props}>
       <SidebarHeader className="gap-0 p-0">
         <div className="border-sidebar-primary/16 flex items-center gap-3 border-b px-4.5 py-4">
-          {/*
-            Decorative. The wordmark beside it already names the College in
-            text, so an `alt` here made a screen reader say it twice on every
-            page; `alt=""` keeps the image in the document and out of the
-            accessibility tree.
-          */}
-          <img
-            alt=""
+          <CollegeCrest
+            alt="St. Aloysius' College crest"
+            size="small"
             className="h-9.5 w-auto"
             src="/uploads/college-crest.png"
           />
           <div className="min-w-0 leading-tight">
-            <div className="text-sidebar-foreground truncate text-xs font-extrabold tracking-[0.04em]">
-              ST. ALOYSIUS&rsquo; COLLEGE
+            <div className="text-sidebar-foreground truncate text-sm font-bold tracking-[-0.005em]">
+              St. Aloysius&rsquo; College
             </div>
-            <div className="text-sidebar-primary mt-0.5 text-xs tracking-[0.18em]">
-              ADMINISTRATION
+            <div className="text-sidebar-primary type-eyebrow mt-0.5">
+              Administration
             </div>
           </div>
         </div>
 
         <div className="border-sidebar-foreground/10 border-b px-3.5 pt-3.5 pb-3">
-          {/*
-            `/60` rather than `/50`: 12px extrabold is not large text under
-            WCAG, so it needs 4.5:1, and cream at half strength over the deep
-            green is 4.38:1. At 60% it is 5.66:1.
-          */}
-          <div className="text-sidebar-foreground/60 mb-2 text-xs font-extrabold tracking-[0.18em]">
-            ACADEMIC YEAR
+          <div className="text-sidebar-muted-foreground type-eyebrow mb-2">
+            Academic year
           </div>
           {/* The switcher's "set current" and "add year" are both
               `adminOnlyProcedure`, and this header is above the role branching

@@ -5,6 +5,7 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldTitle,
 } from "@school-student-teacher-management/ui/components/field";
 import {
   Select,
@@ -160,11 +161,13 @@ export const AcademicYearForm = ({
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       <FieldGroup>
         <Field data-invalid={!!error}>
-          <FieldLabel htmlFor={`${formId}-year`}>Academic Year</FieldLabel>
-          <div
-            id={`${formId}-year`}
-            className="flex flex-wrap gap-2"
-            aria-label="Academic year"
+          <FieldTitle id={`${formId}-year-label`} className="font-medium">
+            Academic year
+          </FieldTitle>
+          <fieldset
+            aria-labelledby={`${formId}-year-label`}
+            aria-describedby={`${formId}-year-description`}
+            className="m-0 flex min-w-0 flex-wrap gap-2 border-0 p-0"
           >
             {candidateYears.map((candidate) => {
               const exists = existingSet.has(candidate);
@@ -185,20 +188,18 @@ export const AcademicYearForm = ({
                 </Button>
               );
             })}
-          </div>
-          <FieldDescription>
+          </fieldset>
+          <FieldDescription id={`${formId}-year-description`}>
             Years already defined are locked. Picking a year suggests a
             Jan&ndash;Dec term below — adjust the dates if yours differs.
           </FieldDescription>
         </Field>
 
         <Field>
-          <FieldLabel>Term Duration</FieldLabel>
+          <FieldTitle className="font-medium">Term duration</FieldTitle>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <FieldDescription className="text-xs font-medium">
-                Start Date
-              </FieldDescription>
+              <FieldLabel htmlFor={`${formId}-start`}>Start date</FieldLabel>
               <DatePicker
                 id={`${formId}-start`}
                 value={startDate}
@@ -210,9 +211,7 @@ export const AcademicYearForm = ({
               />
             </div>
             <div className="space-y-1.5">
-              <FieldDescription className="text-xs font-medium">
-                End Date
-              </FieldDescription>
+              <FieldLabel htmlFor={`${formId}-end`}>End date</FieldLabel>
               <DatePicker
                 id={`${formId}-end`}
                 value={endDate}
@@ -225,7 +224,10 @@ export const AcademicYearForm = ({
             </div>
           </div>
           {durationLabel && (
-            <FieldDescription className="text-primary font-medium">
+            <FieldDescription
+              aria-live="polite"
+              className="text-primary font-medium"
+            >
               {durationLabel}
             </FieldDescription>
           )}
@@ -234,7 +236,7 @@ export const AcademicYearForm = ({
         {isBootstrap && (
           <Field>
             <FieldLabel htmlFor={`${formId}-structure`}>
-              Curriculum Structure Version
+              Curriculum structure version
             </FieldLabel>
             <Select
               value={structureVersionKey}
@@ -271,7 +273,7 @@ export const AcademicYearForm = ({
 
         {error && (
           <div className="border-destructive/30 bg-destructive/5 border p-3">
-            <FieldError>{error}</FieldError>
+            <FieldError id={`${formId}-error`}>{error}</FieldError>
           </div>
         )}
       </FieldGroup>

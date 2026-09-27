@@ -1,101 +1,273 @@
+import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { IconUsersPlus } from "@tabler/icons-react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { NewTeacherNextStepsDialog } from "@/components/staff/teacher-management/new-teacher-next-steps-dialog";
 import { PortTeachersDialog } from "@/components/staff/teacher-management/port-teachers-dialog";
 import { TeacherCsvImport } from "@/components/staff/teacher-management/teacher-csv-import";
 import { TeacherDialogs } from "@/components/staff/teacher-management/teacher-dialogs";
 import { TeachersList } from "@/components/staff/teacher-management/teachers-list";
-import { useTeachersPage } from "@/components/staff/teacher-management/use-teachers-page";
+import { PageHeader } from "@/components/ui-patterns/page-header";
+import { downloadExportFile } from "@/lib/download-export";
+import { pageHead } from "@/lib/page-title";
 import { orpc } from "@/utils/orpc";
 
+type Staff = typeof staff.$inferSelect;
+interface AcademicYear {
+  id: string;
+  year: number;
+  isCurrent: boolean;
+}
+
 const RouteComponent = () => {
+  const navigate = useNavigate();
+  const listQuery = useQuery(orpc.staff.listStaff.queryOptions());
+  const currentYearQuery = useQuery(
+    orpc.staff.listAcademicYears.queryOptions()
+  );
+  const currentYear = useMemo(() => {
+    const years = currentYearQuery.data as unknown[] | undefined;
+    return (
+      (years?.find(
+        (y) => (y as Record<string, unknown>).isCurrent === true
+      ) as AcademicYear) || undefined
+    );
+  }, [currentYearQuery.data]);
+  const createMutation = useMutation(orpc.staff.createStaff.mutationOptions());
+  const updateMutation = useMutation(orpc.staff.updateStaff.mutationOptions());
+  const deleteMutation = useMutation(orpc.staff.deleteStaff.mutationOptions());
+  const exportTeachersMutation = useMutation(
+    orpc.staff.exports.teachersExcel.mutationOptions()
+  );
+  const exportProfileMutation = useMutation(
+    orpc.staff.exports.teacherProfilePdf.mutationOptions()
+  );
+
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isPortDialogOpen, setIsPortDialogOpen] = useState(false);
+  const [newTeacher, setNewTeacher] = useState<Staff | null>(null);
+  const [newTeacherCredentials, setNewTeacherCredentials] = useState<{
+    username: string | null;
+    password: string | null;
+  }>({ username: null, password: null });
+
+  const [selectedTeacher, setSelectedTeacher] = useState<Staff | null>(null);
+
   const { year } = Route.useParams();
-  const page = useTeachersPage(year);
+
+  const teachers = (listQuery.data as Staff[] | undefined) ?? [];
+
+  const handleCreateClick = useCallback(() => {
+    setSelectedTeacher(null);
+    setIsCreateDialogOpen(true);
+  }, []);
+
+  const handleEditClick = useCallback((teacher: Staff) => {
+    setSelectedTeacher(teacher);
+    setIsEditDialogOpen(true);
+  }, []);
+
+  const handleManageTimetableClick = useCallback(
+    (teacher: Staff) => {
+      navigate({
+        to: "/admin/$year/staff/teacher-timetable/$staffId",
+        params: { year, staffId: teacher.id },
+      });
+    },
+    [navigate, year]
+  );
+
+  const handleViewClick = useCallback((teacher: Staff) => {
+    setSelectedTeacher(teacher);
+    setIsViewDialogOpen(true);
+  }, []);
+
+  const handleDeleteClick = useCallback((teacher: Staff) => {
+    setSelectedTeacher(teacher);
+    setIsDeleteDialogOpen(true);
+  }, []);
+
+  const handleCreateSubmit = useCallback(
+    async (data: unknown) => {
+      const created = (await createMutation.mutateAsync(
+        data as never
+      )) as unknown as Staff & {
+        loginUsername?: string;
+        initialPassword?: string;
+      };
+      await listQuery.refetch();
+      setIsCreateDialogOpen(false);
+      setNewTeacher(created);
+      setNewTeacherCredentials({
+        username: created.loginUsername ?? null,
+        password: created.initialPassword ?? null,
+      });
+    },
+    [createMutation, listQuery]
+  );
+
+  const handleEditSubmit = useCallback(
+    async (data: unknown) => {
+      if (!selectedTeacher) {
+        return;
+      }
+
+      const updateData = data as Record<string, unknown>;
+      await updateMutation.mutateAsync({
+        id: selectedTeacher.id,
+        ...updateData,
+      } as never);
+      await listQuery.refetch();
+      setIsEditDialogOpen(false);
+      setSelectedTeacher(null);
+    },
+    [selectedTeacher, updateMutation, listQuery]
+  );
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!selectedTeacher) {
+      return;
+    }
+
+    try {
+      await deleteMutation.mutateAsync({
+        id: selectedTeacher.id,
+      } as never);
+      await listQuery.refetch();
+      setIsDeleteDialogOpen(false);
+      setSelectedTeacher(null);
+      toast.success("Teacher deleted successfully");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete teacher"
+      );
+    }
+  }, [selectedTeacher, deleteMutation, listQuery]);
+
+  const handleExportClick = useCallback(async () => {
+    try {
+      const file = await exportTeachersMutation.mutateAsync();
+      downloadExportFile(file);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to export teachers"
+      );
+    }
+  }, [exportTeachersMutation]);
+
+  const handleExportProfileClick = useCallback(async () => {
+    if (!selectedTeacher) {
+      return;
+    }
+    try {
+      const file = await exportProfileMutation.mutateAsync({
+        id: selectedTeacher.id,
+      } as never);
+      downloadExportFile(file);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to export profile"
+      );
+    }
+  }, [selectedTeacher, exportProfileMutation]);
+
+  const handleImportCreate = useCallback(
+    async (data: Record<string, unknown>) => {
+      await createMutation.mutateAsync(data as never);
+      await listQuery.refetch();
+    },
+    [createMutation, listQuery]
+  );
+
+  const handleImportUpdate = useCallback(
+    async (id: string, data: Record<string, unknown>) => {
+      await updateMutation.mutateAsync({ id, ...data } as never);
+      await listQuery.refetch();
+    },
+    [updateMutation, listQuery]
+  );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="font-heading text-4xl font-semibold">Teachers</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage teacher records, qualifications, and assignments
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => page.handlePortDialogOpenChange(true)}
-            disabled={!page.selectedAcademicYear}
-          >
-            <IconUsersPlus data-icon="inline-start" />
-            Import from Previous Year
-          </Button>
-          <TeacherCsvImport
-            teachers={page.teachers}
-            onCreate={page.handleImportCreate}
-            onUpdate={page.handleImportUpdate}
-          />
-        </div>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="Staff management"
+        title="Teachers"
+        description={
+          <>Manage teacher records, qualifications, and assignments</>
+        }
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setIsPortDialogOpen(true)}>
+              <IconUsersPlus className="mr-2 size-4" />
+              Import from previous year
+            </Button>
+            <TeacherCsvImport
+              teachers={teachers}
+              onCreate={handleImportCreate}
+              onUpdate={handleImportUpdate}
+            />
+          </>
+        }
+      />
 
       <TeachersList
-        teachers={page.listQuery.data}
-        isLoading={page.listQuery.isLoading}
-        isError={page.isListError}
-        errorMessage={page.listErrorMessage}
-        onRetry={page.handleRetryList}
-        onCreateClick={page.handleCreateClick}
-        onEditClick={page.handleEditClick}
-        onViewClick={page.handleViewClick}
-        onDeleteClick={page.handleDeleteClick}
-        onManageTimetableClick={page.handleManageTimetableClick}
-        onExportClick={page.handleExportClick}
-        onExportSelectedClick={page.handleExportSelectedClick}
-        onDeleteSelectedClick={page.handleDeleteSelected}
-        isExportPending={page.isExportPending}
-        isBulkDeletePending={page.isDeletePending}
+        teachers={listQuery.data as Staff[] | undefined}
+        isLoading={listQuery.isLoading}
+        onCreateClick={handleCreateClick}
+        onEditClick={handleEditClick}
+        onViewClick={handleViewClick}
+        onDeleteClick={handleDeleteClick}
+        onManageTimetableClick={handleManageTimetableClick}
+        onExportClick={handleExportClick}
       />
 
       <TeacherDialogs
-        selectedTeacher={page.selectedTeacher}
-        academicYearId={page.selectedAcademicYear?.id}
-        isCreateOpen={page.isCreateDialogOpen}
-        onCreateOpenChange={page.handleCreateDialogOpenChange}
-        isCreatePending={page.isCreatePending}
-        onCreateSubmit={page.handleCreateSubmit}
-        isEditOpen={page.isEditDialogOpen}
-        onEditOpenChange={page.handleEditDialogOpenChange}
-        isEditPending={page.isEditPending}
-        onEditSubmit={page.handleEditSubmit}
-        isViewOpen={page.isViewDialogOpen}
-        onViewOpenChange={page.handleViewDialogOpenChange}
-        isExportProfilePending={page.isExportProfilePending}
-        onExportProfileClick={page.handleExportProfileClick}
-        isDeleteOpen={page.isDeleteDialogOpen}
-        onDeleteOpenChange={page.handleDeleteDialogOpenChange}
-        isDeletePending={page.isDeletePending}
-        onConfirmDelete={page.handleConfirmDelete}
+        selectedTeacher={selectedTeacher}
+        isCreateOpen={isCreateDialogOpen}
+        onCreateOpenChange={setIsCreateDialogOpen}
+        isCreatePending={createMutation.isPending}
+        onCreateSubmit={handleCreateSubmit}
+        isEditOpen={isEditDialogOpen}
+        onEditOpenChange={setIsEditDialogOpen}
+        isEditPending={updateMutation.isPending}
+        onEditSubmit={handleEditSubmit}
+        isViewOpen={isViewDialogOpen}
+        onViewOpenChange={setIsViewDialogOpen}
+        isExportProfilePending={exportProfileMutation.isPending}
+        onExportProfileClick={handleExportProfileClick}
+        isDeleteOpen={isDeleteDialogOpen}
+        onDeleteOpenChange={setIsDeleteDialogOpen}
+        isDeletePending={deleteMutation.isPending}
+        onConfirmDelete={handleConfirmDelete}
       />
 
       <PortTeachersDialog
-        isOpen={page.isPortDialogOpen}
-        onOpenChange={page.handlePortDialogOpenChange}
-        academicYearId={page.selectedAcademicYear?.id}
+        isOpen={isPortDialogOpen}
+        onOpenChange={setIsPortDialogOpen}
+        academicYearId={currentYear?.id}
       />
 
       <NewTeacherNextStepsDialog
-        teacher={page.newTeacher}
-        loginUsername={page.newTeacherCredentials.username}
-        initialPassword={page.newTeacherCredentials.password}
+        teacher={newTeacher}
+        loginUsername={newTeacherCredentials.username}
+        initialPassword={newTeacherCredentials.password}
         onOpenChange={(open) => {
           if (!open) {
-            page.setNewTeacher(null);
-            page.setNewTeacherCredentials({ username: null, password: null });
+            setNewTeacher(null);
+            setNewTeacherCredentials({ username: null, password: null });
           }
         }}
-        onManageTimetableClick={page.handleManageTimetableClick}
+        onManageTimetableClick={(teacher) => {
+          setNewTeacher(null);
+          handleManageTimetableClick(teacher);
+        }}
       />
     </div>
   );
@@ -104,11 +276,9 @@ const RouteComponent = () => {
 export const Route = createFileRoute("/_auth/admin/$year/staff/teachers")({
   component: RouteComponent,
   loader: async ({ context }) => {
-    await Promise.all([
-      context.queryClient.ensureQueryData(
-        orpc.staff.listAcademicYears.queryOptions()
-      ),
-      context.queryClient.ensureQueryData(orpc.staff.listStaff.queryOptions()),
-    ]);
+    await context.queryClient.ensureQueryData(
+      orpc.staff.listStaff.queryOptions()
+    );
   },
+  head: () => pageHead("Teachers"),
 });

@@ -13,6 +13,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@school-student-teacher-management/ui/components/sidebar";
 import { IconChevronRight } from "@tabler/icons-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
@@ -74,9 +75,19 @@ export const NavMain = ({
     }[];
   }[];
 }) => {
-  const navigate = useNavigate();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+  const navigateTo = useNavigate();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  // The mobile sidebar is a sheet over the page; close it once a link is
+  // followed so the destination isn't hidden behind it.
+  const navigate: typeof navigateTo = (opts) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    return navigateTo(opts);
+  };
 
   const isItemActive = (
     url: string,

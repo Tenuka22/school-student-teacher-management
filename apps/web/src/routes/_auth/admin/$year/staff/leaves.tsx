@@ -1,13 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { LeaveRequestsContent } from "@/components/staff/leave-management/leave-requests-content";
-
-const AdminLeavePage = () => {
-  const { year } = Route.useParams();
-
-  return <LeaveRequestsContent year={Number(year)} />;
-};
+import { pageHead } from "@/lib/page-title";
 
 export const Route = createFileRoute("/_auth/admin/$year/staff/leaves")({
-  component: AdminLeavePage,
+  component: LeaveRequestsContent,
+  head: () => pageHead("Leave requests"),
 });

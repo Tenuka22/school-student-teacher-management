@@ -93,18 +93,7 @@ function DialogContent({
         aria-modal="true"
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 bg-popover p-4 text-xs/relaxed text-popover-foreground outline-none duration-150 sm:max-w-sm",
-          // A viewport cap, so a dialog cannot grow off-screen. Deliberately
-          // *not* an `overflow` utility: the app's taller dialogs own their
-          // scroll region (`max-h-[85vh] overflow-hidden` plus an inner
-          // scroller) and an `overflow` here would fight theirs.
-          "max-h-[calc(100dvh-2rem)]",
-          // Full-screen when narrow, per the product constraint. Below `sm` a
-          // centred card leaves a 1rem gutter on each side, which is a phone
-          // layout pretending to be a dialog.
-          "max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none",
-          OVERLAY_SHADOW,
-          "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:duration-0 motion-reduce:animate-none",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-none bg-popover p-4 text-sm/relaxed text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
@@ -179,7 +168,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("font-heading text-sm font-medium text-balance", className)}
+      className={cn("text-lg font-semibold tracking-[-0.012em]", className)}
       {...props}
     />
   )
@@ -198,7 +187,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "text-xs/relaxed text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        "text-sm/relaxed text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
         className
       )}
       {...props}

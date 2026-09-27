@@ -1,12 +1,4 @@
-import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@school-student-teacher-management/ui/components/alert-dialog";
+import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -17,12 +9,14 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 
 import { TeacherPeriodAssignmentForm } from "@/components/staff/period-management/teacher-period-assignment-form";
+import { ConfirmDialog } from "@/components/ui-patterns/confirm-dialog";
 
 interface Class {
   id: string;
   name: string;
   gradeLevel: number;
 }
+type PeriodConfig = typeof periodConfigTable.$inferSelect;
 
 interface TeacherTimetableEntry {
   id: string;
@@ -36,7 +30,7 @@ interface TeacherTimetableEntry {
 
 interface TeacherTimetableDialogsProps {
   classes: Class[];
-  academicYearId?: string;
+  periodConfig: PeriodConfig[];
   selectedEntry: TeacherTimetableEntry | null;
   addSlot: { dayOfWeek: number; periodNumber: number } | null;
   isAddOpen: boolean;
@@ -51,53 +45,11 @@ interface TeacherTimetableDialogsProps {
   onDeleteOpenChange: (open: boolean) => void;
   isDeletePending: boolean;
   onConfirmDelete: () => void;
-  /**
-   * The teacher whose week this is. The assign form needs it to tell an
-   * intentional second class in one slot from a double-booking: without it the
-   * form could only invite a combined session and leave the row unmarked, which
-   * the conflict scan then reports as a clash.
-   */
-  staffId?: string;
 }
-
-/**
- * Fixed width on the submit button.
- *
- * "Assign" becoming "Saving…" and back changes the button's width, which moves
- * the Cancel button under the pointer mid-save. The width is held so the row of
- * buttons does not shift while a write is in flight.
- */
-const SUBMIT_WIDTH = "min-w-32";
-
-const NoSelection = ({ children }: { children: string }) => (
-  <div className="text-muted-foreground border-border border border-dashed px-3 py-6 text-center text-xs">
-    {children}
-  </div>
-);
-
-const DAYS_OF_WEEK = [
-  "",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-];
-
-/**
- * A confirmation that names the row it is about to remove.
- *
- * "This assignment" tells an administrator nothing at the moment they are being
- * asked to confirm a delete; the class, the subject and the slot do.
- */
-const describeEntry = (entry: TeacherTimetableEntry): string => {
-  const day = DAYS_OF_WEEK[entry.dayOfWeek] ?? `Day ${entry.dayOfWeek}`;
-  return `${entry.className}, ${subjectLabel(entry.subjectKey)}, ${day}, Period ${entry.periodNumber}`;
-};
 
 export const TeacherTimetableDialogs = ({
   classes,
-  academicYearId,
+  periodConfig,
   selectedEntry,
   addSlot,
   isAddOpen,
@@ -112,104 +64,88 @@ export const TeacherTimetableDialogs = ({
   onDeleteOpenChange,
   isDeletePending,
   onConfirmDelete,
-  staffId,
 }: TeacherTimetableDialogsProps) => (
   <>
+    {/* Add Dialog */}
     <Dialog open={isAddOpen} onOpenChange={onAddOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Add Timetable Assignment</DialogTitle>
+          <DialogTitle>Add timetable period</DialogTitle>
           <DialogDescription>
-            Assign this teacher to a class and subject. One teacher can hold
-            more than one class in the same slot for a combined session — mark
-            it as intentional below when it applies, so the conflict scan does
-            not report it.
+            Assign this teacher to a class and subject. A teacher can be
+            assigned to more than one class at the same slot for combined
+            sessions.
           </DialogDescription>
         </DialogHeader>
-        <div
-          aria-busy={isAddPending ? "true" : undefined}
-          className="flex-1 overflow-y-auto px-6 py-4"
-        >
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           <TeacherPeriodAssignmentForm
-            academicYearId={academicYearId}
-            classes={classes}
             formId="add-teacher-period-form"
-            isLoading={isAddPending}
+            classes={classes}
+            periodConfig={periodConfig}
             onSubmit={onAddSubmit}
+            isLoading={isAddPending}
             prefillSlot={addSlot ?? undefined}
-            staffId={staffId}
           />
         </div>
         <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
           <Button
-            disabled={isAddPending}
-            onClick={() => onAddOpenChange(false)}
             type="button"
             variant="outline"
+            onClick={() => onAddOpenChange(false)}
+            disabled={isAddPending}
           >
             Cancel
           </Button>
           <Button
-            className={SUBMIT_WIDTH}
-            disabled={isAddPending}
-            form="add-teacher-period-form"
             type="submit"
+            form="add-teacher-period-form"
+            disabled={isAddPending}
           >
-            {isAddPending ? "Saving…" : "Add assignment"}
+            {isAddPending ? "Saving…" : "Add period"}
           </Button>
         </div>
       </DialogContent>
     </Dialog>
 
+    {/* Edit Dialog */}
     <Dialog open={isEditOpen} onOpenChange={onEditOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle>Edit Timetable Assignment</DialogTitle>
+          <DialogTitle>Edit timetable period</DialogTitle>
           <DialogDescription>
-            Update the subject for this slot. The class, day and period are the
-            row&apos;s identity and cannot be changed here.
+            Update the subject for this slot
           </DialogDescription>
         </DialogHeader>
-        <div
-          aria-busy={isEditPending ? "true" : undefined}
-          className="flex-1 overflow-y-auto px-6 py-4"
-        >
-          {selectedEntry ? (
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {selectedEntry && (
             <TeacherPeriodAssignmentForm
-              academicYearId={academicYearId}
-              classes={classes}
               formId="edit-teacher-period-form"
+              classes={classes}
+              periodConfig={periodConfig}
+              onSubmit={onEditSubmit}
+              isLoading={isEditPending}
               initialData={{
                 classId: selectedEntry.classId,
                 dayOfWeek: selectedEntry.dayOfWeek,
                 periodNumber: selectedEntry.periodNumber,
                 subjectKey: selectedEntry.subjectKey,
               }}
-              isLoading={isEditPending}
-              onSubmit={onEditSubmit}
-              staffId={staffId}
             />
-          ) : (
-            <NoSelection>
-              The assignment to edit is no longer selected. Close this and pick
-              the slot again.
-            </NoSelection>
           )}
         </div>
         <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">
           <Button
-            disabled={isEditPending}
-            onClick={() => onEditOpenChange(false)}
             type="button"
             variant="outline"
+            onClick={() => onEditOpenChange(false)}
+            disabled={isEditPending}
           >
             Cancel
           </Button>
           <Button
-            className={SUBMIT_WIDTH}
-            disabled={isEditPending || !selectedEntry}
-            form="edit-teacher-period-form"
             type="submit"
+            form="edit-teacher-period-form"
+            disabled={isEditPending}
           >
             {isEditPending ? "Saving…" : "Save"}
           </Button>
@@ -217,27 +153,16 @@ export const TeacherTimetableDialogs = ({
       </DialogContent>
     </Dialog>
 
-    <AlertDialog open={isDeleteOpen} onOpenChange={onDeleteOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogTitle>Remove Assignment</AlertDialogTitle>
-        <AlertDialogDescription>
-          {selectedEntry
-            ? `${describeEntry(selectedEntry)} is removed and the slot becomes free to assign again. It cannot be undone.`
-            : "This removes the class from this period. It cannot be undone."}
-        </AlertDialogDescription>
-        <div className="flex justify-end gap-3">
-          <AlertDialogCancel disabled={isDeletePending}>
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 min-w-32"
-            disabled={isDeletePending}
-            onClick={onConfirmDelete}
-          >
-            {isDeletePending ? "Removing…" : "Remove"}
-          </AlertDialogAction>
-        </div>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={isDeleteOpen}
+      onOpenChange={onDeleteOpenChange}
+      title="Unassign this period?"
+      description="The class and subject will be removed from this teacher's timetable slot. This cannot be undone."
+      confirmLabel="Unassign"
+      pendingLabel="Unassigning…"
+      isPending={isDeletePending}
+      tone="destructive"
+      onConfirm={onConfirmDelete}
+    />
   </>
 );

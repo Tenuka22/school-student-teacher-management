@@ -9,6 +9,21 @@ export default defineConfig({
   server: {
     port: 3001,
   },
+  optimizeDeps: {
+    // `@base-ui/utils`'s store hook imports these two CJS subpaths
+    // (`use-sync-external-store/shim` and `.../shim/with-selector`) as named
+    // ESM exports. Left out of the pre-bundle, Vite can serve the raw CJS
+    // file straight from `node_modules` via `/@fs/` the first time a route
+    // reaches it — before the dependency scanner has discovered and
+    // re-optimized it — which throws "does not provide an export named
+    // useSyncExternalStoreWithSelector" instead of self-healing. Listing both
+    // subpaths here forces them into the initial pre-bundle every time, so
+    // the CJS-to-ESM interop always runs before either is imported.
+    include: [
+      "use-sync-external-store/shim",
+      "use-sync-external-store/shim/with-selector",
+    ],
+  },
   resolve: {
     tsconfigPaths: true,
   },

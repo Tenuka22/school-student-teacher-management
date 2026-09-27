@@ -4,6 +4,8 @@ import { ClassCsvImport } from "@/components/staff/class-assignment/class-csv-im
 import { ClassDialogs } from "@/components/staff/class-assignment/class-dialogs";
 import { ClassesTabs } from "@/components/staff/class-assignment/classes-tabs";
 import { useClassesPage } from "@/components/staff/class-assignment/use-classes-page";
+import { PageHeader } from "@/components/ui-patterns/page-header";
+import { pageHead } from "@/lib/page-title";
 import { orpc } from "@/utils/orpc";
 
 const RouteComponent = () => {
@@ -11,24 +13,21 @@ const RouteComponent = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="font-heading text-4xl font-semibold">
-            Class Assignment
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Create classes and assign homeroom teachers for the academic year
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        eyebrow="Staff management"
+        title="Class assignment"
+        description={
+          <>Create classes and assign homeroom teachers for the academic year</>
+        }
+        actions={
           <ClassCsvImport
             academicYearId={page.currentYear?.id}
             classes={page.classes}
             onCreate={page.handleImportCreate}
             onUpdate={page.handleImportUpdate}
           />
-        </div>
-      </div>
+        }
+      />
 
       <ClassesTabs
         classes={page.classes}
@@ -82,4 +81,5 @@ export const Route = createFileRoute("/_auth/admin/$year/staff/classes")({
       context.queryClient.ensureQueryData(orpc.staff.listStaff.queryOptions()),
     ]);
   },
+  head: () => pageHead("Class assignment"),
 });

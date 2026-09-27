@@ -35,12 +35,7 @@ function Table({
     >
       <table
         data-slot="table"
-        className={cn(
-          "w-full caption-bottom text-xs tabular-nums",
-          stickyHeader &&
-            "[&_[data-slot=table-header]]:[&_tr]:sticky [&_[data-slot=table-header]]:[&_tr]:top-0 [&_[data-slot=table-header]]:[&_tr]:z-20 [&_[data-slot=table-header]]:[&_tr]:bg-background [&_[data-slot=table-header]]:[&_th]:bg-background",
-          className
-        )}
+        className={cn("w-full caption-bottom text-sm tabular-nums", className)}
         {...props}
       />
     </div>
@@ -133,11 +128,13 @@ function TableHead({
 }: React.ComponentProps<"th"> & { numeric?: boolean }) {
   return (
     <th
+      // Header cells describe their column unless a caller says otherwise
+      // (e.g. `scope="row"` for a row label in a timetable grid).
+      scope="col"
       data-slot="table-head"
       scope={scope}
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
-        numeric && "text-right",
+        "h-10 px-3 text-left align-middle text-xs font-semibold tracking-[0.06em] whitespace-nowrap text-muted-foreground uppercase [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -175,8 +172,7 @@ function TableCell({
       data-slot="table-cell"
       scope={scope}
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
-        numeric && "text-right tabular-nums",
+        "px-3 py-2.5 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -202,12 +198,7 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn(
-        visuallyHidden
-          ? "sr-only"
-          : "mt-4 text-xs text-muted-foreground text-balance",
-        className
-      )}
+      className={cn("mt-4 text-sm text-muted-foreground", className)}
       {...props}
     />
   )

@@ -11,14 +11,18 @@ import type {
 } from "@/components/signup/signup-schema";
 import {
   EMPTY_FORM,
-  PASSWORD_MIN_LENGTH,
-  firstInvalidField,
   toSignupPayload,
   validateSignup,
 } from "@/components/signup/signup-schema";
 import { SignupSuccess } from "@/components/signup/signup-success";
 import { formatApiErrorMessage, validationFieldErrors } from "@/lib/api-error";
+import { descriptionId, errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
+
+const STAFF_CATEGORY_OPTIONS = [
+  { value: "teacher", label: "Teacher" },
+  { value: "officeStaff", label: "Office Staff" },
+] as const;
 
 /**
  * A `teacher` is on the College's establishment, so the form is long and the
@@ -32,6 +36,7 @@ const THEMES: Record<
   {
     panel: string;
     form: string;
+    kicker: string;
     heading: string;
     intro: string;
     submit: string;
@@ -42,60 +47,39 @@ const THEMES: Record<
   }
 > = {
   teacher: {
-    panel: "bg-sidebar",
+    panel: "bg-surface-deep",
     form: "text-primary-foreground",
+    kicker: "text-accent",
     heading: "text-primary-foreground",
-    intro: "text-primary-foreground/75",
-    submit: "bg-accent text-sidebar hover:bg-accent-hover",
-    toggleActive: "bg-accent text-sidebar",
+    intro: "text-primary-foreground/70",
+    submit: "bg-accent text-surface-deep hover:bg-accent-hover",
+    toggleActive: "bg-accent text-surface-deep",
     toggleIdle:
       "bg-primary-foreground/8 text-primary-foreground/70 hover:bg-primary-foreground/14",
-    toggleTextActive: "text-sidebar",
+    toggleTextActive: "text-surface-deep",
     toggleTextIdle: "text-primary-foreground/70",
   },
   user: {
     panel: "bg-[#F4F6F1]",
-    form: "text-primary",
-    heading: "text-primary",
-    intro: "text-primary/70",
-    submit: "bg-success text-primary-foreground hover:bg-[#084512]",
+    form: "text-foreground",
+    kicker: "text-[#0B5E1A]",
+    heading: "text-foreground",
+    intro: "text-muted-foreground",
+    submit: "bg-[#0B5E1A] text-primary-foreground hover:bg-[#084512]",
     toggleActive: "bg-primary text-primary-foreground",
-    toggleIdle: "bg-primary/6 text-primary/70 hover:bg-primary/12",
+    toggleIdle: "bg-primary/6 text-muted-foreground hover:bg-primary/12",
     toggleTextActive: "text-primary-foreground",
-    toggleTextIdle: "text-primary/70",
+    toggleTextIdle: "text-muted-foreground",
   },
 };
-
 const INPUT_CLASS =
-  "w-full border border-current/25 bg-white px-[15px] py-[13px] text-sm text-primary outline-none placeholder:text-primary/70 focus:border-primary focus:bg-white";
-
-const FIELD_IDS: Record<string, string> = {
-  name: "signup-name",
-  nic: "signup-nic",
-  email: "signup-email",
-  phone: "signup-phone",
-  password: "signup-password",
-  confirmPassword: "signup-confirm-password",
-};
-
-/**
- * Focus the first field that needs work.
- *
- * By id rather than by a ref map: every field already carries a stable `id` for
- * its `<label for>`, so a second parallel structure of refs would have to be
- * kept in step with the labels for no benefit. Module scope, because it closes
- * over nothing — rebuilding it each render would break memoized children. Only
- * ever called from a submit handler, so `document` is available.
- */
-const focusField = (field: string) => {
-  document.querySelector<HTMLElement>(`#${FIELD_IDS[field]}`)?.focus();
-};
+  "w-full border border-input bg-white/70 px-[15px] py-[13px] text-base text-foreground outline-none placeholder:text-muted-foreground focus:bg-white focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring aria-invalid:border-destructive sm:text-[0.9375rem]";
 
 const getSubmitLabel = (isTeacher: boolean, isSubmitting: boolean) => {
   if (isSubmitting) {
-    return "CREATING ACCOUNT…";
+    return "Creating account…";
   }
-  return isTeacher ? "CREATE STAFF ACCOUNT" : "CREATE ACCOUNT";
+  return isTeacher ? "Sign up as staff" : "Create account";
 };
 
 const AccountTypeToggle = ({
@@ -107,8 +91,8 @@ const AccountTypeToggle = ({
   theme: (typeof THEMES)[AccountType];
   onChange: (next: AccountType) => void;
 }) => (
-  <fieldset className="grid grid-cols-2 gap-2">
-    <legend className="sr-only">What kind of account do you need?</legend>
+  <fieldset className="m-0 grid min-w-0 grid-cols-2 gap-2 border-0 p-0">
+    <legend className="sr-only">Account type</legend>
     {(["user", "teacher"] as const).map((type) => {
       const isActive = value === type;
       return (
@@ -119,15 +103,15 @@ const AccountTypeToggle = ({
           onClick={() => onChange(type)}
           className={`px-4 py-3 text-left transition-colors ${isActive ? theme.toggleActive : theme.toggleIdle}`}
         >
-          <span className="block text-[13px] font-extrabold tracking-[0.08em]">
-            {type === "user" ? "GENERAL ACCOUNT" : "COLLEGE STAFF"}
+          <span className="block text-sm font-bold">
+            {type === "user" ? "User" : "Teacher / staff"}
           </span>
           <span
-            className={`mt-1 block text-xs leading-tight ${isActive ? theme.toggleTextActive : theme.toggleTextIdle}`}
+            className={`mt-1 block text-[0.8125rem] leading-snug ${isActive ? theme.toggleTextActive : theme.toggleTextIdle}`}
           >
             {type === "user"
-              ? "Sign in with your email address"
-              : "NIC number becomes your username"}
+              ? "Email sign-in, no staff record"
+              : "NIC identity and staff access"}
           </span>
         </button>
       );
@@ -136,79 +120,50 @@ const AccountTypeToggle = ({
 );
 
 interface SignupFieldProps {
-  field: keyof FormState;
+  /** `id` of the control rendered in `children`. */
+  id: string;
   label: string;
   error?: string;
   hint?: React.ReactNode;
   children: React.ReactNode;
 }
 
-/**
- * A labelled control with its hint and its error bound to the input, not just
- * printed near it. `aria-describedby` is what makes a screen reader read
- * "This does not look like an email address" out as part of the field rather
- * than as loose text somewhere below the form.
- */
+/** Label, control, hint and error. Pair the control with `controlA11y`. */
 const SignupField = ({
-  field,
+  id,
   label,
   error,
   hint,
   children,
-}: SignupFieldProps) => {
-  const id = FIELD_IDS[field];
-  const hintId = `${id}-hint`;
-  const errorId = `${id}-error`;
-
-  return (
-    <div className="mb-[clamp(12px,2vh,18px)]">
-      <label
-        className="mb-2 block text-xs font-bold tracking-[0.16em]"
-        htmlFor={id}
+}: SignupFieldProps) => (
+  <div className="mb-[clamp(12px,2vh,18px)]">
+    <label htmlFor={id} className="mb-2 block text-sm font-semibold">
+      {label}
+    </label>
+    {children}
+    {hint && (
+      <p id={descriptionId(id)} className="m-0 mt-1.5 text-sm opacity-80">
+        {hint}
+      </p>
+    )}
+    {error && (
+      <p
+        id={errorId(id)}
+        role="alert"
+        className="text-destructive m-0 mt-1.5 text-sm font-medium"
       >
-        {label}
-      </label>
-      {children}
-      {hint ? (
-        <span className="mt-1.5 block text-xs opacity-70" id={hintId}>
-          {hint}
-        </span>
-      ) : null}
-      {error ? (
-        <span
-          className="text-destructive mt-1.5 block text-xs leading-relaxed"
-          id={errorId}
-        >
-          {error}
-        </span>
-      ) : null}
-    </div>
-  );
-};
+        {error}
+      </p>
+    )}
+  </div>
+);
 
-/** Wires the ids `SignupField` renders so the input can reference them. */
-const fieldAria = (
-  field: keyof FormState,
-  error?: string,
-  hasHint?: boolean
-) => {
-  const id = FIELD_IDS[field];
-  const describedBy = [
-    hasHint ? `${id}-hint` : null,
-    error ? `${id}-error` : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return {
-    id,
-    "aria-describedby": describedBy === "" ? undefined : describedBy,
-    "aria-invalid": error ? true : undefined,
-  } as const;
-};
+/** `id` / `aria-invalid` / `aria-describedby` for a `SignupField` control. */
+const controlA11y = (id: string, error?: string, hasHint = false) =>
+  fieldA11y(id, { error, hasDescription: hasHint });
 
 const PasswordField = ({
-  field,
+  id,
   label,
   value,
   onChange,
@@ -219,9 +174,8 @@ const PasswordField = ({
   showPassword,
   onToggleShow,
   disabled,
-  inputRef,
 }: {
-  field: keyof FormState;
+  id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -232,178 +186,38 @@ const PasswordField = ({
   showPassword: boolean;
   onToggleShow: () => void;
   disabled: boolean;
-  inputRef?: (node: HTMLInputElement | null) => void;
 }) => (
-  <SignupField field={field} error={error} hint={hint} label={label}>
-    <span className="relative block">
+  <SignupField id={id} label={label} error={error} hint={hint}>
+    <div className="relative">
       <input
+        {...controlA11y(id, error, Boolean(hint))}
         type={showPassword ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
-        style={showToggle ? { paddingRight: 70 } : undefined}
+        style={showToggle ? { paddingRight: 76 } : undefined}
         disabled={disabled}
         className={INPUT_CLASS}
-        ref={inputRef}
-        {...fieldAria(field, error, Boolean(hint))}
       />
-      {showToggle ? (
+      {showToggle && (
         <button
           type="button"
-          aria-pressed={showPassword}
           onClick={onToggleShow}
-          className="absolute top-1/2 right-[13px] -translate-y-1/2 border-b border-current/40 text-xs font-extrabold tracking-[0.1em] opacity-70"
+          aria-controls={id}
+          aria-pressed={showPassword}
+          aria-label={showPassword ? "Hide passwords" : "Show passwords"}
+          className="absolute top-1/2 right-1.5 flex min-h-9 min-w-14 -translate-y-1/2 items-center justify-center px-2 text-sm font-semibold underline decoration-current/40 underline-offset-4 opacity-80 hover:opacity-100"
         >
-          {showPassword ? "HIDE" : "SHOW"}
-          <span className="sr-only"> password</span>
+          {showPassword ? "Hide" : "Show"}
         </button>
-      ) : null}
-    </span>
+      )}
+    </div>
   </SignupField>
-);
-
-interface SignupFieldsProps {
-  form: FormState;
-  errors: FormErrors;
-  isTeacher: boolean;
-  isSubmitting: boolean;
-  showPassword: boolean;
-  theme: (typeof THEMES)[AccountType];
-  onFieldChange: (field: keyof FormState, value: string) => void;
-  onToggleShowPassword: () => void;
-  onSubmit: (event: React.FormEvent) => void;
-}
-/**
- * Every control on the sign-up form, in reading order.
- *
- * Split out of `SignupForm` so the submit logic and the field list can be
- * read separately. It owns no state: everything it renders is a prop, which
- * is what lets the parent clear one field error without discarding the rest
- * of the form.
- */
-const SignupFields = ({
-  form,
-  errors,
-  isTeacher,
-  isSubmitting,
-  showPassword,
-  theme,
-  onFieldChange,
-  onToggleShowPassword,
-  onSubmit,
-}: SignupFieldsProps) => (
-  <form noValidate onSubmit={onSubmit}>
-    <SignupField field="name" error={errors.name} label="FULL NAME">
-      <input
-        type="text"
-        value={form.name}
-        onChange={(e) => onFieldChange("name", e.target.value)}
-        placeholder="A. B. Perera"
-        autoComplete="name"
-        disabled={isSubmitting}
-        className={INPUT_CLASS}
-        {...fieldAria("name", errors.name)}
-      />
-    </SignupField>
-    {isTeacher ? (
-      <SignupField
-        field="nic"
-        error={errors.nic}
-        hint={
-          <>
-            This becomes your <strong>username</strong> for signing in.
-          </>
-        }
-        label="NIC NUMBER"
-      >
-        <input
-          type="text"
-          value={form.nic}
-          onChange={(e) => onFieldChange("nic", e.target.value)}
-          placeholder="199912345678 or 991234567V"
-          autoComplete="off"
-          spellCheck={false}
-          disabled={isSubmitting}
-          className={INPUT_CLASS}
-          {...fieldAria("nic", errors.nic, true)}
-        />
-      </SignupField>
-    ) : null}
-    <SignupField
-      field="email"
-      error={errors.email}
-      hint={
-        isTeacher ? undefined : (
-          <>
-            This becomes your <strong>username</strong> too.
-          </>
-        )
-      }
-      label="EMAIL"
-    >
-      <input
-        type="email"
-        value={form.email}
-        onChange={(e) => onFieldChange("email", e.target.value)}
-        placeholder="you@example.com"
-        autoComplete="email"
-        disabled={isSubmitting}
-        className={INPUT_CLASS}
-        {...fieldAria("email", errors.email, !isTeacher)}
-      />
-    </SignupField>
-    {isTeacher ? (
-      <SignupField field="phone" error={errors.phone} label="PHONE (OPTIONAL)">
-        <input
-          type="tel"
-          value={form.phone}
-          onChange={(e) => onFieldChange("phone", e.target.value)}
-          placeholder="07X XXX XXXX"
-          autoComplete="tel"
-          disabled={isSubmitting}
-          className={INPUT_CLASS}
-          {...fieldAria("phone", errors.phone)}
-        />
-      </SignupField>
-    ) : null}
-    <PasswordField
-      field="password"
-      label="PASSWORD"
-      value={form.password}
-      onChange={(value) => onFieldChange("password", value)}
-      error={errors.password}
-      hint={`At least ${PASSWORD_MIN_LENGTH} characters. Choose something you have not used elsewhere.`}
-      autoComplete="new-password"
-      showToggle
-      showPassword={showPassword}
-      onToggleShow={onToggleShowPassword}
-      disabled={isSubmitting}
-    />
-    <PasswordField
-      field="confirmPassword"
-      label="CONFIRM PASSWORD"
-      value={form.confirmPassword}
-      onChange={(value) => onFieldChange("confirmPassword", value)}
-      error={errors.confirmPassword}
-      autoComplete="new-password"
-      showPassword={showPassword}
-      onToggleShow={onToggleShowPassword}
-      disabled={isSubmitting}
-    />
-    <button
-      type="submit"
-      disabled={isSubmitting}
-      className={`block w-full min-w-[14rem] py-[15px] text-center text-[13.5px] font-extrabold tracking-[0.08em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${theme.submit}`}
-    >
-      {getSubmitLabel(isTeacher, isSubmitting)}
-    </button>
-  </form>
 );
 
 export const SignupForm = () => {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
   const [createdUsername, setCreatedUsername] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -420,26 +234,9 @@ export const SignupForm = () => {
         const fieldErrors = validationFieldErrors<keyof FormState>(error);
         if (Object.keys(fieldErrors).length > 0) {
           setErrors((prev) => ({ ...prev, ...fieldErrors }));
-          setFormError(
-            "The College server rejected part of this form. The fields it named are marked below — everything you typed is still here, so correct those and send it again."
-          );
-          const first = firstInvalidField(fieldErrors, isTeacher);
-          if (first) {
-            focusField(first);
-          }
-        } else {
-          setFormError(
-            `${formatApiErrorMessage(
-              error,
-              "The College server did not accept the registration."
-            )} Nothing was created and nothing you typed has been lost — try again in a moment, and if it keeps failing tell an administrator.`
-          );
         }
         toast.error(
-          formatApiErrorMessage(
-            error,
-            "Registration failed. Your details are still on screen — try again."
-          )
+          formatApiErrorMessage(error, "Sign up failed. Please try again.")
         );
       },
     })
@@ -448,32 +245,19 @@ export const SignupForm = () => {
   const setField = (field: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
-    setFormError(null);
   };
 
   const setAccountType = (accountType: AccountType) => {
     setForm({ ...EMPTY_FORM, accountType });
     setErrors({});
-    setFormError(null);
   };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (isSubmitting) {
-      return;
-    }
-
     const nextErrors = validateSignup(form);
-    setErrors(nextErrors);
-    setFormError(null);
-
-    const first = firstInvalidField(nextErrors, isTeacher);
-    if (first) {
-      setFormError(
-        "Nothing was sent. Correct the field marked below — everything else you typed is still filled in."
-      );
-      focusField(first);
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
 
@@ -503,7 +287,7 @@ export const SignupForm = () => {
 
   return (
     <AuthSplitLayout
-      eyebrow={isTeacher ? "FOR COLLEGE STAFF" : "GENERAL ACCOUNT"}
+      eyebrow={isTeacher ? "For College staff" : "Get an account"}
       title={isTeacher ? "Staff registration" : "Create an account"}
       subtitle={
         isTeacher
@@ -522,40 +306,158 @@ export const SignupForm = () => {
           />
 
           <div>
-            <h1
-              className={`font-heading m-0 text-[clamp(26px,4vh,38px)] leading-[1.05] font-semibold ${theme.heading}`}
-            >
-              {isTeacher ? "Register as College staff" : "Create your account"}
+            <p className={`type-eyebrow ${theme.kicker}`}>
+              {isTeacher ? "Staff sign-up" : "Sign up"}
+            </p>
+            <h1 className={`type-page-title m-0 mt-2 ${theme.heading}`}>
+              {isTeacher ? "Join the College system" : "Create your account"}
             </h1>
-            <p className={`mt-2 text-[13.5px] leading-[1.55] ${theme.intro}`}>
+            <p className={`type-body mt-2.5 ${theme.intro}`}>
               {isTeacher
-                ? "Teachers and teaching assistants: your username will be your NIC number, so there is nothing extra to remember. Office staff accounts are issued by an administrator instead."
+                ? "Teachers and office staff — your username will be your NIC number, so there’s nothing extra to remember."
                 : "Your email address is your username. An administrator can grant staff access later if you need it."}
             </p>
           </div>
 
-          {formError ? (
-            <p
-              className="border-destructive bg-destructive/8 text-destructive m-0 border p-3 text-[12.5px] leading-[1.5]"
-              role="alert"
+          <form onSubmit={handleSubmit} noValidate>
+            <SignupField id="signup-name" label="Full name" error={errors.name}>
+              <input
+                {...controlA11y("signup-name", errors.name)}
+                type="text"
+                value={form.name}
+                onChange={(e) => setField("name", e.target.value)}
+                placeholder="A. B. Perera"
+                autoComplete="name"
+                disabled={isSubmitting}
+                className={INPUT_CLASS}
+              />
+            </SignupField>
+
+            {isTeacher && (
+              <SignupField
+                id="signup-nic"
+                label="NIC number"
+                error={errors.nic}
+                hint={
+                  <>
+                    This becomes your <strong>username</strong> for signing in.
+                  </>
+                }
+              >
+                <input
+                  {...controlA11y("signup-nic", errors.nic, true)}
+                  type="text"
+                  autoComplete="off"
+                  value={form.nic}
+                  onChange={(e) => setField("nic", e.target.value)}
+                  placeholder="e.g. 199912345678 or 991234567V"
+                  disabled={isSubmitting}
+                  className={INPUT_CLASS}
+                />
+              </SignupField>
+            )}
+
+            <SignupField
+              id="signup-email"
+              label="Email"
+              error={errors.email}
+              hint={
+                isTeacher ? undefined : (
+                  <>
+                    This becomes your <strong>username</strong> too.
+                  </>
+                )
+              }
             >
-              {formError}
-            </p>
-          ) : null}
+              <input
+                {...controlA11y("signup-email", errors.email, !isTeacher)}
+                type="email"
+                value={form.email}
+                onChange={(e) => setField("email", e.target.value)}
+                placeholder="e.g. you@example.com"
+                autoComplete="email"
+                disabled={isSubmitting}
+                className={INPUT_CLASS}
+              />
+            </SignupField>
 
-          <SignupFields
-            errors={errors}
-            form={form}
-            isSubmitting={isSubmitting}
-            isTeacher={isTeacher}
-            onFieldChange={setField}
-            onSubmit={handleSubmit}
-            onToggleShowPassword={() => setShowPassword((shown) => !shown)}
-            showPassword={showPassword}
-            theme={theme}
-          />
+            {isTeacher && (
+              <>
+                <SignupField id="signup-phone" label="PHONE (OPTIONAL)">
+                  <input
+                    {...controlA11y("signup-phone")}
+                    type="tel"
+                    inputMode="tel"
+                    value={form.phone}
+                    onChange={(e) => setField("phone", e.target.value)}
+                    placeholder="e.g. 071 234 5678"
+                    autoComplete="tel"
+                    disabled={isSubmitting}
+                    className={INPUT_CLASS}
+                  />
+                </SignupField>
 
-          <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-current/15 pt-[clamp(12px,2vh,20px)] text-[12.5px] opacity-75">
+                <SignupField
+                  id="signup-category"
+                  label="Staff category"
+                  error={errors.staffCategory}
+                >
+                  <select
+                    {...controlA11y("signup-category", errors.staffCategory)}
+                    value={form.staffCategory}
+                    onChange={(e) => setField("staffCategory", e.target.value)}
+                    disabled={isSubmitting}
+                    className={INPUT_CLASS}
+                  >
+                    <option value="" disabled>
+                      Select category
+                    </option>
+                    {STAFF_CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </SignupField>
+              </>
+            )}
+
+            <PasswordField
+              id="signup-password"
+              label="Password"
+              value={form.password}
+              onChange={(value) => setField("password", value)}
+              error={errors.password}
+              hint="At least 8 characters."
+              autoComplete="new-password"
+              showToggle
+              showPassword={showPassword}
+              onToggleShow={() => setShowPassword((shown) => !shown)}
+              disabled={isSubmitting}
+            />
+
+            <PasswordField
+              id="signup-confirm-password"
+              label="Confirm password"
+              value={form.confirmPassword}
+              onChange={(value) => setField("confirmPassword", value)}
+              error={errors.confirmPassword}
+              autoComplete="new-password"
+              showPassword={showPassword}
+              onToggleShow={() => setShowPassword((shown) => !shown)}
+              disabled={isSubmitting}
+            />
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`block w-full py-3.5 text-center text-[0.9375rem] font-bold tracking-[0.01em] transition-colors disabled:opacity-60 ${theme.submit}`}
+            >
+              {getSubmitLabel(isTeacher, isSubmitting)}
+            </button>
+          </form>
+
+          <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-current/12 pt-[clamp(12px,2vh,20px)] text-sm opacity-75">
             <span>
               Already have an account?{" "}
               <Link
@@ -566,7 +468,7 @@ export const SignupForm = () => {
                 Sign in
               </Link>
             </span>
-            <span className="font-bold tracking-[0.18em] opacity-60">
+            <span className="text-xs font-bold tracking-[0.2em]">
               CERTA VIRILITER
             </span>
           </div>
@@ -575,26 +477,3 @@ export const SignupForm = () => {
     </AuthSplitLayout>
   );
 };
-
-/** Shown while the route's `beforeLoad` resolves the session. */
-export const SignupSkeleton = () => (
-  <div
-    aria-busy="true"
-    aria-live="polite"
-    className="flex min-h-dvh items-center justify-center bg-[#FFF8E7] px-[clamp(20px,4vw,52px)] py-10"
-  >
-    <span className="sr-only">Checking your session…</span>
-    <div className="w-full max-w-[28rem]">
-      <div className="h-10 w-56 bg-[#013405]/15" />
-      <div className="mt-8 flex flex-col gap-5">
-        <div className="h-3 w-24 bg-[#013405]/12" />
-        <div className="h-11 w-full bg-[#013405]/12" />
-        <div className="h-3 w-24 bg-[#013405]/12" />
-        <div className="h-11 w-full bg-[#013405]/12" />
-        <div className="h-3 w-24 bg-[#013405]/12" />
-        <div className="h-11 w-full bg-[#013405]/12" />
-        <div className="mt-2 h-12 w-full bg-[#013405]/20" />
-      </div>
-    </div>
-  </div>
-);

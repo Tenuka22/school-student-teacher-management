@@ -13,13 +13,10 @@ import {
 import { Input } from "@school-student-teacher-management/ui/components/input";
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-import { QueryErrorPanel } from "@/components/query-error-panel";
-import { TeacherSubjectAssignments } from "@/components/staff/teacher-management/teacher-subject-assignments";
-import { formatApiErrorMessage } from "@/lib/api-error";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 /**
@@ -29,18 +26,7 @@ import { orpc } from "@/utils/orpc";
  */
 export const MyProfileContent = () => {
   const queryClient = useQueryClient();
-  const { year } = useParams({ from: "/_auth/teacher/$year" });
   const myStaffQuery = useQuery(orpc.staff.getMyStaff.queryOptions());
-  const academicYearsQuery = useQuery(
-    orpc.staff.listAcademicYears.queryOptions()
-  );
-  const academicYearId = useMemo(() => {
-    const years = academicYearsQuery.data as
-      | { id: string; year: number }[]
-      | undefined;
-    return years?.find((academicYear) => academicYear.year === Number(year))
-      ?.id;
-  }, [academicYearsQuery.data, year]);
   const profile = myStaffQuery.data?.profile;
 
   const [phone, setPhone] = useState("");
@@ -67,36 +53,12 @@ export const MyProfileContent = () => {
     })
   );
 
-  if (myStaffQuery.isPending) {
+  if (myStaffQuery.isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-64 w-full" />
       </div>
-    );
-  }
-
-  /**
-   * "No staff profile is linked to your account" is a fact about the account,
-   * and a failed request knows nothing about it. The old `!profile` branch
-   * printed that sentence on a 500 or a refused permission, telling a teacher
-   * their account was not linked when the truth was that nobody had answered.
-   * Pending and failed both return above, so what is left here is a request
-   * that succeeded — and only a successful request may say the profile is
-   * missing.
-   */
-  if (myStaffQuery.isError) {
-    return (
-      <QueryErrorPanel
-        message={formatApiErrorMessage(
-          myStaffQuery.error,
-          "The server did not return your staff record."
-        )}
-        onRetry={() => {
-          void myStaffQuery.refetch();
-        }}
-        title="Your profile could not be loaded"
-      />
     );
   }
 
@@ -125,13 +87,16 @@ export const MyProfileContent = () => {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-heading text-4xl font-semibold">My Profile</h1>
-        <p className="text-muted-foreground mt-2">
-          Your staff record as verified by the administration. Contact the
-          office to correct name, email or employment details.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Teacher workspace"
+        title="My profile"
+        description={
+          <>
+            Your staff record as verified by the administration. Contact the
+            office to correct name, email or employment details.
+          </>
+        }
+      />
 
       <Card>
         <CardContent className="p-6">
@@ -149,14 +114,6 @@ export const MyProfileContent = () => {
         </CardContent>
       </Card>
 
-      {academicYearId && (
-        <TeacherSubjectAssignments
-          staffId={profile.id}
-          academicYearId={academicYearId}
-          editable={false}
-        />
-      )}
-
       <Card>
         <CardContent className="p-6">
           <h2 className="mb-1 font-semibold">Contact details</h2>
@@ -167,12 +124,16 @@ export const MyProfileContent = () => {
             <FieldLabel htmlFor="my-phone">Phone</FieldLabel>
             <Input
               id="my-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              aria-describedby="my-phone-description"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+947XXXXXXXX"
+              placeholder="e.g. +94771234567"
             />
-            <FieldDescription>
-              Sri Lankan mobile number, normalized to +94 format
+            <FieldDescription id="my-phone-description">
+              Sri Lankan mobile number; it is saved in +94 format.
             </FieldDescription>
           </Field>
           <Button
@@ -187,7 +148,7 @@ export const MyProfileContent = () => {
               })
             }
           >
-            {updateMutation.isPending ? "Saving..." : "Save Phone Number"}
+            {updateMutation.isPending ? "Saving…" : "Save phone number"}
           </Button>
         </CardContent>
       </Card>

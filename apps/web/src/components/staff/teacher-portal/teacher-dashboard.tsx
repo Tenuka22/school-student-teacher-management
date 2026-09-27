@@ -1,17 +1,5 @@
 "use client";
 
-import {
-  appointmentTypeLabel,
-  employmentStatusLabel,
-} from "@school-student-teacher-management/db/constants/display";
-import {
-  leavePaymentLabel,
-  leaveTypeLabel,
-} from "@school-student-teacher-management/db/constants/leave-labels";
-import {
-  Avatar,
-  AvatarFallback,
-} from "@school-student-teacher-management/ui/components/avatar";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -28,38 +16,17 @@ import { Skeleton } from "@school-student-teacher-management/ui/components/skele
 import { IconCalendarTime, IconId } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import { useState } from "react";
 
-import { getAvatarFallback } from "@/components/nav-user";
-import { QueryErrorPanel } from "@/components/query-error-panel";
-import { CustodyRequestBanner } from "@/components/staff/teacher-portal/custody-request-banner";
-import { EquipmentSummaryCard } from "@/components/staff/teacher-portal/equipment-summary-card";
-import { RequestEquipmentDialog } from "@/components/staff/teacher-portal/request-equipment-dialog";
-import { formatApiErrorMessage } from "@/lib/api-error";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
-/**
- * A balance line, in words.
- *
- * Maternity is the only type with more than one payment status, so it is the
- * only one that needs the status in its name — and the status is read from the
- * shared label map so a request recorded as half pay says so, rather than
- * falling through to "Unpaid".
- */
-const getLeaveBalanceLabel = (balance: {
-  leaveType: string;
-  paymentStatus: string;
-}) => {
-  const typeLabel = leaveTypeLabel(balance.leaveType);
-  if (balance.leaveType !== "maternity") {
-    return typeLabel;
-  }
-
-  if (balance.paymentStatus === "notApplicable") {
-    return typeLabel;
-  }
-
-  return `${typeLabel} (${leavePaymentLabel(balance.paymentStatus)})`;
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  annual: "Annual",
+  casual: "Casual",
+  medical: "Medical",
+  maternity: "Maternity",
+  duty: "Official Duty",
+  other: "Other",
 };
 
 /** Leave balance card: entitlement (max) vs derived usage for the year. */
@@ -68,39 +35,6 @@ const LeaveBalanceCard = () => {
     orpc.staff.leaves.getMyLeaveBalance.queryOptions({ input: {} })
   );
   const balances = balanceQuery.data?.balances ?? [];
-
-  /**
-   * The card used to `return null` for `balances.length === 0`, which is also
-   * what it returned while loading and after a failure — so a teacher whose
-   * balance could not be read saw no balance card and no reason. All three
-   * states now say something, and the empty one is reached only on a request
-   * that succeeded.
-   */
-  if (balanceQuery.isPending) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <Skeleton className="h-6 w-56" />
-          <Skeleton className="mt-4 h-3 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (balanceQuery.isError) {
-    return (
-      <QueryErrorPanel
-        message={formatApiErrorMessage(
-          balanceQuery.error,
-          "The server did not return your leave balance."
-        )}
-        onRetry={() => {
-          void balanceQuery.refetch();
-        }}
-        title="Your leave balance could not be loaded"
-      />
-    );
-  }
 
   if (balances.length === 0) {
     return null;
@@ -114,25 +48,19 @@ const LeaveBalanceCard = () => {
           <h2 className="font-semibold">Leave Balance (this year)</h2>
         </div>
         <div className="space-y-3">
-          {balances.map((balance) => {
-            const label = getLeaveBalanceLabel(balance);
+          {balances.map((b) => {
             const pct =
-              balance.maxDays > 0
-                ? Math.min(
-                    100,
-                    Math.round((balance.usedDays / balance.maxDays) * 100)
-                  )
+              b.maxDays > 0
+                ? Math.min(100, Math.round((b.usedDays / b.maxDays) * 100))
                 : 0;
-            const isLoan = balance.remainingDays < 0;
-            const balanceLabel = isLoan
-              ? `${Math.abs(balance.remainingDays)} days loan`
-              : `${balance.remainingDays} days remaining`;
             return (
-              <div key={`${balance.leaveType}:${balance.paymentStatus}`}>
+              <div key={b.leaveType}>
                 <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium">{label}</span>
-                  <span className="text-muted-foreground font-mono text-xs">
-                    {balance.usedDays} / {balance.maxDays} days · {balanceLabel}
+                  <span className="font-medium">
+                    {LEAVE_TYPE_LABELS[b.leaveType] ?? b.leaveType}
+                  </span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {b.usedDays} / {b.maxDays} days
                   </span>
                 </div>
                 <div
@@ -140,7 +68,7 @@ const LeaveBalanceCard = () => {
                   aria-valuenow={pct}
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-label={`${label} leave used`}
+                  aria-label={`${LEAVE_TYPE_LABELS[b.leaveType] ?? b.leaveType} leave used`}
                 >
                   <div
                     className={`h-full rounded-full ${pct >= 100 ? "bg-destructive" : "bg-primary"}`}
@@ -156,43 +84,27 @@ const LeaveBalanceCard = () => {
   );
 };
 
+const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
+  permanent: "Permanent",
+  probation: "Probation",
+  temporary: "Temporary",
+  substitute: "Substitute",
+  visiting: "Visiting Lecturer",
+};
+
 export const TeacherDashboard = () => {
   const { year } = useParams({ from: "/_auth/teacher/$year" });
   const myStaffQuery = useQuery(orpc.staff.getMyStaff.queryOptions());
   const profile = myStaffQuery.data?.profile;
   const username = myStaffQuery.data?.username;
-  const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
 
-  if (myStaffQuery.isPending) {
+  if (myStaffQuery.isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-40 w-full" />
       </div>
-    );
-  }
-
-  /**
-   * "No staff profile linked" is a claim about the teacher's account, and a
-   * failed request knows nothing about it — the old `!profile` branch printed
-   * that notice on a 500, sending a teacher to the office for a link that
-   * exists. Pending and failed both return above, so what remains here is a
-   * request that succeeded, and only a successful request may say the profile
-   * is missing.
-   */
-  if (myStaffQuery.isError) {
-    return (
-      <QueryErrorPanel
-        message={formatApiErrorMessage(
-          myStaffQuery.error,
-          "The server did not return your staff record."
-        )}
-        onRetry={() => {
-          void myStaffQuery.refetch();
-        }}
-        title="Your staff profile could not be loaded"
-      />
     );
   }
 
@@ -215,7 +127,7 @@ export const TeacherDashboard = () => {
                 className="mt-4 inline-flex items-center gap-2"
               >
                 <IconCalendarTime className="size-4" />
-                Apply for Leave
+                Apply for leave
               </Link>
             }
           />
@@ -226,50 +138,22 @@ export const TeacherDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <CustodyRequestBanner />
+      <PageHeader
+        eyebrow="Teacher workspace"
+        title={<>Welcome, {profile.name}</>}
+        description={
+          <>
+            Your teacher workspace — profile, leave and timetable in one place.
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Avatar className="bg-primary text-primary-foreground size-14 rounded-none text-lg font-bold">
-            <AvatarFallback className="bg-primary text-primary-foreground rounded-none text-lg font-bold">
-              {getAvatarFallback(profile.name)}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="font-heading text-3xl font-semibold md:text-4xl">
-              Welcome, {profile.name}
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Your teacher workspace — profile, leave and timetable in one
-              place.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => setIsRequestDialogOpen(true)}
-            variant="outline"
-          >
-            Get equipment
-          </Button>
-          <Button render={<Link to="/teacher/$year/leave" params={{ year }} />}>
-            Manage My Leave
-          </Button>
-          <Button
-            variant="outline"
-            render={<Link to="/teacher/$year/timetable" params={{ year }} />}
-          >
-            Timetables
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="p-6">
             <div className="mb-4 flex items-center gap-2">
               <IconId className="text-muted-foreground size-5" />
-              <h2 className="font-semibold">My Profile</h2>
+              <h2 className="font-semibold">My profile</h2>
             </div>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between gap-4">
@@ -295,12 +179,13 @@ export const TeacherDashboard = () => {
                 <dd className="flex items-center gap-2">
                   {profile.appointmentType && (
                     <Badge variant="outline">
-                      {appointmentTypeLabel(profile.appointmentType)}
+                      {APPOINTMENT_TYPE_LABELS[profile.appointmentType] ??
+                        profile.appointmentType}
                     </Badge>
                   )}
                   {profile.employmentStatus && (
                     <Badge variant="secondary">
-                      {employmentStatusLabel(profile.employmentStatus)}
+                      {profile.employmentStatus}
                     </Badge>
                   )}
                 </dd>
@@ -312,20 +197,46 @@ export const TeacherDashboard = () => {
               className="mt-4"
               render={<Link to="/teacher/$year/profile" params={{ year }} />}
             >
-              Edit phone number
+              Edit contact details
             </Button>
           </CardContent>
         </Card>
 
-        <LeaveBalanceCard />
+        <Card>
+          <CardContent className="flex h-full flex-col justify-between gap-4 p-6">
+            <div className="flex items-center gap-2">
+              <IconCalendarTime className="text-muted-foreground size-5" />
+              <h2 className="font-semibold">Leave &amp; Timetable</h2>
+            </div>
+            <p className="text-muted-foreground text-sm">
+              Applying for leave, tracking approvals and checking your weekly
+              timetable all live here.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                render={<Link to="/teacher/$year/leave" params={{ year }} />}
+              >
+                Manage my leave
+              </Button>
+              <Button
+                variant="outline"
+                render={
+                  <Link
+                    to="/admin/$year/staff/teacher-timetable"
+                    params={{ year }}
+                  />
+                }
+              >
+                Timetables
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="md:col-span-2">
+          <LeaveBalanceCard />
+        </div>
       </div>
-
-      <EquipmentSummaryCard />
-
-      <RequestEquipmentDialog
-        onOpenChange={setIsRequestDialogOpen}
-        open={isRequestDialogOpen}
-      />
     </div>
   );
 };

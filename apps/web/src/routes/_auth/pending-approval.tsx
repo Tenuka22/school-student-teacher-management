@@ -2,7 +2,7 @@ import type { SessionUser } from "@school-student-teacher-management/api/context
 import { createFileRoute } from "@tanstack/react-router";
 
 import { PendingApprovalContent } from "@/components/auth/pending-approval-content";
-import { pageSeo } from "@/functions/get-site-origin";
+import { pageHead } from "@/lib/page-title";
 
 const PendingApprovalRoute = () => {
   // From the authed shell's context, not a second lookup — see `verify.tsx`.
@@ -21,13 +21,5 @@ const PendingApprovalRoute = () => {
  */
 export const Route = createFileRoute("/_auth/pending-approval")({
   component: PendingApprovalRoute,
-  head: ({ matches }) =>
-    pageSeo({
-      matches,
-      path: "/pending-approval",
-      title: "Waiting for staff approval",
-      description:
-        "Your teacher registration has been received and your email address confirmed. An administrator or the Principal checks you are on the College establishment before the teacher role is granted.",
-      noindex: true,
-    }),
+  head: () => pageHead("Awaiting approval"),
 });

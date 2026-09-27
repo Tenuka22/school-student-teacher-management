@@ -1,27 +1,26 @@
-import type { StaffListItem } from "@school-student-teacher-management/api/routers/staff/list-staff";
+import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
-import { IconCalendarTime, IconCopy, IconId } from "@tabler/icons-react";
+import { IconCalendarTime, IconId } from "@tabler/icons-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-type TeacherReference = Pick<StaffListItem, "id" | "name" | "email" | "phone">;
+type Staff = typeof staff.$inferSelect;
 
 interface NewTeacherNextStepsDialogProps {
-  teacher: TeacherReference | null;
+  teacher: Staff | null;
   /** Login username (the teacher's NIC) returned by createStaff. */
   loginUsername?: string | null;
   /** One-time initial password shown only right after creation. */
   initialPassword?: string | null;
   onOpenChange: (open: boolean) => void;
-  onManageTimetableClick: (teacher: TeacherReference) => void;
+  onManageTimetableClick: (teacher: Staff) => void;
 }
 
 /** Shown right after a teacher is created: their fresh login credentials —
@@ -33,18 +32,7 @@ export const NewTeacherNextStepsDialog = ({
   onOpenChange,
   onManageTimetableClick,
 }: NewTeacherNextStepsDialogProps) => {
-  /**
-   * Whether the credentials are on the clipboard, and it resets when the dialog
-   * reopens.
-   *
-   * It used to be a plain `useState` that was only ever set to `true`, so a
-   * second teacher created in the same session opened this dialog already
-   * reading "Copied!" — a claim about a clipboard that still held the *first*
-   * teacher's password. Keying it off the teacher it belongs to is what makes
-   * the label true.
-   */
-  const [copiedFor, setCopiedFor] = useState<string | null>(null);
-  const hasCopied = copiedFor !== null && copiedFor === teacher?.id;
+  const [hasCopied, setHasCopied] = useState(false);
 
   const credentialsText =
     teacher && loginUsername && initialPassword
@@ -52,29 +40,12 @@ export const NewTeacherNextStepsDialog = ({
       : null;
 
   const handleCopyCredentials = async () => {
-    if (!credentialsText || !teacher) {
+    if (!credentialsText) {
       return;
     }
-
-    /*
-     * `navigator.clipboard` is not always there and not always allowed: a
-     * non-secure origin, a browser policy, or a permission the reader has
-     * refused. Every one of those threw out of an `async` event handler with
-     * nothing catching it, so the button silently did nothing and the label
-     * stayed "Copy Credentials" — an affordance that reliably fails and never
-     * says why. A refused copy is a message, not a shrug.
-     */
-    try {
-      await navigator.clipboard.writeText(credentialsText);
-      setCopiedFor(teacher.id);
-      toast.success("Credentials copied — share them with the teacher");
-    } catch (error) {
-      toast.error(
-        error instanceof Error && error.message
-          ? `Could not copy to the clipboard: ${error.message}. Select the username and password and copy them by hand.`
-          : "Could not copy to the clipboard. Select the username and password and copy them by hand."
-      );
-    }
+    await navigator.clipboard.writeText(credentialsText);
+    setHasCopied(true);
+    toast.success("Credentials copied — share them with the teacher");
   };
 
   return (
@@ -89,66 +60,45 @@ export const NewTeacherNextStepsDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        {credentialsText ? (
-          <div className="bg-muted flex flex-col gap-2 border p-3">
-            <p className="text-muted-foreground text-xs">
-              Shown once, immediately after the account is created. Copy them
-              now — they cannot be read back later.
-            </p>
+        {credentialsText && (
+          <div className="bg-muted space-y-2 border p-3">
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
-                <IconId className="size-4" aria-hidden="true" />
+                <IconId className="size-4" />
                 Username
               </span>
-              <code className="font-mono font-semibold break-all">
-                {loginUsername}
-              </code>
+              <code className="font-mono font-semibold">{loginUsername}</code>
             </div>
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">Initial password</span>
-              <code className="font-mono font-semibold break-all">
-                {initialPassword}
-              </code>
+              <code className="font-mono font-semibold">{initialPassword}</code>
             </div>
             <Button
-              type="button"
               size="sm"
               variant="outline"
               className="w-full"
               onClick={handleCopyCredentials}
             >
-              {hasCopied ? (
-                "Copied"
-              ) : (
-                <>
-                  <IconCopy data-icon="inline-start" />
-                  Copy credentials
-                </>
-              )}
+              {hasCopied ? "Copied!" : "Copy Credentials"}
             </Button>
           </div>
-        ) : null}
+        )}
 
         <div className="flex flex-col gap-2">
           <Button
-            type="button"
             variant="outline"
             className="justify-start"
             onClick={() => teacher && onManageTimetableClick(teacher)}
           >
-            <IconCalendarTime data-icon="inline-start" />
+            <IconCalendarTime className="mr-2 size-4" />
             Set up timetable
           </Button>
         </div>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-          >
+        <div className="flex justify-end">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Done for now
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

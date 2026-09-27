@@ -29,6 +29,7 @@ import {
   CLASS_CATEGORIES,
   categoryForGrade,
 } from "@/components/staff/class-assignment/class-categories";
+import { errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
 
 interface Class {
@@ -154,52 +155,29 @@ const SelectField = ({
   placeholder,
   disabled = false,
   error,
-  hint,
-  triggerRef,
-}: SelectFieldProps) => {
-  const labelId = `${id}-label`;
-  const errorId = `${id}-error`;
-  const hintId = `${id}-hint`;
-  const describedBy =
-    [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ") ||
-    undefined;
-
-  return (
-    <Field data-invalid={Boolean(error)}>
-      <FieldLabel id={labelId}>{label}</FieldLabel>
-      <Select
-        value={value}
-        onValueChange={(next) => next && onValueChange(next)}
-      >
-        <SelectTrigger
-          aria-describedby={describedBy}
-          aria-invalid={error ? true : undefined}
-          aria-labelledby={labelId}
-          aria-required="true"
-          disabled={disabled}
-          id={id}
-          ref={triggerRef}
-        >
-          <SelectValue placeholder={placeholder}>
-            {(selectedValue: string | null) =>
-              options.find((option) => option.value === selectedValue)?.label ??
-              placeholder
-            }
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {hint && <FieldDescription id={hintId}>{hint}</FieldDescription>}
-      {error && <FieldError id={errorId}>{error}</FieldError>}
-    </Field>
-  );
-};
+}: SelectFieldProps) => (
+  <Field data-invalid={!!error}>
+    <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    <Select value={value} onValueChange={(next) => next && onValueChange(next)}>
+      <SelectTrigger {...fieldA11y(id, { error })} disabled={disabled}>
+        <SelectValue placeholder={placeholder}>
+          {(selectedValue: string | null) =>
+            options.find((option) => option.value === selectedValue)?.label ??
+            placeholder
+          }
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+    {error && <FieldError id={errorId(id)}>{error}</FieldError>}
+  </Field>
+);
 
 const useSelectOptions = (
   classes: Class[],
@@ -419,8 +397,8 @@ const TeacherPeriodAssignmentFormContent = ({
   <form id={formId} onSubmit={handleSubmit} className="space-y-5">
     {generalError && (
       <div
-        className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
         role="alert"
+        className="bg-destructive/10 text-destructive p-3 text-sm"
       >
         {generalError}
       </div>

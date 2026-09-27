@@ -1,15 +1,6 @@
-/*
- * `<section>` is used for the scrollable grid rather than `role="region"`, and
- * the one suppression below is for the `tabIndex` that makes a scroll container
- * reachable: a region that scrolls but cannot be focused cannot be scrolled with
- * the keyboard, which WCAG 2.1.1 requires.
- */
-/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- a scrollable region must be focusable so it can be scrolled from the keyboard */
 "use client";
 
-import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
-import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
-import { Badge } from "@school-student-teacher-management/ui/components/badge";
+import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { Card } from "@school-student-teacher-management/ui/components/card";
 import {
@@ -21,40 +12,15 @@ import {
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
-import {
-  IconAlertTriangle,
-  IconDotsVertical,
-  IconPlus,
-  IconRepeat,
-} from "@tabler/icons-react";
-import { useCallback, useMemo } from "react";
+import { IconDotsVertical, IconPlus } from "@tabler/icons-react";
+import { useMemo, useState } from "react";
 
-import { useSlotNavigation } from "@/components/staff/period-management/timetable-grid";
-import type {
-  SlotNavigation,
-  SlotPosition,
-} from "@/components/staff/period-management/timetable-grid";
-
-const DAYS_OF_WEEK = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-] as const;
-
-const PERIOD_TIMES = new Map<number, string>(
-  CODE_DEFINED_PERIODS.map((period) => [
-    period.periodNumber,
-    `${period.startTime}–${period.endTime}`,
-  ])
-);
+type PeriodConfig = typeof periodConfigTable.$inferSelect;
 
 interface TeacherTimetableEntry {
   id: string;
@@ -64,332 +30,120 @@ interface TeacherTimetableEntry {
   dayOfWeek: number;
   periodNumber: number;
   subjectKey: string;
-  /**
-   * Set by the page hook from the server's conflict scan, because the
-   * teacher-timetable read does not carry the stored `isCombinedSession` flag.
-   * `true` here means the scan reported this row.
-   */
-  isClash?: boolean;
 }
+
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 interface TeacherTimetableGridProps {
   entries: TeacherTimetableEntry[];
+  periodConfig: PeriodConfig[];
   onAssignClick: (dayOfWeek: number, periodNumber: number) => void;
   onEditClick: (entry: TeacherTimetableEntry) => void;
   onDeleteClick: (entry: TeacherTimetableEntry) => void;
-  /** Names the teacher in the caption; the page heading already says it. */
-  teacherName?: string;
 }
 
-const describeSlot = (dayOfWeek: number, periodNumber: number): string => {
-  const day = DAYS_OF_WEEK[dayOfWeek - 1] ?? `Day ${dayOfWeek}`;
-  const times = PERIOD_TIMES.get(periodNumber);
-  return times
-    ? `${day}, Period ${periodNumber} (${times})`
-    : `${day}, Period ${periodNumber}`;
+/** Monday–Friday → 1–5; weekends open on Monday. */
+const todayOrMonday = () => {
+  const day = new Date().getDay();
+  return day >= 1 && day <= 5 ? day : 1;
 };
 
-type SharedSlotKind = "combined" | "clash";
-
-/**
- * What a slot holding more than one class means.
- *
- * The database allows a teacher to be in two classes at once precisely so a
- * Dance or Music teacher can run one session across several classes, and the
- * server's scan leaves an overlap out of its report when every row in it is
- * marked as a combined session. So a multi-class slot is either a declared
- * combined session or something the scan reported — and this grid can tell which,
- * because the page passes the scan's answer in. It says which, either way; it
- * never implies the timetable has been checked and found clean.
- */
-const sharedSlotKind = (
-  slotEntries: TeacherTimetableEntry[]
-): SharedSlotKind | null => {
-  if (slotEntries.length < 2) {
-    return null;
-  }
-  return slotEntries.some((entry) => entry.isClash) ? "clash" : "combined";
-};
-
-const SHARED_SLOT_MEANING: Record<SharedSlotKind, string> = {
-  combined:
-    "every class in this slot is marked as an intentional combined session, so the conflict scan does not report it",
-  clash:
-    "the conflict scan found an overlap here that is not marked as intentional, so at least one of these classes is unexpected",
-};
-
-const SlotMark = ({ kind }: { kind: SharedSlotKind }) => {
-  if (kind === "clash") {
-    return (
-      <Badge className="gap-1" variant="destructive">
-        <IconAlertTriangle aria-hidden="true" />
-        Clash
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      className="border-warning-ink/40 text-warning-ink gap-1"
-      variant="outline"
-    >
-      <IconRepeat aria-hidden="true" />
-      Combined
-    </Badge>
-  );
-};
-
-const MarkLegend = ({ kind }: { kind: SharedSlotKind }) => (
-  <span className="flex items-center gap-1.5">
-    <SlotMark kind={kind} />
-    <span>
-      <span className="font-bold">
-        {kind === "clash" ? "Clash" : "Combined session"}
-      </span>{" "}
-      — {SHARED_SLOT_MEANING[kind]}.
-    </span>
-  </span>
-);
-
-/** One class in a slot, and the actions behind the row-actions key. */
-const ClassEntryCard = ({
-  entry,
-  navigation,
-  onDelete,
-  onEdit,
-  position,
-  sharedKind,
-  slot,
-}: {
-  entry: TeacherTimetableEntry;
-  navigation: SlotNavigation;
-  onDelete: () => void;
-  onEdit: () => void;
-  position: SlotPosition;
-  sharedKind: SharedSlotKind | null;
-  slot: string;
-}) => (
-  <div className="group bg-card relative border p-2 text-left text-xs">
-    <button
-      aria-label={`Edit ${entry.className}, ${subjectLabel(entry.subjectKey)}, in ${slot}${sharedKind === "clash" ? ". The conflict scan reported an unmarked overlap in this slot." : ""}`}
-      className="block w-full cursor-pointer pr-6 text-left"
-      onClick={onEdit}
-      onKeyDown={(event) => navigation.handleSlotKeyDown(event, position)}
-      ref={(node) =>
-        navigation.registerSlotButton(
-          `${position.dayIndex}:${position.periodIndex}:${position.itemIndex}`,
-          node
-        )
-      }
-      tabIndex={navigation.isActive(position) ? 0 : -1}
-      type="button"
-    >
-      <div className="font-bold">{entry.className}</div>
-      <div className="text-muted-foreground text-xs">
-        {subjectLabel(entry.subjectKey)}
-      </div>
-    </button>
-    {/* Sibling of the cell button, not a child, and reachable from the focused
-        cell with Shift+F10 rather than a second tab stop. */}
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label={`Actions for ${entry.className}, ${subjectLabel(entry.subjectKey)}, in ${slot}`}
-            className="absolute top-0 right-0 size-6 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
-            ref={(node: HTMLButtonElement | null) =>
-              navigation.registerSlotMenu(
-                `${position.dayIndex}:${position.periodIndex}:${position.itemIndex}`,
-                node
-              )
-            }
-            tabIndex={-1}
-            size="icon"
-            variant="ghost"
-          >
-            <IconDotsVertical aria-hidden="true" className="size-3" />
-          </Button>
-        }
-      />
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
-        <DropdownMenuItem className="text-destructive" onClick={onDelete}>
-          Remove
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  </div>
-);
-
-/**
- * The tone of a slot.
- *
- * Destructive-tinted for a slot the scan reported, the quiet green wash for one
- * holding a class, and the muted panel for a free slot — so "no class here" and
- * "a class is here" are never the same picture.
- */
-const slotCellTone = (
-  sharedKind: SharedSlotKind | null,
-  isEmpty: boolean
-): string => {
-  if (sharedKind === "clash") {
-    return "bg-destructive/6";
-  }
-  return isEmpty ? "bg-muted/30" : "bg-primary/5";
-};
-
-/** One slot: the classes in it, what the scan says, and the add button. */
-const TeacherSlotCell = ({
-  dayOfWeek,
-  navigation,
-  onAssign,
-  onDelete,
-  onEdit,
-  period,
-  slotEntries,
-}: {
+interface SlotStackProps {
   dayOfWeek: number;
-  navigation: SlotNavigation;
-  onAssign: () => void;
-  onDelete: (entry: TeacherTimetableEntry) => void;
-  onEdit: (entry: TeacherTimetableEntry) => void;
-  period: (typeof CODE_DEFINED_PERIODS)[number];
+  periodNumber: number;
   slotEntries: TeacherTimetableEntry[];
-}) => {
-  const periodIndex = period.periodNumber - 1;
-  const slot = describeSlot(dayOfWeek, period.periodNumber);
-  const sharedKind = sharedSlotKind(slotEntries);
-  const addPosition = {
-    dayIndex: dayOfWeek - 1,
-    periodIndex,
-    itemIndex: slotEntries.length,
-  };
+  onAssignClick: TeacherTimetableGridProps["onAssignClick"];
+  onEditClick: TeacherTimetableGridProps["onEditClick"];
+  onDeleteClick: TeacherTimetableGridProps["onDeleteClick"];
+}
+
+/**
+ * Every class taught in one slot, plus the button that adds another. The
+ * per-class menu shows on hover, on keyboard focus and always on touch.
+ */
+const SlotStack = ({
+  dayOfWeek,
+  periodNumber,
+  slotEntries,
+  onAssignClick,
+  onEditClick,
+  onDeleteClick,
+}: SlotStackProps) => {
+  const slotName = `${DAYS_OF_WEEK[dayOfWeek - 1]}, period ${periodNumber}`;
 
   return (
-    <TableCell
-      className={`min-h-[66px] p-1 align-top ${slotCellTone(
-        sharedKind,
-        slotEntries.length === 0
-      )}`}
-    >
-      <div className="flex flex-col gap-1">
-        {sharedKind && <SlotMark kind={sharedKind} />}
-        {slotEntries.map((entry, itemIndex) => (
-          <ClassEntryCard
-            key={entry.id}
-            entry={entry}
-            navigation={navigation}
-            onDelete={() => onDelete(entry)}
-            onEdit={() => onEdit(entry)}
-            position={{
-              dayIndex: dayOfWeek - 1,
-              itemIndex,
-              periodIndex,
-            }}
-            sharedKind={sharedKind}
-            slot={slot}
-          />
-        ))}
-        {sharedKind && (
-          <p className="text-muted-foreground text-[10px] leading-snug">
-            {`${slotEntries.length} classes in this slot: ${SHARED_SLOT_MEANING[sharedKind]}.`}
-          </p>
-        )}
-        <Button
-          aria-label={`${
-            slotEntries.length > 0
-              ? "Add another class to"
-              : "Assign a class to"
-          } ${slot}`}
-          className="border-border w-full justify-start border border-dashed px-2 text-xs"
-          onClick={onAssign}
-          onKeyDown={(event) =>
-            navigation.handleSlotKeyDown(event, addPosition)
-          }
-          ref={(node) =>
-            navigation.registerSlotButton(
-              `${addPosition.dayIndex}:${addPosition.periodIndex}:${addPosition.itemIndex}`,
-              node
-            )
-          }
-          tabIndex={navigation.isActive(addPosition) ? 0 : -1}
-          type="button"
-          variant="ghost"
+    <div className="flex flex-col gap-1">
+      {slotEntries.map((entry) => (
+        <div
+          key={entry.id}
+          className="group bg-card relative border p-2 text-left text-sm"
         >
-          <IconPlus aria-hidden="true" className="mr-1 size-3" />
-          {slotEntries.length > 0 ? "Add class" : "Assign"}
-        </Button>
-      </div>
-    </TableCell>
+          <button
+            type="button"
+            className="focus-visible:ring-ring w-full pr-6 text-left focus-visible:ring-2 focus-visible:outline-none"
+            aria-label={`Edit ${slotName}: ${entry.className}, ${entry.subjectKey}`}
+            onClick={() => onEditClick(entry)}
+          >
+            <span className="block text-sm leading-snug font-semibold">
+              {entry.className}
+            </span>
+            <span className="text-muted-foreground type-caption block">
+              {entry.subjectKey}
+            </span>
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`More actions for ${entry.className}, ${slotName}`}
+                  className="absolute top-0.5 right-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+                />
+              }
+            >
+              <IconDotsVertical aria-hidden="true" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEditClick(entry)}>
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onDeleteClick(entry)}
+                className="text-destructive"
+              >
+                Unassign
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ))}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full"
+        aria-label={`${slotEntries.length > 0 ? "Add another class to" : "Assign"} ${slotName}`}
+        onClick={() => onAssignClick(dayOfWeek, periodNumber)}
+      >
+        <IconPlus aria-hidden="true" className="mr-1 size-3" />
+        {slotEntries.length > 0 ? "Add class" : "Assign"}
+      </Button>
+    </div>
   );
 };
 
-const PeriodRow = ({
-  entriesFor,
-  navigation,
-  onAssignClick,
-  onDeleteClick,
-  onEditClick,
-  period,
-}: {
-  entriesFor: (
-    dayOfWeek: number,
-    periodNumber: number
-  ) => TeacherTimetableEntry[];
-  navigation: SlotNavigation;
-  onAssignClick: (dayOfWeek: number, periodNumber: number) => void;
-  onDeleteClick: (entry: TeacherTimetableEntry) => void;
-  onEditClick: (entry: TeacherTimetableEntry) => void;
-  period: (typeof CODE_DEFINED_PERIODS)[number];
-}) => (
-  <TableRow>
-    <TableHead
-      className="bg-card text-foreground sticky left-0 z-10 w-36 border-r font-medium"
-      scope="row"
-    >
-      <div className="text-sm font-bold">{`Period ${period.periodNumber}`}</div>
-      <div className="text-muted-foreground font-mono text-xs tabular-nums">
-        {period.startTime}–{period.endTime}
-      </div>
-    </TableHead>
-    {DAYS_OF_WEEK.map((_, dayIndex) => {
-      const dayOfWeek = dayIndex + 1;
-      return (
-        <TeacherSlotCell
-          key={`${dayOfWeek}-${period.periodNumber}`}
-          dayOfWeek={dayOfWeek}
-          navigation={navigation}
-          onAssign={() => onAssignClick(dayOfWeek, period.periodNumber)}
-          onDelete={onDeleteClick}
-          onEdit={onEditClick}
-          period={period}
-          slotEntries={entriesFor(dayOfWeek, period.periodNumber)}
-        />
-      );
-    })}
-  </TableRow>
-);
-
-/**
- * Day × Period grid for one teacher.
- *
- * A cell can hold more than one class — a combined session runs across several
- * classes at once — so entries are grouped by slot rather than assuming a 1:1
- * slot-to-class mapping, and a slot with several classes says in words what it
- * is rather than looking like a mistake. The period times come from the shared
- * `CODE_DEFINED_PERIODS` list, the same one the attendance grid and the class
- * timetable read, so the three can never disagree about what "Period 3" is.
- *
- * Semantics and keyboard behaviour match the class grid: a real table with a
- * caption and `scope` on every header, pinned day and period headers, one tab
- * stop with arrow keys walking the slots, and the row's actions one key away.
- */
+/** Day x Period datagrid for a single teacher: each cell can hold more than
+ * one class (combined sessions, e.g. Dance/Music run across several classes
+ * at once) instead of assuming a strict 1:1 slot-to-class mapping. */
 export const TeacherTimetableGrid = ({
   entries,
+  periodConfig,
   onAssignClick,
   onEditClick,
   onDeleteClick,
-  teacherName,
 }: TeacherTimetableGridProps) => {
+  const [mobileDay, setMobileDay] = useState(todayOrMonday);
+
   const entriesBySlot = useMemo(() => {
     const map = new Map<string, TeacherTimetableEntry[]>();
     for (const entry of entries) {
@@ -401,103 +155,126 @@ export const TeacherTimetableGrid = ({
     return map;
   }, [entries]);
 
-  const entriesFor = useCallback(
-    (dayOfWeek: number, periodNumber: number) =>
-      entriesBySlot.get(`${dayOfWeek}-${periodNumber}`) ?? [],
-    [entriesBySlot]
+  const sortedConfig = useMemo(
+    () => periodConfig.toSorted((a, b) => a.periodNumber - b.periodNumber),
+    [periodConfig]
   );
 
-  // A slot holds one control per class, then the button that adds another.
-  const controlCountFor = useCallback(
-    (dayIndex: number, periodIndex: number) => {
-      const period = CODE_DEFINED_PERIODS[periodIndex];
-      return period
-        ? entriesFor(dayIndex + 1, period.periodNumber).length + 1
-        : 1;
-    },
-    [entriesFor]
-  );
-  const navigation = useSlotNavigation(controlCountFor);
-
-  const sharedKinds = useMemo(() => {
-    const kinds = new Set<SharedSlotKind>();
-    for (const slotEntries of entriesBySlot.values()) {
-      const kind = sharedSlotKind(slotEntries);
-      if (kind) {
-        kinds.add(kind);
-      }
-    }
-    return kinds;
-  }, [entriesBySlot]);
+  const handlers = { onAssignClick, onEditClick, onDeleteClick };
 
   return (
-    <div className="space-y-3">
-      <p className="text-muted-foreground text-xs">
-        Arrow keys move between slots, Enter edits the focused class, and
-        Shift+F10 opens its actions. The day and period headers stay in place
-        while the grid scrolls.
-      </p>
-
-      <Card className="max-h-[min(72vh,42rem)] overflow-hidden p-0 py-0">
-        <section
-          aria-label="Teacher timetable grid, scrollable"
-          className="min-h-0 flex-1 overflow-auto [&>[data-slot=table-container]]:h-full"
-          tabIndex={0}
-        >
-          <Table className="w-max min-w-full">
-            <TableCaption className="sr-only">
-              {`Timetable for ${teacherName ?? "the selected teacher"}: eight periods by five days, Monday to Friday. Column headers are days, row headers are periods with their start and end times. Each cell lists the classes and subjects in that slot, or offers to assign one.`}
-            </TableCaption>
-            <TableHeader className="bg-primary [&_tr]:border-none">
-              <TableRow className="hover:bg-primary">
-                <TableHead
-                  className="text-accent bg-primary sticky left-0 z-30 h-11 w-36 text-xs font-extrabold tracking-[0.16em] uppercase"
-                  scope="col"
-                >
-                  Period
-                </TableHead>
-                {DAYS_OF_WEEK.map((day) => (
-                  <TableHead
-                    className="text-accent bg-primary sticky top-0 z-20 h-11 text-center text-xs font-extrabold tracking-[0.16em] uppercase"
-                    key={day}
-                    scope="col"
-                  >
-                    {day}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {CODE_DEFINED_PERIODS.map((period) => (
-                <PeriodRow
-                  key={period.periodNumber}
-                  entriesFor={entriesFor}
-                  navigation={navigation}
-                  onAssignClick={onAssignClick}
-                  onDeleteClick={onDeleteClick}
-                  onEditClick={onEditClick}
-                  period={period}
+    <>
+      {/* Phones and small tablets: one day at a time. */}
+      <div className="space-y-3 md:hidden">
+        <fieldset className="m-0 grid min-w-0 grid-cols-5 gap-1 border-0 p-0">
+          <legend className="sr-only">Day shown</legend>
+          {DAYS_OF_WEEK.map((day, index) => (
+            <Button
+              key={day}
+              type="button"
+              size="sm"
+              variant={mobileDay === index + 1 ? "default" : "outline"}
+              aria-pressed={mobileDay === index + 1}
+              aria-label={day}
+              onClick={() => setMobileDay(index + 1)}
+              className="px-0"
+            >
+              {day.slice(0, 3)}
+            </Button>
+          ))}
+        </fieldset>
+        <Card className="gap-0 p-0">
+          <h3 className="bg-primary text-accent m-0 px-3 py-2.5 text-xs font-bold tracking-[0.08em] uppercase">
+            {DAYS_OF_WEEK[mobileDay - 1]}
+          </h3>
+          <ul className="m-0 list-none p-0">
+            {sortedConfig.map((period) => (
+              <li
+                key={period.id}
+                className="border-border grid grid-cols-[5.5rem_1fr] items-start gap-2 border-b p-2 last:border-b-0"
+              >
+                <div>
+                  <div className="text-sm font-semibold">
+                    Period {period.periodNumber}
+                  </div>
+                  <div className="text-muted-foreground type-caption">
+                    {period.startTime}–{period.endTime}
+                  </div>
+                </div>
+                <SlotStack
+                  dayOfWeek={mobileDay}
+                  periodNumber={period.periodNumber}
+                  slotEntries={
+                    entriesBySlot.get(`${mobileDay}-${period.periodNumber}`) ??
+                    []
+                  }
+                  {...handlers}
                 />
-              ))}
-            </TableBody>
-          </Table>
-        </section>
-      </Card>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
 
-      {sharedKinds.size > 0 && (
-        <div className="text-muted-foreground flex flex-wrap items-start gap-x-5 gap-y-2 text-xs">
-          <span className="font-extrabold tracking-[0.18em] uppercase">
-            Reading this grid
-          </span>
-          {sharedKinds.has("combined") && <MarkLegend kind="combined" />}
-          {sharedKinds.has("clash") && <MarkLegend kind="clash" />}
-          <span className="basis-full">
-            A clash is a report, not a guarantee: nothing in the timetable
-            prevents a double-booking from being saved, and this grid shows what
-            the conflict scan found for this teacher.
-          </span>
-        </div>
-      )}
-    </div>
+      {/* md and up: the full week. */}
+      <Card className="hidden overflow-x-auto md:flex">
+        <Table className="min-w-184">
+          <TableHeader className="bg-primary">
+            <TableRow className="hover:bg-primary">
+              <TableHead className="text-accent h-11 w-32 text-xs font-bold tracking-[0.08em]">
+                Period
+              </TableHead>
+              {DAYS_OF_WEEK.map((day) => (
+                <TableHead
+                  key={day}
+                  className="text-accent h-11 text-center text-xs font-bold tracking-[0.08em]"
+                >
+                  {day}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedConfig.map((period) => (
+              <TableRow key={period.id}>
+                <TableHead
+                  scope="row"
+                  className="text-foreground h-auto tracking-normal normal-case"
+                >
+                  <div className="text-sm font-semibold">
+                    Period {period.periodNumber}
+                  </div>
+                  <div className="text-muted-foreground type-caption font-normal">
+                    {period.startTime}–{period.endTime}
+                  </div>
+                </TableHead>
+                {DAYS_OF_WEEK.map((day, dayIndex) => {
+                  const dayOfWeek = dayIndex + 1;
+                  const slotEntries =
+                    entriesBySlot.get(`${dayOfWeek}-${period.periodNumber}`) ??
+                    [];
+
+                  return (
+                    <TableCell
+                      key={day}
+                      className={`p-1 align-top ${
+                        slotEntries.length > 0 ? "bg-primary/5" : "bg-muted/30"
+                      }`}
+                    >
+                      <SlotStack
+                        dayOfWeek={dayOfWeek}
+                        periodNumber={period.periodNumber}
+                        slotEntries={slotEntries}
+                        {...handlers}
+                      />
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+    </>
   );
 };

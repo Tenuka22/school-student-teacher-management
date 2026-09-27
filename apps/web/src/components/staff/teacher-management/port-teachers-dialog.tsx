@@ -273,7 +273,7 @@ export const PortTeachersDialog = ({
           >
             {portMutation.isPending
               ? "Importing…"
-              : `Import ${selectedCount} teacher${plural(selectedCount)}`}
+              : `Import ${teachers.length - excluded.size} Teacher(s)`}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -30,7 +30,7 @@ export const AddAcademicYearDialog = ({
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-md">
       <DialogHeader className="shrink-0 border-b px-6 py-4">
-        <DialogTitle>Add Academic Year</DialogTitle>
+        <DialogTitle>Add academic year</DialogTitle>
         <DialogDescription>
           Create a new academic year in advance. It won&apos;t become the active
           year until you switch to it.
@@ -59,7 +59,7 @@ export const AddAcademicYearDialog = ({
           form="add-academic-year-form"
           disabled={isLoading}
         >
-          {isLoading ? "Creating..." : "Create Year"}
+          {isLoading ? "Creating…" : "Create year"}
         </Button>
       </div>
     </DialogContent>

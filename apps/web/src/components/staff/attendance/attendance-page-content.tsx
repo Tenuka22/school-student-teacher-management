@@ -5,7 +5,6 @@ import {
   isAdminRole,
   isLeadershipRole,
 } from "@school-student-teacher-management/auth/roles";
-import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Card,
@@ -39,7 +38,6 @@ import {
 } from "@school-student-teacher-management/ui/components/select";
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import {
-  IconAlertTriangle,
   IconCalendar,
   IconRefresh,
   IconSearch,
@@ -47,7 +45,6 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { useRouteContext } from "@tanstack/react-router";
-import { format } from "date-fns";
 import { useState } from "react";
 
 import { AttendanceGrid } from "@/components/staff/attendance/attendance-grid";
@@ -57,6 +54,7 @@ import type {
 } from "@/components/staff/attendance/use-attendance-page";
 import { useAttendancePage } from "@/components/staff/attendance/use-attendance-page";
 import { PortTeachersDialog } from "@/components/staff/teacher-management/port-teachers-dialog";
+import { PageHeader } from "@/components/ui-patterns/page-header";
 
 const POLICY_FIELDS: {
   name: keyof AttendancePolicyValues;
@@ -431,12 +429,6 @@ const AttendancePolicyCard = ({
   );
 };
 
-const formatDateRange = (startDate: string, endDate: string) =>
-  `${format(new Date(`${startDate}T00:00:00`), "d MMM yyyy")} – ${format(
-    new Date(`${endDate}T00:00:00`),
-    "d MMM yyyy"
-  )}`;
-
 interface AttendancePageContentProps {
   academicYear: number;
 }
@@ -485,26 +477,20 @@ export const AttendancePageContent = ({
     page.teachers.length === 0 &&
     page.hasPreviousYear;
 
-  const hasDateRange = Boolean(
-    page.currentYear?.startDate && page.currentYear.endDate
-  );
-  const dateLabel = format(
-    new Date(`${page.date}T00:00:00`),
-    "EEEE d MMMM yyyy"
-  );
-
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-3xl font-bold">Attendance</h1>
-        <p className="text-muted-foreground mt-2">
-          {dateLabel} · academic year {page.currentYear?.year ?? "—"}. Every
-          mark saves as you make it, so there is no separate save step. Arrow
-          keys move between cells; Space or Enter marks one. A teacher absent
-          for all {page.periods.length} periods is recorded as absent for the
-          whole day.
-        </p>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="Staff management"
+        title="Attendance"
+        description={
+          <>
+            Tick a period off to mark that teacher absent for it (with a reason)
+            - saves immediately, no separate save step. A teacher absent for
+            every scheduled period that day is treated as absent for the whole
+            day.
+          </>
+        }
+      />
 
       <AttendancePolicySection page={page} />
 
@@ -638,27 +624,23 @@ export const AttendancePageContent = ({
           </Field>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={hasDateRange ? "outline" : "destructive"}>
-            Academic year {page.currentYear?.year ?? "—"}
-          </Badge>
-          {page.isPastDate ? (
-            <Badge variant="secondary">
-              <IconAlertTriangle data-icon="inline-start" />
-              Backdating — every change is confirmed before it saves
-            </Badge>
-          ) : null}
-          <p className="text-muted-foreground text-xs">
-            {hasDateRange &&
-            page.currentYear?.startDate &&
-            page.currentYear.endDate
-              ? `Attendance dates are limited to ${formatDateRange(
-                  page.currentYear.startDate,
-                  page.currentYear.endDate
-                )}.`
-              : "This year has no date range. Add its start and end dates to enforce attendance limits."}
-          </p>
-        </div>
+        <Field className="w-64 sm:ml-auto">
+          <FieldLabel htmlFor="attendance-filter">Filter teachers</FieldLabel>
+          <div className="relative">
+            <IconSearch
+              aria-hidden="true"
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+            />
+            <Input
+              id="attendance-filter"
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Search by teacher name"
+              className="pl-8"
+            />
+          </div>
+        </Field>
       </div>
 
       {showImportBanner ? (
@@ -670,7 +652,7 @@ export const AttendancePageContent = ({
           </EmptyDescription>
           <EmptyContent>
             <Button onClick={() => setIsPortDialogOpen(true)}>
-              <IconUsersPlus data-icon="inline-start" />
+              <IconUsersPlus className="mr-2 size-4" />
               Import from previous year
             </Button>
           </EmptyContent>
