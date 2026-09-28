@@ -1419,9 +1419,13 @@ export const useAttendancePage = (
       runCellWrite(`${staffId}:school`, attendanceKey, async () => {
         const previous = expandedAbsentPeriods(staffId);
         const status = rowStatus(staffId);
-        // Unmarked and absent both mean "not here today"; only a recorded day
-        // can be made absent, and only an absent day can be called back.
-        const markingAbsent = status !== "unmarked" && status !== "absent";
+        // Everything that is not a recorded absence gets marked absent, and an
+        // absence is what gets called back. An unmarked row has to be markable:
+        // it is the row this button is used on most, and the old guard
+        // (`status !== "unmarked" && status !== "absent"`) meant that pressing
+        // "Absent" on a teacher nobody had touched yet saved a *present* day
+        // instead — the opposite of the label above it.
+        const markingAbsent = status !== "absent";
         const nextPeriods = markingAbsent
           ? new Map(
               CODE_DEFINED_PERIODS.map((period) => [period.periodNumber, ""])

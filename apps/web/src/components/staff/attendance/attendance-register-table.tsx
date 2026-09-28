@@ -1,16 +1,7 @@
 import { QUALIFICATION_LEVELS } from "@school-student-teacher-management/db/constants/teachers";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@school-student-teacher-management/ui/components/dialog";
-import {
   Field,
-  FieldDescription,
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
 import { Input } from "@school-student-teacher-management/ui/components/input";
@@ -27,6 +18,11 @@ import { useTable } from "@tanstack/react-table";
 import type { SortingState } from "@tanstack/react-table";
 import { useCallback, useMemo, useState } from "react";
 
+import {
+  ArrivalDialog,
+  PeriodsDialog,
+  RemarkDialog,
+} from "@/components/staff/attendance/attendance-mark-dialogs";
 import {
   buildRegisterColumns,
   qualificationLabel,
@@ -86,10 +82,15 @@ interface AttendanceRegisterTableProps {
  *
  * It used to live on the page, in its own block to the right of the date picker,
  * which put three *table* filters in two different places: a reader setting
- * "Secondary + a name" had to clear one control that was above the row and two
- * that were below it, and the screen had a ragged gap in the middle where the
- * shorter of the two rows ended. Search is a filter on the rows, so it is where
- * the other filters are — one row of controls, one count, one thing to clear.
+ * "Secondary + a name" had to clear one control above the row and two that were
+ * below it, and the screen had a ragged gap in the middle where the shorter of
+ * the two rows ended. Search is a filter on the rows, so it is where the other
+ * filters are — one row of controls, one count, one thing to clear.
+ *
+ * **No `FieldDescription` under this one**, unlike the other two fields: the row
+ * aligns on the bottom edge, so a three-line hint here lifted "Qualification" and
+ * "Teaches" a whole block out of line with it. The hint is not carrying anything
+ * the placeholder does not already say, so it went rather than the alignment.
  */
 const SearchField = ({
   onChange,
@@ -109,7 +110,6 @@ const SearchField = ({
           className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
         />
         <Input
-          aria-describedby="register-search-hint"
           className="pl-8"
           id="register-search"
           onChange={(event) => {
@@ -133,106 +133,92 @@ const SearchField = ({
         </Button>
       ) : null}
     </div>
-    <FieldDescription id="register-search-hint">
-      Searches by name or NIC — the NIC is unique, so it is the one that never
-      collides.
-    </FieldDescription>
   </Field>
 );
 
 /**
- * The remark, typed into a dialog.
+ * Routes one row's open dialog to the right component.
  *
- * `saveReason(staffId, null, …)` is the whole-day note and it is the same write
- * the absence reason has always used — `markAttendance` nulls the column on any
- * write that omits it, which is why the hook sends the reason with every status
- * rather than only with an absence. So a remark on a present teacher and a reason
- * on an absent one are the same field: the remark is not a new concept, it is the
- * reason box, reachable for a teacher who is not absent.
+ * A component rather than three ternaries at the call site, because the `key`
+ * that remounts it is what clears the previous dialog's draft: switching
+ * teacher, or switching from remark to periods, starts from that teacher's own
+ * saved values instead of handing the last one's half-typed text along.
+ *
+ * Every `onSave` closes only on success. A refused write leaves the dialog up
+ * with its own message, because the text in it is the thing the user would
+ * otherwise have to reconstruct.
  */
-const RemarkDialog = ({
-  initialValue,
-  onOpenChange,
-  onSave,
-  open,
-  teacherName,
+const MarkDialogs = ({
+  kind,
+  onClose,
+  page,
+  row,
 }: {
-  initialValue: string;
-  onOpenChange: (open: boolean) => void;
-  onSave: (value: string) => Promise<boolean>;
-  open: boolean;
-  teacherName: string;
+  kind: "remark" | "arrival" | "periods";
+  onClose: () => void;
+  page: AttendancePageApi;
+  row: RegisterRow;
 }) => {
-  const [value, setValue] = useState(initialValue);
-  const [isSaving, setIsSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const inputId = "attendance-remark";
+  const closeWhen = (open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  };
+
+  if (kind === "remark") {
+    return (
+      <RemarkDialog
+        initialValue={row.remark}
+        onOpenChange={closeWhen}
+        onSave={async (value) => {
+          const saved = await page.saveReason(row.staffId, null, value);
+          if (saved) {
+            onClose();
+          }
+          return saved;
+        }}
+        open
+        teacherName={row.name}
+      />
+    );
+  }
+
+  if (kind === "arrival") {
+    return (
+      <ArrivalDialog
+        cutoff={page.policy?.arrivalCutoffTime ?? null}
+        onOpenChange={closeWhen}
+        onSave={async (arrivalTime) => {
+          const saved = await page.recordArrival(row.staffId, arrivalTime);
+          if (saved) {
+            onClose();
+          }
+          return saved;
+        }}
+        open
+        teacherName={row.name}
+      />
+    );
+  }
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Remark for {teacherName}</DialogTitle>
-          <DialogDescription>
-            Anything worth remembering about this teacher on this date — a call
-            from a parent, why a mark was changed, a note to yourself. It is the
-            same field the absence reason uses, and saving it does not change
-            the mark.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            if (isSaving) {
-              return;
-            }
-            setIsSaving(true);
-            setFailed(false);
-            const saved = await onSave(value);
-            setIsSaving(false);
-            if (saved) {
-              onOpenChange(false);
-            } else {
-              // The text stays and the dialog stays: a refused save is not a
-              // reason to make somebody type it again.
-              setFailed(true);
-            }
-          }}
-        >
-          <Field>
-            <FieldLabel htmlFor={inputId}>Remark</FieldLabel>
-            <Input
-              autoFocus
-              id={inputId}
-              onChange={(event) => {
-                setValue(event.target.value);
-              }}
-              placeholder="e.g. Called the office at 09:20, traffic"
-              value={value}
-            />
-          </Field>
-          {failed ? (
-            <p className="text-destructive mt-2 text-sm" role="alert">
-              The remark was not saved and the text is still here. Try again.
-            </p>
-          ) : null}
-          <DialogFooter className="mt-4">
-            <Button
-              onClick={() => {
-                onOpenChange(false);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button disabled={isSaving} type="submit">
-              {isSaving ? "Saving…" : "Save remark"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <PeriodsDialog
+      absent={page.expandedAbsentPeriods(row.staffId)}
+      onOpenChange={closeWhen}
+      onSave={async (absentPeriods) => {
+        const saved = await page.saveTeacherDay(
+          row.staffId,
+          absentPeriods,
+          page.dayReason(row.staffId)
+        );
+        if (saved) {
+          onClose();
+        }
+        return saved;
+      }}
+      open
+      teacherName={row.name}
+    />
   );
 };
 
@@ -242,7 +228,10 @@ export const AttendanceRegisterTable = ({
   const [search, setSearch] = useState("");
   const [qualificationFilter, setQualificationFilter] = useState("all");
   const [bandFilter, setBandFilter] = useState(ANY_BAND);
-  const [remarkFor, setRemarkFor] = useState<RegisterRow | null>(null);
+  const [dialogFor, setDialogFor] = useState<{
+    kind: "remark" | "arrival" | "periods";
+    row: RegisterRow;
+  } | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const rows = useMemo(() => buildRegisterRows(page), [page]);
@@ -306,13 +295,28 @@ export const AttendanceRegisterTable = ({
       : boundaries.filter((boundary) => boundary.startsAt < flat.length);
   }, [groups]);
 
+  /**
+   * Which row is in a dialog, and which dialog.
+   *
+   * One state rather than three booleans because a row can only ever be in one:
+   * opening the arrival dialog from a row whose remark is open has to close the
+   * remark, and three flags would leave both mounted and fight over focus.
+   */
   const onRemark = useCallback((row: RegisterRow) => {
-    setRemarkFor(row);
+    setDialogFor({ kind: "remark", row });
+  }, []);
+
+  const onArrival = useCallback((row: RegisterRow) => {
+    setDialogFor({ kind: "arrival", row });
+  }, []);
+
+  const onPeriods = useCallback((row: RegisterRow) => {
+    setDialogFor({ kind: "periods", row });
   }, []);
 
   const columns = useMemo(
-    () => buildRegisterColumns({ onRemark, page }),
-    [onRemark, page]
+    () => buildRegisterColumns({ onArrival, onPeriods, onRemark, page }),
+    [onArrival, onPeriods, onRemark, page]
   );
 
   const table = useTable({
@@ -341,11 +345,6 @@ export const AttendanceRegisterTable = ({
           onClear={() => {
             setSearch("");
           }}
-          value={search}
-        />
-        <SearchField
-          onChange={setSearch}
-          onClear={() => setSearch("")}
           value={search}
         />
         <Field className="w-64">
@@ -435,23 +434,15 @@ export const AttendanceRegisterTable = ({
         table={table}
       />
 
-      {remarkFor ? (
-        <RemarkDialog
-          initialValue={remarkFor.remark}
-          onOpenChange={(open) => {
-            if (!open) {
-              setRemarkFor(null);
-            }
+      {dialogFor ? (
+        <MarkDialogs
+          key={`${dialogFor.kind}:${dialogFor.row.staffId}`}
+          kind={dialogFor.kind}
+          onClose={() => {
+            setDialogFor(null);
           }}
-          onSave={async (value) => {
-            const saved = await page.saveReason(remarkFor.staffId, null, value);
-            if (saved) {
-              setRemarkFor(null);
-            }
-            return saved;
-          }}
-          open
-          teacherName={remarkFor.name}
+          page={page}
+          row={dialogFor.row}
         />
       ) : null}
     </div>
