@@ -1,5 +1,6 @@
 "use client";
 
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
 import type {
   classPeriodSubject,
   classPeriodTeacher,
@@ -193,7 +194,7 @@ export const TeacherAssignmentForm = ({
         </p>
         <p className="text-muted-foreground m-0 mt-1 text-sm">
           {DAY_NAMES[subject.dayOfWeek]} · Period {subject.periodNumber} ·{" "}
-          {subject.subjectKey}
+          {subjectLabel(subject.subjectKey)}
         </p>
       </div>
 
@@ -203,7 +204,7 @@ export const TeacherAssignmentForm = ({
         </FieldLabel>
         <Select
           value={formData.staffId}
-          onValueChange={(value: string) => {
+          onValueChange={(value: string | null) => {
             if (value) {
               handleChange("staffId", value);
             }

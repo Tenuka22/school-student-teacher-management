@@ -1,3 +1,4 @@
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
 import type {
   classPeriodSubject,
   classPeriodTeacher,
@@ -156,7 +157,7 @@ export const DeleteSubjectConfirmDialog = ({
     open={isOpen}
     onOpenChange={onOpenChange}
     title="Remove this subject?"
-    description={`${subjectKey} and all its teachers will be removed from the timetable slot. This cannot be undone.`}
+    description={`${subjectLabel(subjectKey)} and all its teachers will be removed from the timetable slot. This cannot be undone.`}
     confirmLabel="Remove subject"
     pendingLabel="Removing…"
     isPending={isLoading}

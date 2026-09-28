@@ -1,5 +1,6 @@
 "use client";
 
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
 import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
 import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
@@ -229,7 +230,7 @@ export const PeriodAssignmentForm = ({
         </FieldLabel>
         <Select
           value={formData.staffId}
-          onValueChange={(value: string) => {
+          onValueChange={(value: string | null) => {
             if (value) {
               handleChange("staffId", value);
             }
@@ -265,7 +266,7 @@ export const PeriodAssignmentForm = ({
         </FieldLabel>
         <Select
           value={formData.subjectKey}
-          onValueChange={(value: string) => {
+          onValueChange={(value: string | null) => {
             if (value) {
               handleChange("subjectKey", value);
             }
@@ -283,7 +284,7 @@ export const PeriodAssignmentForm = ({
           <SelectContent>
             {filteredSubjects.map((subject) => (
               <SelectItem key={subject.subjectKey} value={subject.subjectKey}>
-                {subject.subjectKey}
+                {subjectLabel(subject.subjectKey)}
               </SelectItem>
             ))}
           </SelectContent>

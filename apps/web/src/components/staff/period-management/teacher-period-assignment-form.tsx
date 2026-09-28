@@ -160,7 +160,7 @@ const SelectField = ({
     <FieldLabel htmlFor={id}>{label}</FieldLabel>
     <Select
       value={value}
-      onValueChange={(next: string) => next && onValueChange(next)}
+      onValueChange={(next: string | null) => next && onValueChange(next)}
     >
       <SelectTrigger {...fieldA11y(id, { error })} disabled={disabled}>
         <SelectValue placeholder={placeholder}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { subjectLabel } from "@school-student-teacher-management/db/constants/display";
 import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import type {
   classPeriodSubject,
@@ -104,7 +105,9 @@ const SubjectCard = ({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">{subject.subjectKey}</div>
+          <div className="text-sm font-semibold">
+            {subjectLabel(subject.subjectKey)}
+          </div>
           <div className="mt-1.5 space-y-1">
             {subject.teachers.length === 0 ? (
               <div className="text-muted-foreground type-caption italic">
@@ -152,7 +155,7 @@ const SubjectCard = ({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`More actions for ${subject.subjectKey}`}
+                aria-label={`More actions for ${subjectLabel(subject.subjectKey)}`}
                 className="shrink-0 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
               />
             }

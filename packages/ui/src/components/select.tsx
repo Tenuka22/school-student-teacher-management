@@ -112,28 +112,41 @@ function hasSameLabels(
 /**
  * The select's root, and the reason every select in this app shows a label.
  *
- * It is a wrapper rather than the bare primitive for one reason: it supplies
- * `items`, the map base-ui reads a selected item's label out of. Everything else
- * is the primitive's own props, passed straight through.
+ * It is a wrapper rather than the bare primitive for two reasons, and both are
+ * about the value the trigger shows.
  *
- * The map is held in state and refreshed **during render** when the children
- * change, rather than in an effect or a `useMemo` keyed on `children`. Both
- * alternatives were wrong here: an effect would show one frame of raw values
- * whenever the options arrive, and `children` is a new array on every render of
- * every parent, so a memo would hand base-ui a new object each time and make it
- * re-resolve a label that has not changed. Adjusting state in render is the
- * documented way to derive state from props, and it settles in one extra pass.
- */
-/**
- * `string` and not `unknown`: every select in this app holds a string value, and
- * typing the value as `unknown` would push a cast onto every `onValueChange` at
- * every call site — thirty of them — to get back the narrowing this line gives for
- * free. A select that needs another kind of value is a different component, and
- * base-ui's generic root is still there underneath for whoever needs it.
+ * **1. It supplies `items`**, the map base-ui reads a selected item's label out of.
+ * Without it every closed select printed its stored value — `all`, `teacher`, a
+ * date — because the options live in a popup that is unmounted while the trigger is
+ * closed, so there was nothing for base-ui to read a label out of.
+ *
+ * **2. It hides a value that has no option.** When the controlled value is not among
+ * the options, base-ui has no label for it and falls back to printing the value
+ * itself — which for a list keyed on database ids means the trigger shows
+ * `5749b69d-09aa-4922-af62-66cd9cc16814`. That is not a cosmetic bug: it happened on
+ * a teacher picker whose selected teacher had just become ineligible, so the id was
+ * the only thing left to show, and an identifier is not something to put in front of
+ * a person. An unmatched value is treated as **nothing selected**, which is the
+ * truth: there is no option that says what this is.
+ *
+ * The map is held in state and refreshed **during render** when the children change,
+ * rather than in an effect or a `useMemo` keyed on `children`. Both alternatives were
+ * wrong: an effect would show one frame of raw values whenever the options arrive,
+ * and `children` is a new array on every render of every parent, so a memo would hand
+ * base-ui a new object each time and make it re-resolve a label that has not changed.
+ * Adjusting state in render is the documented way to derive state from props, and it
+ * settles in one extra pass.
+ *
+ * `string` and not `unknown` in the value type: every select in this app holds a
+ * string value, and typing the value as `unknown` would push a cast onto every
+ * `onValueChange` at every call site — thirty of them — to get back the narrowing
+ * this line gives for free. A select that needs another kind of value is a different
+ * component, and base-ui's generic root is still there underneath for whoever needs it.
  */
 function Select({
   children,
   items,
+  value,
   ...props
 }: SelectPrimitive.Root.Props<string>) {
   const derived: Record<string, string> = {}
@@ -144,12 +157,24 @@ function Select({
     setLabels(derived)
   }
 
-  // `labels` is the stale map on the render that set it, and that render's
-  // output is thrown away; `derived` is what the next pass will compare equal to.
-  const resolved = items ?? derived
+  // `labels` is the stale map on the render that set it, and that render's output
+  // is thrown away; `derived` is what the next pass will compare equal to.
+  const resolved = items ?? derived;
+
+  /*
+   * Only checked when the map is ours. A caller that passed `items` knows its own
+   * keys, and a caller that passed neither has no options at all — for which "no
+   * option matches" is true and the placeholder is the honest thing to show.
+   */
+  const isUnmatched =
+    !items && typeof value === "string" && value !== "" && !(value in derived);
 
   return (
-    <SelectPrimitive.Root items={resolved} {...props}>
+    <SelectPrimitive.Root
+      items={resolved}
+      value={isUnmatched ? null : value}
+      {...props}
+    >
       {children}
     </SelectPrimitive.Root>
   )
