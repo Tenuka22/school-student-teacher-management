@@ -337,6 +337,12 @@ export const useClassesPage = () => {
       await updateMutation.mutateAsync({
         id,
         name: rest.name,
+        // The grade is part of what the conflict dialog shows and promises to
+        // apply. It was left out, so "Apply imported version" on a class whose
+        // grade had changed in the file cleared the conflict and changed
+        // nothing — the dialog's Imported column and the register then
+        // disagreed with no way to tell which of them was right.
+        gradeLevel: rest.gradeLevel,
         medium: rest.medium,
       } as never);
 

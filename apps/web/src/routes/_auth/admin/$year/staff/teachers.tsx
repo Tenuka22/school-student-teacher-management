@@ -8,8 +8,8 @@ import { toast } from "sonner";
 
 import { NewTeacherNextStepsDialog } from "@/components/staff/teacher-management/new-teacher-next-steps-dialog";
 import { PortTeachersDialog } from "@/components/staff/teacher-management/port-teachers-dialog";
-import { TeacherCsvImport } from "@/components/staff/teacher-management/teacher-csv-import";
 import { TeacherDialogs } from "@/components/staff/teacher-management/teacher-dialogs";
+import { TeacherExcelImport } from "@/components/staff/teacher-management/teacher-excel-import";
 import { TeachersDataTable } from "@/components/staff/teacher-management/teachers-data-table";
 import {
   toListTeachersInput,
@@ -253,7 +253,7 @@ const RouteComponent = ({ search }: { search: TeachersSearch }) => {
               <IconUsersPlus className="mr-2 size-4" />
               Import from previous year
             </Button>
-            <TeacherCsvImport
+            <TeacherExcelImport
               teachers={importTeachers}
               onCreate={handleImportCreate}
               onUpdate={handleImportUpdate}

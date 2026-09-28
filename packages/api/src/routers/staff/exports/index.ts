@@ -4,6 +4,7 @@ import { exportClassTimetablePdf } from "./export-class-timetable-pdf";
 import { exportClassesExcel } from "./export-classes-excel";
 import { exportTeacherProfilePdf } from "./export-teacher-profile-pdf";
 import { exportTeachersExcel } from "./export-teachers-excel";
+import { exportWorkbook } from "./workbook";
 
 /** File-export procedures: Excel for lists/groups, PDF for a single entity or a single timetable. */
 export const exportsRouter = {
@@ -13,4 +14,6 @@ export const exportsRouter = {
   classTimetablePdf: exportClassTimetablePdf,
   classTeacherHistoryExcel: exportClassTeacherHistoryExcel,
   allTimetablesExcel: exportAllTimetablesExcel,
+  /** The import templates: headings and rows sent from the component that reads them back. */
+  workbook: exportWorkbook,
 };

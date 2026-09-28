@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ClassCsvImport } from "@/components/staff/class-assignment/class-csv-import";
 import { ClassDialogs } from "@/components/staff/class-assignment/class-dialogs";
+import { ClassExcelImport } from "@/components/staff/class-assignment/class-excel-import";
 import { ClassesTabs } from "@/components/staff/class-assignment/classes-tabs";
 import { useClassesPage } from "@/components/staff/class-assignment/use-classes-page";
 import { PageHeader } from "@/components/ui-patterns/page-header";
@@ -20,7 +20,7 @@ const RouteComponent = () => {
           <>Create classes and assign homeroom teachers for the academic year</>
         }
         actions={
-          <ClassCsvImport
+          <ClassExcelImport
             academicYearId={page.currentYear?.id}
             classes={page.classes}
             onCreate={page.handleImportCreate}

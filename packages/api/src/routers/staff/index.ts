@@ -14,6 +14,7 @@ import { getAdminOverview } from "./get-admin-overview";
 import { getMyStaff } from "./get-my-staff";
 import { getStaff } from "./get-staff";
 import { getHistoricalData } from "./historical-data";
+import { importsRouter } from "./imports";
 import { leavesRouter } from "./leaves";
 import { seedLeaveEntitlements } from "./leaves/entitlements";
 import { listAcademicYears } from "./list-academic-years";
@@ -119,4 +120,7 @@ export const staffRouter = {
 
   // File exports (Excel/PDF)
   exports: exportsRouter,
+
+  // Spreadsheet import (reading a picked file; attendance writes from it)
+  imports: importsRouter,
 };
