@@ -7,13 +7,13 @@ import {
 } from "@school-student-teacher-management/auth/roles";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@school-student-teacher-management/ui/components/card";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@school-student-teacher-management/ui/components/dialog";
 import {
   Empty,
   EmptyContent,
@@ -41,6 +41,7 @@ import {
   IconCalendar,
   IconRefresh,
   IconSearch,
+  IconSettings,
   IconUsersPlus,
   IconX,
 } from "@tabler/icons-react";
@@ -115,19 +116,62 @@ const PERIOD_RANGE_FIELDS = new Set<keyof AttendancePolicyValues>([
 
 const POLICY_ERROR_ID = "attendance-policy-error";
 
+/**
+ * The policy's four load-bearing numbers, in the order somebody asks for them.
+ *
+ * These used to be a six-input form in a full-width card above the register,
+ * which is the wrong shape twice over: it is a *school-wide setting* that most
+ * visits to this page do not change, and it pushed the actual job — the register —
+ * below the fold. So the numbers stay on the page at reading size, and the form
+ * moved behind a button.
+ *
+ * Four, not six: the two period *ranges* are what people read ("which periods
+ * make a half day"), and the starts and ends are shown separately only because a
+ * number input cannot hold a range.
+ */
+const policyReadouts = (
+  policy: NonNullable<AttendancePageApi["policy"]>
+): [string, string][] => [
+  ["Cut-off", policy.arrivalCutoffTime],
+  ["Short leaves", `${policy.shortLeavesPerMonth}/mo`],
+  [
+    "Primary half-day",
+    `P${policy.primaryStartPeriodNumber}–${policy.primaryEndPeriodNumber}`,
+  ],
+  [
+    "Secondary half-day",
+    `P${policy.secondaryStartPeriodNumber}–${policy.secondaryEndPeriodNumber}`,
+  ],
+];
+
+/**
+ * The labels alone, for the loading skeleton.
+ *
+ * Duplicated as literals rather than derived from `policyReadouts` because there is
+ * no policy to read yet — that is the whole condition being rendered. One source
+ * of truth for the *labels* would mean threading a null policy through a function
+ * whose job is to format one.
+ */
+const policyReadoutLabels = [
+  "Cut-off",
+  "Short leaves",
+  "Primary half-day",
+  "Secondary half-day",
+];
+
 interface AttendancePolicyEditorProps {
   page: AttendancePageApi;
 }
 
 /**
- * The policy form, for the seat that may write it.
+ * The policy form, in a dialog, for the seat that may write it.
  *
  * A refused save keeps everything that was typed. The form is uncontrolled and
  * keyed on the policy's own `dataUpdatedAt`, so a failure — which changes
  * nothing on the server — cannot remount it and wipe the numbers someone has
  * just corrected.
  */
-const AttendancePolicyEditor = ({ page }: AttendancePolicyEditorProps) => {
+const AttendancePolicyForm = ({ page }: AttendancePolicyEditorProps) => {
   const [error, setError] = useState<string | null>(null);
   const { policy, policyUsage, currentYear, isSavingPolicy } = page;
 
@@ -161,148 +205,124 @@ const AttendancePolicyEditor = ({ page }: AttendancePolicyEditorProps) => {
   };
 
   return (
-    <Card className="w-full" size="sm">
-      <form aria-busy={isSavingPolicy || undefined} onSubmit={handleSubmit}>
-        <CardHeader className="border-b">
-          <CardTitle>
-            <h2 className="font-heading text-sm font-medium">
-              Attendance policy
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            Arrival, short leave, and half-day period rules for{" "}
-            {currentYear.year}. School-wide: it decides what recording an
-            arrival does.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <div className="mb-3" id={POLICY_ERROR_ID} role="alert">
-              <FieldError>{error}</FieldError>
-            </div>
-          ) : null}
-          <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {POLICY_FIELDS.map((field) => {
-              const inputId = `attendance-policy-${field.name}`;
-              const describedByPeriodRange =
-                error && PERIOD_RANGE_FIELDS.has(field.name)
-                  ? POLICY_ERROR_ID
-                  : undefined;
-              return (
-                <Field key={field.name}>
-                  <FieldLabel htmlFor={inputId}>{field.label}</FieldLabel>
-                  <Input
-                    aria-describedby={describedByPeriodRange}
-                    defaultValue={policy[field.name]}
-                    disabled={isSavingPolicy}
-                    id={inputId}
-                    max={field.max}
-                    min={field.min}
-                    name={field.name}
-                    required
-                    step="1"
-                    type={field.type}
-                  />
-                </Field>
-              );
-            })}
-          </FieldGroup>
-          <FieldDescription className="mt-3">
-            Half-days have no monthly allowance. Two half-days count as one full
-            leave day; a third in the same month is recorded as a half day. The
-            Primary block has to come before the Secondary block, and the two
-            cannot overlap.
-          </FieldDescription>
-        </CardContent>
-        <CardFooter className="flex-wrap justify-between gap-3">
-          <div>
-            <p className="font-medium">Your short leaves this month</p>
-            <p className="text-muted-foreground">
-              {policyUsage
-                ? `${policyUsage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record`
-                : "This policy is school-wide; the count here is your own usage, not the whole staff."}
-            </p>
-          </div>
-          <Button
-            className="min-w-32"
-            disabled={isSavingPolicy}
-            size="sm"
-            type="submit"
-          >
-            {isSavingPolicy ? "Saving…" : "Save policy"}
-          </Button>
-        </CardFooter>
-      </form>
-    </Card>
+    <form aria-busy={isSavingPolicy || undefined} onSubmit={handleSubmit}>
+      {error ? (
+        <div className="mb-3" id={POLICY_ERROR_ID} role="alert">
+          <FieldError>{error}</FieldError>
+        </div>
+      ) : null}
+      <FieldGroup className="grid gap-3 sm:grid-cols-2">
+        {POLICY_FIELDS.map((field) => {
+          const inputId = `attendance-policy-${field.name}`;
+          const describedByPeriodRange =
+            error && PERIOD_RANGE_FIELDS.has(field.name)
+              ? POLICY_ERROR_ID
+              : undefined;
+          return (
+            <Field key={field.name}>
+              <FieldLabel htmlFor={inputId}>{field.label}</FieldLabel>
+              <Input
+                aria-describedby={describedByPeriodRange}
+                defaultValue={policy[field.name]}
+                disabled={isSavingPolicy}
+                id={inputId}
+                max={field.max}
+                min={field.min}
+                name={field.name}
+                required
+                step="1"
+                type={field.type}
+              />
+            </Field>
+          );
+        })}
+      </FieldGroup>
+      <FieldDescription className="mt-3">
+        Arrival, short leave, and half-day period rules for {currentYear.year}.
+        School-wide: it decides what recording an arrival does. Half-days have
+        no monthly allowance — two half-days count as one full leave day, and a
+        third in the same month is recorded as a half day. The Primary block has
+        to come before the Secondary block, and the two cannot overlap.
+      </FieldDescription>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-muted-foreground text-sm">
+          {policyUsage
+            ? `Your short leaves: ${policyUsage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used this month.`
+            : "This policy is school-wide."}
+        </p>
+        <Button disabled={isSavingPolicy} type="submit">
+          {isSavingPolicy ? "Saving…" : "Save policy"}
+        </Button>
+      </div>
+    </form>
   );
 };
 
 /**
- * The policy as leadership reads it.
+ * The policy strip: the four numbers, then the button that opens the form.
  *
- * `attendance.getPolicy` is a `protectedProcedure` and the register around this
- * card is `adminProcedure`, so a Principal or a Deputy is entitled to the
- * numbers — and is not entitled to move them, which is what
- * `adminOnlyProcedure` on `updatePolicy` says. So the same six numbers render
- * here as text instead of as inputs: the read tier and the write tier describe
- * one policy, and only one of them belongs to the seats outside leadership.
+ * **One component for both tiers.** This used to be two — an editor card and a
+ * summary card — because a read-only seat cannot be shown inputs it may not
+ * submit, and `updatePolicy` is `adminOnlyProcedure`, so a Principal and a Deputy
+ * were being refused every save. That reasoning is right about the *form* and
+ * wrong about the *numbers*: the read tier and the write tier describe one policy,
+ * and a Principal marking a register has exactly as much use for "cut-off 08:00"
+ * as an administrator does. So both seats get the same four figures, and only the
+ * administrator gets the button.
+ *
+ * The numbers are placed to the **left** of the button, deliberately: the question
+ * this strip answers is "what are today's rules", and that is a reading task, not
+ * a settings task. The button is the last thing on the line so it cannot be
+ * mistaken for the strip's primary action.
  */
-const AttendancePolicySummary = ({ page }: AttendancePolicyEditorProps) => {
-  const { currentYear, policy, policyUsage } = page;
+const AttendancePolicyStrip = ({
+  canEdit,
+  page,
+}: AttendancePolicyEditorProps & { canEdit: boolean }) => {
+  const { currentYear, policy } = page;
+  const [isOpen, setIsOpen] = useState(false);
+
   if (!policy || !currentYear) {
     return null;
   }
-  const detailRows: [string, string][] = [
-    ["Arrival cut-off", policy.arrivalCutoffTime],
-    ["Short leaves / month", String(policy.shortLeavesPerMonth)],
-    [
-      "Primary range",
-      `Periods ${policy.primaryStartPeriodNumber}–${policy.primaryEndPeriodNumber}`,
-    ],
-    [
-      "Secondary range",
-      `Periods ${policy.secondaryStartPeriodNumber}–${policy.secondaryEndPeriodNumber}`,
-    ],
-  ];
 
   return (
-    <Card className="w-full" size="sm">
-      <CardHeader className="border-b">
-        <CardTitle>
-          <h2 className="font-heading text-sm font-medium">
-            Attendance policy
-          </h2>
-        </CardTitle>
-        <CardDescription>
-          Arrival, short leave, and half-day period rules for {currentYear.year}
-          . Read-only — the administrator sets these.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
-          {detailRows.map(([label, value]) => (
-            <div
-              className="flex justify-between gap-4 border-b pb-2"
-              key={label}
-            >
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="text-right font-medium tabular-nums">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="text-muted-foreground mt-3 text-xs">
-          Half-days have no monthly allowance. Two half-days count as one full
-          leave day; a third in the same month is recorded as a half day.
-        </p>
-      </CardContent>
-      <CardFooter>
-        <p className="text-muted-foreground text-xs">
-          {policyUsage
-            ? `Your short leaves this month: ${policyUsage.shortLeavesUsed} of ${policy.shortLeavesPerMonth} used on your own record.`
-            : "This policy applies school-wide."}
-        </p>
-      </CardFooter>
-    </Card>
+    <div className="bg-card flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border px-4 py-2.5">
+      <h2 className="font-heading text-sm font-medium">Policy</h2>
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-1">
+        {policyReadouts(policy).map(([label, value]) => (
+          <div className="flex items-baseline gap-1.5" key={label}>
+            <dt className="text-muted-foreground text-xs">{label}</dt>
+            <dd className="text-sm font-medium tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {canEdit ? (
+        <Dialog onOpenChange={setIsOpen} open={isOpen}>
+          <DialogTrigger
+            render={
+              <Button className="ml-auto" size="sm" variant="outline">
+                <IconSettings data-icon="inline-start" />
+                Settings
+              </Button>
+            }
+          />
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Attendance policy</DialogTitle>
+              <DialogDescription>
+                Arrival, short leave, and half-day period rules for{" "}
+                {currentYear.year}. School-wide, and it decides what recording
+                an arrival does.
+              </DialogDescription>
+            </DialogHeader>
+            {/* Keyed on the year, so switching years cannot leave the previous
+                year's numbers in a form that saves to the new one. */}
+            <AttendancePolicyForm key={currentYear.id} page={page} />
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
   );
 };
 
@@ -322,111 +342,78 @@ const AttendancePolicyCard = ({
   const { currentYear } = page;
 
   if (!currentYear || page.isLoadingPolicy) {
+    // Four bars, not six inputs' worth of a card: the strip is a line of text, so
+    // its loading state is a line of text too. A skeleton shaped like the old form
+    // would make the page jump when the real strip arrives.
     return (
-      <Card size="sm">
-        <CardHeader className="border-b">
-          <CardTitle>
-            <h2 className="font-heading text-sm font-medium">
-              Attendance policy
-            </h2>
-          </CardTitle>
-          <CardDescription>Loading this year&rsquo;s policy…</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
-          {POLICY_FIELDS.map((field) => (
-            <Skeleton
-              className="h-8 motion-reduce:animate-none"
-              key={field.name}
-            />
-          ))}
-        </CardContent>
-      </Card>
+      <div
+        aria-busy="true"
+        className="flex flex-wrap items-center gap-6 rounded-lg border px-4 py-2.5"
+      >
+        <Skeleton className="h-4 w-14 motion-reduce:animate-none" />
+        {policyReadoutLabels.map((label) => (
+          <Skeleton
+            className="h-4 w-24 motion-reduce:animate-none"
+            key={label}
+          />
+        ))}
+      </div>
     );
   }
 
   if (page.isErrorPolicy) {
     return (
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>
-            <h2 className="font-heading text-sm font-medium">
-              Attendance policy
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            The policy for {currentYear.year} could not be read
-            {page.errorPolicy ? `: ${page.errorPolicy.message}` : "."} Until it
-            loads, recording an arrival cannot say what it will record.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={() => {
-              page.refetchPolicy();
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <IconRefresh data-icon="inline-start" />
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="border-destructive/40 flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2.5">
+        <p className="text-sm">
+          The policy for {currentYear.year} could not be read
+          {page.errorPolicy ? `: ${page.errorPolicy.message}` : "."} Until it
+          loads, recording an arrival cannot say what it will record.
+        </p>
+        <Button
+          className="ml-auto"
+          onClick={() => {
+            page.refetchPolicy();
+          }}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <IconRefresh data-icon="inline-start" />
+          Try again
+        </Button>
+      </div>
     );
   }
 
   if (!page.policy) {
     return (
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>
-            <h2 className="font-heading text-sm font-medium">
-              Attendance policy
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            Arrival, short leave, and half-day period rules for{" "}
-            {currentYear.year}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Empty className="min-h-32 border-none py-2">
-            <EmptyTitle>Attendance policy not configured</EmptyTitle>
-            <EmptyDescription>
-              {canEdit
-                ? "Configure the arrival cut-off, short-leave allowance, and Primary/Secondary period ranges for this academic year. The register cannot be read for any date until it exists."
-                : "The arrival cut-off, short-leave allowance and Primary/Secondary period ranges are not set for this academic year, and the register cannot be read for any date until they are. The administrator sets them."}
-            </EmptyDescription>
-            {/* Seeding the row is the same `updatePolicy` write as the form
-                below, so it is the administrator's button too. */}
-            {canEdit ? (
-              <EmptyContent>
-                <Button
-                  disabled={page.isSavingPolicy}
-                  onClick={() => {
-                    void page.configureDefaultPolicy();
-                  }}
-                  size="sm"
-                  type="button"
-                >
-                  {page.isSavingPolicy
-                    ? "Configuring…"
-                    : "Configure default policy"}
-                </Button>
-              </EmptyContent>
-            ) : null}
-          </Empty>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-2.5">
+        <p className="text-sm">
+          <span className="font-medium">Policy not set</span> for{" "}
+          {currentYear.year}. The register cannot be read for any date until the
+          arrival cut-off and the half-day ranges exist.
+          {canEdit ? null : " The administrator sets them."}
+        </p>
+        {/* Seeding the row is the same `updatePolicy` write as the form in the
+            dialog, so it is the administrator's button too. */}
+        {canEdit ? (
+          <Button
+            className="ml-auto"
+            disabled={page.isSavingPolicy}
+            onClick={() => {
+              void page.configureDefaultPolicy();
+            }}
+            size="sm"
+            type="button"
+          >
+            {page.isSavingPolicy ? "Configuring…" : "Set default policy"}
+          </Button>
+        ) : null}
+      </div>
     );
   }
 
-  return canEdit ? (
-    <AttendancePolicyEditor key={currentYear.id} page={page} />
-  ) : (
-    <AttendancePolicySummary page={page} />
-  );
+  return <AttendancePolicyStrip canEdit={canEdit} page={page} />;
 };
 
 interface AttendancePageContentProps {
@@ -623,24 +610,6 @@ export const AttendancePageContent = ({
             </FieldDescription>
           </Field>
         </div>
-
-        <Field className="w-64 sm:ml-auto">
-          <FieldLabel htmlFor="attendance-filter">Filter teachers</FieldLabel>
-          <div className="relative">
-            <IconSearch
-              aria-hidden="true"
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
-            />
-            <Input
-              id="attendance-filter"
-              type="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Search by teacher name"
-              className="pl-8"
-            />
-          </div>
-        </Field>
       </div>
 
       {showImportBanner ? (
