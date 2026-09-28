@@ -21,6 +21,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@school-student-teacher-management/ui/components/empty";
 import { Input } from "@school-student-teacher-management/ui/components/input";
 import {
   Table,
@@ -31,7 +38,12 @@ import {
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
 import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
-import { IconClockCheck, IconMessage2 } from "@tabler/icons-react";
+import {
+  IconCalendarPlus,
+  IconClockCheck,
+  IconMessage2,
+  IconX,
+} from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 
 import type {
@@ -44,7 +56,10 @@ import { CLASS_CATEGORIES } from "@/components/staff/class-assignment/class-cate
 
 interface AttendanceGridProps {
   page: AttendancePageApi;
+  /** The register filter, matched against teacher names only. */
   filter: string;
+  /** Empties that filter. The grid owns the empty state, so it offers the way out. */
+  onClearFilters: () => void;
 }
 
 type ReasonTarget =
@@ -99,6 +114,20 @@ const ROW_STATUS_BADGE: Record<
   absent: { label: "Absent", variant: "destructive" },
   lateShortLeave: { label: "Late (SL)", variant: "secondary" },
   halfDay: { label: "Half Day", variant: "destructive" },
+  /**
+   * "Not marked", in the muted outline rather than the absence colours.
+   *
+   * `unmarked` was added to `RowStatus` with a comment explaining that a missing
+   * row is a different fact from a stored `present`, and this map was not given
+   * the entry — so every lookup returned `undefined` and the badge read
+   * `badge.variant` off it, which is the "Cannot read properties of undefined"
+   * that took the page down.
+   *
+   * It is `outline` on purpose. A day nobody marked is not an absence and must not
+   * wear the absence colour: the tint is how somebody spots a day that needs
+   * chasing, and a day that needs chasing is a day somebody *wrote down* as absent.
+   */
+  unmarked: { label: "Not marked", variant: "outline" },
 };
 
 const ReasonButton = ({
@@ -132,11 +161,19 @@ const SchoolCell = ({
   const status = page.rowStatus(teacher.id);
   const isPresent =
     status === "present" || status === "lateShortLeave" || status === "halfDay";
+  /**
+   * "Nobody has written this day down" is not an absence, so it is neither
+   * tinted as one nor offered a reason to explain. The checkbox still works and
+   * still records presence — what a blank day must not do is claim somebody was
+   * away, which is what the destructive tint and the reason button both said.
+   */
+  const isUnmarked = status === "unmarked";
+  const isMarkedAbsence = !isPresent && !isUnmarked;
   const isSaving = page.pendingCells.has(`${teacher.id}:school`);
 
   return (
     <TableCell
-      className={`w-20 p-1.5 text-center ${isPresent ? "" : "bg-destructive/5"}`}
+      className={`w-20 p-1.5 text-center ${isMarkedAbsence ? "bg-destructive/5" : ""}`}
     >
       <div className="flex items-center justify-center gap-1">
         <Checkbox
@@ -145,7 +182,7 @@ const SchoolCell = ({
           aria-label={`${teacher.name} at school`}
           onCheckedChange={() => page.toggleSchool(teacher.id)}
         />
-        {!isPresent && (
+        {isMarkedAbsence && (
           <ReasonButton
             label={`Absence reason for ${teacher.name}, whole day`}
             onClick={() =>
@@ -422,7 +459,11 @@ const PastEditConfirmDialog = ({ page }: { page: AttendancePageApi }) => {
   );
 };
 
-export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
+export const AttendanceGrid = ({
+  page,
+  filter,
+  onClearFilters,
+}: AttendanceGridProps) => {
   const [reasonTarget, setReasonTarget] = useState<ReasonTarget | null>(null);
 
   const filtered = useMemo(() => {
@@ -437,9 +478,31 @@ export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
 
   if (page.dayOfWeek === null) {
     return (
-      <p className="text-muted-foreground text-center text-sm">
-        No periods are scheduled on weekends - nothing to mark for this date.
-      </p>
+      <Empty className="border-primary/22 border border-dashed">
+        <EmptyHeader>
+          <EmptyTitle>No periods on a weekend</EmptyTitle>
+          <EmptyDescription>
+            {page.date} is a weekend, and periods are only defined Monday to
+            Friday — so there is nothing to mark for this date.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          {/*
+            The recovery, not an explanation. This used to be one sentence with no
+            way out of it, on a screen whose whole job is marking a day: the reader
+            had worked out that the date was wrong and had to go and find the date
+            control to fix it. `nextWeekday` already exists on the page API for
+            exactly this, so the button and the answer are the same value.
+          */}
+          <Button
+            variant="outline"
+            onClick={() => page.setDate(page.nextWeekday)}
+          >
+            <IconCalendarPlus aria-hidden="true" />
+            Go to {page.nextWeekday}
+          </Button>
+        </EmptyContent>
+      </Empty>
     );
   }
 
@@ -494,11 +557,42 @@ export const AttendanceGrid = ({ page, filter }: AttendanceGridProps) => {
             </div>
           )
       )}
-      {groups.every((g) => g.teachers.length === 0) && (
-        <p className="text-muted-foreground text-center text-sm">
-          No teachers found.
-        </p>
-      )}
+      {/*
+        Two different sentences, because these are two different situations and
+        the old one sentence covered both. "No teachers found." after somebody
+        typed three letters into the filter box is a claim about the College's
+        staff, printed by a filter, and the reader's only way out of it was to
+        guess which box to clear.
+      */}
+      {groups.every((group) => group.teachers.length === 0) &&
+        (filter.trim() ? (
+          <Empty className="border-primary/22 border border-dashed">
+            <EmptyHeader>
+              <EmptyTitle>No teacher matches that filter</EmptyTitle>
+              <EmptyDescription>
+                Nobody on the register is called that. The filter looks at
+                teacher names only, so an email address or a service number will
+                not match.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant="outline" onClick={onClearFilters}>
+                <IconX aria-hidden="true" />
+                Clear the filter
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <Empty className="border-primary/22 border border-dashed">
+            <EmptyHeader>
+              <EmptyTitle>Nobody is on the register</EmptyTitle>
+              <EmptyDescription>
+                There are no teachers to mark for this date. Teachers appear
+                here once they hold a position in the selected academic year.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ))}
 
       <ReasonDialog
         key={

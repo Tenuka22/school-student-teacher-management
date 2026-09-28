@@ -233,7 +233,7 @@ export const TeacherCsvImport = ({
     <>
       <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
         <IconDownload className="mr-2 size-4" />
-        IconDownload Template
+        Download Template
       </Button>
       <Button
         variant="outline"
