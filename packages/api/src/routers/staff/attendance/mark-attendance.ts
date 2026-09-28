@@ -226,13 +226,40 @@ export const markAttendance = adminProcedure
               reason: input.overrideReason?.trim() || null,
             });
           }
-        } else if (existing) {
+        } else {
+          // Present is a record, not the absence of one. This branch used to
+          // delete the row outright, which meant a teacher marked present held
+          // no row at all: on the next load `listAttendanceForDate` returned
+          // nothing for them and the register read "Not marked" again. The mark
+          // survived only in the browser that made it, so the two states
+          // `rowStatus` goes to such lengths to keep apart — "nobody said" and
+          // "somebody said they were here" — were the same row after a refresh.
+          const id = existing?.id ?? crypto.randomUUID();
+          const reason = input.reason?.trim() || null;
+
+          const upsert = existing
+            ? tx
+                .update(teacherAttendance)
+                .set({
+                  status: "present",
+                  reason,
+                  markedAt: new Date(),
+                })
+                .where(eq(teacherAttendance.id, id))
+            : tx.insert(teacherAttendance).values({
+                id,
+                staffId: input.staffId,
+                academicYearId: input.academicYearId,
+                date: input.date,
+                status: "present",
+                reason,
+              });
+          await upsert;
+          // A present day has no missed periods, so the ones a previous mark
+          // left behind go with the row they belonged to.
           await tx
             .delete(teacherPeriodAbsence)
-            .where(eq(teacherPeriodAbsence.teacherAttendanceId, existing.id));
-          await tx
-            .delete(teacherAttendance)
-            .where(eq(teacherAttendance.id, existing.id));
+            .where(eq(teacherPeriodAbsence.teacherAttendanceId, id));
         }
 
         return {
