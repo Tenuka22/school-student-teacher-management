@@ -263,7 +263,7 @@ export const ClassesTabs = ({
                       <h3 className="text-muted-foreground text-sm font-semibold">
                         Grade {gradeLevel}
                       </h3>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-3">
                         {gradeClasses.map((cls) => (
                           <ClassCard
                             key={cls.id}
