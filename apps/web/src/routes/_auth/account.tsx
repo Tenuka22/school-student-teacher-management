@@ -1,11 +1,16 @@
 import type { SessionUser } from "@school-student-teacher-management/api/context";
 import { isSeededAccount } from "@school-student-teacher-management/auth/roles";
+import {
+  Avatar,
+  AvatarFallback,
+} from "@school-student-teacher-management/ui/components/avatar";
+import { IconLock, IconUserPlus } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { AccountSessions } from "@/components/account/account-panels";
 import { PasswordDialog } from "@/components/account/password-dialog";
-import { PageHeader } from "@/components/ui-patterns/page-header";
+import { getAvatarFallback } from "@/components/nav-user";
 import { pageHead } from "@/lib/page-title";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -27,91 +32,106 @@ const PasswordSection = ({
   onOpenChange: (open: boolean) => void;
   username?: string | null;
 }) => (
-  <section className="border-border bg-card border px-5.5 py-5">
-    <h2 className="text-foreground type-section-title">Password</h2>
-    <p className="text-muted-foreground type-body mt-1.5 max-w-prose">
-      {isEnvManaged
-        ? "This is an institutional login. Its password is set by the College's server configuration and re-applied on every start, so it is managed outside the app."
-        : `Change it with your current password, or confirm with a one-time code sent to ${email} if you cannot remember it.`}
-    </p>
-    <button
-      type="button"
-      disabled={isEnvManaged}
-      onClick={() => onOpenChange(true)}
-      className="border-primary text-foreground hover:bg-primary hover:text-primary-foreground disabled:border-input disabled:text-muted-foreground mt-4 border px-5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed"
-    >
-      Change password
-    </button>
+  <section className="border-primary/14 bg-card border px-[22px] py-4">
+    <div className="flex flex-col items-center py-2 text-center">
+      <span className="border-primary/30 text-primary flex size-12 items-center justify-center border">
+        <IconLock className="size-5" />
+      </span>
+      <h2 className="font-heading text-primary mt-3 text-[19px] font-semibold">
+        Password
+      </h2>
+      <p className="text-primary/65 mt-1.5 max-w-prose text-[13.5px]">
+        {isEnvManaged
+          ? "This is an institutional login. Its password is set by the College's server configuration and re-applied on every start, so it is managed outside the app."
+          : `Change it with your current password, or confirm with a one-time code sent to ${email} if you cannot remember it.`}
+      </p>
+      <button
+        type="button"
+        disabled={isEnvManaged}
+        onClick={() => onOpenChange(true)}
+        className="border-primary/30 text-primary hover:border-primary mt-4 border px-4 py-2 text-xs font-extrabold tracking-[0.04em] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        CHANGE PASSWORD
+      </button>
+    </div>
   </section>
 );
 
 const ProfileSection = ({ user }: { user: SessionUser | undefined }) => (
-  <section className="border-border bg-card border px-5.5 py-5">
-    <h2 className="text-foreground type-section-title">Profile</h2>
-
-    <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
-      <div>
-        <dt className="text-muted-foreground text-sm font-medium">Full name</dt>
-        <dd className="text-foreground type-body mt-0.5 font-semibold">
-          {user?.name ?? "—"}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted-foreground text-sm font-medium">Email</dt>
-        <dd className="text-foreground type-body mt-0.5">
-          {user?.email ?? "—"}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted-foreground text-sm font-medium">Username</dt>
-        <dd className="text-foreground mt-0.5 font-mono text-sm">
-          {user?.username ?? "—"}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted-foreground text-sm font-medium">Role</dt>
-        <dd className="text-foreground type-body mt-0.5">
-          {ROLE_LABELS[user?.role ?? "user"] ?? user?.role}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted-foreground text-sm font-medium">
-          Email verified
-        </dt>
-        <dd className="text-foreground type-body mt-0.5">
-          {user?.emailVerified ? "Yes" : "Not yet"}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted-foreground text-sm font-medium">
-          Display name
-        </dt>
-        <dd className="text-foreground type-body mt-0.5">
-          {user?.displayUsername ?? user?.username ?? "—"}
-        </dd>
-      </div>
+  <section className="border-primary/14 bg-card border px-[22px] py-4">
+    <ProfileHeader user={user} />
+    <dl className="border-primary/14 mt-2 grid gap-x-8 gap-y-4 border-t pt-4 sm:grid-cols-2">
+      {profileFields(user).map((field) => (
+        <InfoField key={field.label} {...field} />
+      ))}
     </dl>
   </section>
 );
 
-const SwitchAccountSection = () => (
-  <section className="border-border bg-card border px-5.5 py-5">
-    <h2 className="text-foreground type-section-title">
-      Add or switch account
+const ProfileHeader = ({ user }: { user: SessionUser | undefined }) => (
+  <div className="flex flex-col items-center py-4 text-center">
+    <Avatar className="bg-primary/10 text-primary size-20 rounded-none text-2xl font-bold">
+      <AvatarFallback className="bg-primary/10 text-primary rounded-none text-2xl font-bold">
+        {getAvatarFallback(user?.name ?? "?")}
+      </AvatarFallback>
+    </Avatar>
+    <h2 className="font-heading text-primary mt-3 text-[24px] font-semibold">
+      {user?.name ?? "\u2014"}
     </h2>
-    <p className="text-muted-foreground type-body mt-1.5 max-w-prose">
-      Sign in as someone else without signing out of this account — useful for
-      checking a teacher&rsquo;s portal or approving a request as a different
-      role. Your current session stays active, and the sign-in page lists every
-      account this browser holds.
-    </p>
-    <Link
-      to="/login"
-      search={{ switch: 1 }}
-      className="border-primary text-foreground hover:bg-primary hover:text-primary-foreground mt-4 inline-block border px-5 py-2.5 text-sm font-semibold transition-colors"
-    >
-      Manage accounts
-    </Link>
+    <p className="text-primary/60 mt-0.5 text-sm">{user?.email ?? "\u2014"}</p>
+    <span className="border-primary/30 text-primary mt-3 border px-3 py-1 text-xs font-extrabold tracking-[0.1em]">
+      {(ROLE_LABELS[user?.role ?? "user"] ?? user?.role ?? "").toUpperCase()}
+    </span>
+  </div>
+);
+
+const InfoField = ({ label, value }: { label: string; value: string }) => (
+  <div>
+    <dt className="text-primary/60 text-xs font-extrabold tracking-[0.12em]">
+      {label}
+    </dt>
+    <dd className="text-primary mt-1 text-sm">{value}</dd>
+  </div>
+);
+
+const profileFields = (user: SessionUser | undefined) => [
+  { label: "FULL NAME", value: user?.name ?? "\u2014" },
+  { label: "EMAIL", value: user?.email ?? "\u2014" },
+  { label: "USERNAME", value: user?.username ?? "\u2014" },
+  {
+    label: "ROLE",
+    value: ROLE_LABELS[user?.role ?? "user"] ?? user?.role ?? "\u2014",
+  },
+  { label: "EMAIL VERIFIED", value: user?.emailVerified ? "Yes" : "Not yet" },
+  {
+    label: "DISPLAY NAME",
+    value: user?.displayUsername ?? user?.username ?? "\u2014",
+  },
+];
+
+const SwitchAccountSection = () => (
+  <section className="border-primary/14 bg-card border px-[22px] py-4">
+    <div className="flex flex-col items-center py-2 text-center">
+      <span className="border-primary/30 text-primary flex size-12 items-center justify-center border">
+        <IconUserPlus className="size-5" />
+      </span>
+      <h2 className="font-heading text-primary mt-3 text-[19px] font-semibold">
+        Add or switch account
+      </h2>
+      <p className="text-primary/65 mt-1.5 max-w-prose text-[13.5px]">
+        Sign in as someone else without signing out of this account &mdash;
+        useful for checking a teacher&rsquo;s portal or approving a request as a
+        different role. Your current session stays active, and the sign-in page
+        lists every account this browser holds.
+      </p>
+      <Link
+        to="/login"
+        search={{ switch: 1 }}
+        className="border-primary/30 text-primary hover:border-primary mt-4 inline-block border px-4 py-2 text-xs font-extrabold tracking-[0.04em] transition-colors"
+      >
+        MANAGE ACCOUNTS
+      </Link>
+    </div>
   </section>
 );
 
@@ -126,11 +146,14 @@ const AccountPage = () => {
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <PageHeader
-        eyebrow="Your account"
-        title="Account"
-        description={<>Your profile, password and signed-in devices.</>}
-      />
+      <div>
+        <h1 className="font-heading text-primary m-0 text-[38px] leading-[1.05] font-semibold">
+          Account
+        </h1>
+        <p className="text-primary/65 mt-1.5 text-[13.5px]">
+          Your profile, password and signed-in devices.
+        </p>
+      </div>
 
       <ProfileSection user={user} />
 

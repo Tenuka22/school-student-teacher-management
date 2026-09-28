@@ -15,11 +15,6 @@ import {
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@school-student-teacher-management/ui/components/input-group";
-import {
   Select,
   SelectContent,
   SelectGroup,
@@ -27,12 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@school-student-teacher-management/ui/components/select";
-import {
-  IconBan,
-  IconCircleCheck,
-  IconSearch,
-  IconX,
-} from "@tabler/icons-react";
+import { IconBan, IconCircleCheck, IconX } from "@tabler/icons-react";
 import { useTable } from "@tanstack/react-table";
 import type {
   ColumnVisibilityState,
@@ -46,9 +36,9 @@ import { useId, useMemo, useState } from "react";
 
 import { DataTableFrame } from "@/components/ui-patterns/data-table/data-table-frame";
 import { DataTablePagination } from "@/components/ui-patterns/data-table/data-table-pagination";
+import { DataTableSearchField } from "@/components/ui-patterns/data-table/data-table-search-field";
 import { DataTableViewOptions } from "@/components/ui-patterns/data-table/data-table-view-options";
 import { listTableFeatures } from "@/components/ui-patterns/data-table/list-table-features";
-import { useDebouncedListSearch } from "@/components/ui-patterns/data-table/use-debounced-list-search";
 
 import { buildUserColumns } from "./users-columns";
 import { USERS_PAGE_SIZES, USERS_STATUS_OPTIONS } from "./users-search";
@@ -203,10 +193,11 @@ const AccountsErrorPanel = ({ onRetry }: { onRetry: () => void }) => (
 /**
  * Search, the two filters, and the column menu.
  *
- * The search box takes the **draft** and reports keystrokes, not the committed
- * `search` prop, because the debounce lives in `useDebouncedListSearch`: the box
- * must not repaint from the committed value while the user is still typing, or the
- * term they are halfway through replacing disappears under the caret.
+ * The search box is the shared one, which is also where the debounce lives: the
+ * box takes the **draft** and reports keystrokes, not the committed `search` prop,
+ * because the box must not repaint from the committed value while the user is
+ * still typing, or the term they are halfway through replacing disappears under
+ * the caret.
  */
 const AccountsToolbar = ({
   hasFilters,
@@ -230,89 +221,73 @@ const AccountsToolbar = ({
   search: string;
   status: StatusFilter;
   table: AccountsTable;
-}) => {
-  const { draft, setDraft } = useDebouncedListSearch(search, onSearchChange);
+}) => (
+  <div className="flex flex-wrap items-end gap-3">
+    <DataTableSearchField
+      id={`${ids}-search`}
+      onCommit={onSearchChange}
+      placeholder="Name, email or username"
+      value={search}
+    />
 
-  return (
-    <div className="flex flex-wrap items-end gap-3">
-      <Field className="min-w-[16rem] flex-1">
-        <FieldLabel htmlFor={`${ids}-search`}>Search</FieldLabel>
-        <InputGroup>
-          <InputGroupAddon align="inline-start">
-            <IconSearch
-              aria-hidden="true"
-              className="text-muted-foreground size-4"
-            />
-          </InputGroupAddon>
-          <InputGroupInput
-            id={`${ids}-search`}
-            type="search"
-            placeholder="Name, email or username"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-        </InputGroup>
-      </Field>
+    <Field className="w-52">
+      <FieldLabel htmlFor={`${ids}-role`}>Role</FieldLabel>
+      <Select
+        value={role}
+        onValueChange={(value: string | null) => {
+          onRoleChange((value ?? ANY_FILTER) as RoleFilter);
+        }}
+      >
+        <SelectTrigger id={`${ids}-role`}>
+          <SelectValue placeholder="Every role" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem value={ANY_FILTER}>Every role</SelectItem>
+            {ALL_ROLES.map((option) => (
+              <SelectItem key={option} value={option}>
+                {roleLabel(option)}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
 
-      <Field className="w-52">
-        <FieldLabel htmlFor={`${ids}-role`}>Role</FieldLabel>
-        <Select
-          value={role}
-          onValueChange={(value: string | null) => {
-            onRoleChange((value ?? ANY_FILTER) as RoleFilter);
-          }}
-        >
-          <SelectTrigger id={`${ids}-role`}>
-            <SelectValue placeholder="Every role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value={ANY_FILTER}>Every role</SelectItem>
-              {ALL_ROLES.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {roleLabel(option)}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </Field>
+    <Field className="w-56">
+      <FieldLabel htmlFor={`${ids}-status`}>Status</FieldLabel>
+      <Select
+        value={status}
+        onValueChange={(value: string | null) => {
+          onStatusChange((value ?? ANY_FILTER) as StatusFilter);
+        }}
+      >
+        <SelectTrigger id={`${ids}-status`}>
+          <SelectValue placeholder="Any status" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem value={ANY_FILTER}>Any status</SelectItem>
+            {USERS_STATUS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
 
-      <Field className="w-56">
-        <FieldLabel htmlFor={`${ids}-status`}>Status</FieldLabel>
-        <Select
-          value={status}
-          onValueChange={(value: string | null) => {
-            onStatusChange((value ?? ANY_FILTER) as StatusFilter);
-          }}
-        >
-          <SelectTrigger id={`${ids}-status`}>
-            <SelectValue placeholder="Any status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value={ANY_FILTER}>Any status</SelectItem>
-              {USERS_STATUS_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </Field>
+    {hasFilters && (
+      <Button variant="ghost" onClick={onResetFilters}>
+        <IconX aria-hidden="true" />
+        Clear filters
+      </Button>
+    )}
 
-      {hasFilters && (
-        <Button variant="ghost" onClick={onResetFilters}>
-          <IconX aria-hidden="true" />
-          Clear filters
-        </Button>
-      )}
-
-      <DataTableViewOptions table={table} />
-    </div>
-  );
-};
+    <DataTableViewOptions table={table} />
+  </div>
+);
 
 /**
  * The selection bar, and the only reason the checkboxes exist.

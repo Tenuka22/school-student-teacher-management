@@ -1,3 +1,4 @@
+import { IconDeviceLaptop } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -47,44 +48,53 @@ export const AccountSessions = () => {
   const sessions = sessionsQuery.data ?? [];
 
   return (
-    <section className="border-border bg-card px-[22px] py-5">
-      <h2 className="text-foreground type-section-title">Active sessions</h2>
-      <p className="text-muted-foreground type-body mt-1.5">
-        Every browser currently signed in as this account. Revoke anything you
-        do not recognise.
-      </p>
+    <section className="border-primary/14 bg-card border px-[22px] py-4">
+      <div className="flex flex-col items-center py-2 text-center">
+        <span className="border-primary/30 text-primary flex size-12 items-center justify-center border">
+          <IconDeviceLaptop className="size-5" />
+        </span>
+        <h2 className="font-heading text-primary mt-3 text-[19px] font-semibold">
+          Active sessions
+        </h2>
+        <p className="text-primary/65 mt-1.5 max-w-prose text-[13.5px]">
+          Every browser currently signed in as this account. Revoke anything you
+          do not recognise.
+        </p>
+      </div>
 
       {sessionsQuery.isPending && (
-        <p className="text-muted-foreground mt-4 text-sm">Loading sessions…</p>
+        <p className="text-primary/60 mt-4 text-center text-sm">
+          Loading sessions…
+        </p>
       )}
 
       {!sessionsQuery.isPending && sessions.length === 0 && (
-        <p className="text-muted-foreground mt-4 text-sm">
+        <p className="text-primary/60 mt-4 text-center text-sm">
           No other active sessions.
         </p>
       )}
 
-      <ul className="mt-4 flex flex-col">
+      <ul className="border-primary/14 mt-4 flex flex-col border-t">
         {sessions.map((entry, index) => {
           const { session, user } = entry;
           return (
             <li
               key={session.token}
-              className="border-border flex flex-wrap items-center gap-3 border-b py-3 last:border-b-0"
+              className="border-primary/8 flex flex-wrap items-center gap-3 border-b py-3 last:border-b-0"
             >
               <span className="min-w-0 flex-1">
-                <span className="text-foreground block text-sm font-semibold">
+                <span className="text-primary block text-sm font-bold">
                   {describeAgent(session.userAgent)}
                   {index === 0 && (
-                    <span className="text-muted-foreground ml-2 text-xs font-semibold">
+                    <span className="text-primary/55 ml-2 text-xs font-semibold">
                       most recent
                     </span>
                   )}
                 </span>
-                <span className="text-muted-foreground mt-0.5 block text-sm">
+                <span className="text-primary/60 mt-0.5 block text-sm">
                   {user.name} · {user.email}
                 </span>
-                <span className="text-muted-foreground mt-0.5 block text-xs">
+                <span className="text-primary/55 mt-0.5 block text-xs">
                   {session.ipAddress ?? "unknown IP"} · signed in{" "}
                   {formatWhen(session.createdAt)} · expires{" "}
                   {formatWhen(session.expiresAt)}
@@ -94,7 +104,7 @@ export const AccountSessions = () => {
               <span className="flex shrink-0 gap-2">
                 <button
                   type="button"
-                  className="border-destructive/60 text-destructive hover:border-destructive border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50"
+                  className="border-destructive/40 text-destructive hover:border-destructive border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
                   disabled={revokeMutation.isPending}
                   onClick={() => revokeMutation.mutate(session.token)}
                 >
