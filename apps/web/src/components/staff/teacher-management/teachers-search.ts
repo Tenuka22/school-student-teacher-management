@@ -2,13 +2,13 @@ import type { InferRouterInputs, InferRouterOutputs } from "@orpc/server";
 import type { AppRouter } from "@school-student-teacher-management/api/routers/index";
 
 import {
-  omitEmptyParams,
   readDirection,
   readOneOf,
   readPage,
   readPageSize,
   readString,
 } from "@/components/ui-patterns/data-table/list-search";
+import type { RouteSearch } from "@/components/ui-patterns/data-table/list-search";
 
 /**
  * The teachers register's URL contract, and the second implementation of the
@@ -97,20 +97,53 @@ export const toListTeachersInput = (search: TeachersSearch) => ({
   pageSize: search.size,
 });
 
-/** A `TeachersSearch` back into query-string values, with every default left off. */
+/**
+ * A `TeachersSearch` back into query-string values, with every default left off.
+ *
+ * **This runs after validation, not before, and that ordering is the whole fix.**
+ * A route's `validateSearch` return value is what the router serialises into the
+ * address bar, so a validator that returns the *filled* object puts every default
+ * back on the URL — a teachers page opened at `?sort=createdAt&dir=asc&page=1&
+ * size=25`, none of which narrows anything. Omission has to be the last thing that
+ * happens to a value, which is this function's job and the reason it is separate
+ * from the parser.
+ *
+ * It is also what makes the params optional to a `<Link>`: every key is absent
+ * when it is at its default, so a link may carry none of them.
+ */
 export const toTeachersSearchParams = (
   search: TeachersSearch
-): Record<string, string | undefined> =>
-  omitEmptyParams({
-    q: search.q || undefined,
-    sort: search.sort === DEFAULT_TEACHER_SORT ? undefined : search.sort,
-    dir: search.dir === "asc" ? undefined : search.dir,
-    page: search.page === 1 ? undefined : String(search.page),
-    size:
-      search.size === DEFAULT_TEACHER_PAGE_SIZE
-        ? undefined
-        : String(search.size),
-  });
+): RouteSearch<TeachersSearch> => {
+  const params: RouteSearch<TeachersSearch> = {};
+
+  if (search.q !== "") {
+    params.q = search.q;
+  }
+
+  if (search.sort !== DEFAULT_TEACHER_SORT) {
+    params.sort = search.sort;
+  }
+
+  if (search.dir !== "asc") {
+    params.dir = search.dir;
+  }
+
+  if (search.page !== 1) {
+    params.page = search.page;
+  }
+
+  if (search.size !== DEFAULT_TEACHER_PAGE_SIZE) {
+    params.size = search.size;
+  }
+
+  return params;
+};
+
+/** What the route declares: clamped, then stripped of its defaults. */
+export const validateTeachersRouteSearch = (
+  search: Record<string, unknown>
+): RouteSearch<TeachersSearch> =>
+  toTeachersSearchParams(validateTeachersSearch(search));
 
 /**
  * True when something is narrowing the register, which is the difference between

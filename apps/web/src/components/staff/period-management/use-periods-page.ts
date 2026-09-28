@@ -9,10 +9,19 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CLASS_CATEGORIES } from "@/components/staff/class-assignment/class-categories";
+import type { ClassCategoryKey } from "@/components/staff/class-assignment/class-categories";
 import type {
   AcademicYear,
   PeriodClass,
 } from "@/components/staff/period-management/period-dialogs";
+import {
+  gradeChangedTo,
+  sectionChangedTo,
+  toPeriodsSearchParams,
+  validatePeriodsSearch,
+} from "@/components/staff/period-management/periods-search";
+import type { PeriodsSearch } from "@/components/staff/period-management/periods-search";
+import { useListSearchWriter } from "@/components/ui-patterns/data-table/use-list-search-writer";
 import { formatApiErrorMessage } from "@/lib/api-error";
 import { downloadExportFile } from "@/lib/download-export";
 import { orpc } from "@/utils/orpc";
@@ -40,7 +49,7 @@ const rethrow = (error: unknown, fallback: string): never => {
     : new Error(formatApiErrorMessage(error, fallback));
 };
 
-export const usePeriodsPage = () => {
+export const usePeriodsPage = (search: PeriodsSearch) => {
   const currentYearQuery = useQuery(
     orpc.staff.listAcademicYears.queryOptions()
   );
@@ -63,26 +72,10 @@ export const usePeriodsPage = () => {
     })
   );
 
-  const [selectedClassId, setSelectedClassId] = useState<string>("");
-
   const classesData = useMemo(() => {
     const data = classesQuery.data as unknown[] | undefined;
     return (data || []) as PeriodClass[];
   }, [classesQuery.data]);
-
-  const [categoryValue, setCategoryValue] = useState<string>("");
-  const [gradeValue, setGradeValue] = useState<string>("");
-
-  const setCategory = useCallback((value: string) => {
-    setCategoryValue(value);
-    setGradeValue("");
-    setSelectedClassId("");
-  }, []);
-
-  const setGrade = useCallback((value: string) => {
-    setGradeValue(value);
-    setSelectedClassId("");
-  }, []);
 
   const categoryOptions = useMemo(
     () => CLASS_CATEGORIES.map((c) => ({ value: c.key, label: c.label })),
@@ -91,7 +84,7 @@ export const usePeriodsPage = () => {
 
   const gradeOptions = useMemo(() => {
     const activeCategory = CLASS_CATEGORIES.find(
-      (c) => c.key === categoryValue
+      (c) => c.key === search.section
     );
     if (!activeCategory) {
       return [];
@@ -104,11 +97,11 @@ export const usePeriodsPage = () => {
       }
     }
     return options;
-  }, [classesData, categoryValue]);
+  }, [classesData, search.section]);
 
   const classOptions = useMemo(() => {
-    const gradeNumber = Number(gradeValue);
-    if (!gradeValue) {
+    const gradeNumber = Number(search.grade);
+    if (!search.grade) {
       return [];
     }
     const options: { value: string; label: string }[] = [];
@@ -118,7 +111,65 @@ export const usePeriodsPage = () => {
       }
     }
     return options;
-  }, [classesData, gradeValue]);
+  }, [classesData, search.grade]);
+
+  /**
+   * The picks, after checking them against what the College actually has.
+   *
+   * **Derived, not stored, and not written back.** The URL is the only copy of
+   * them; these three are what the page works with once a link that does not line up
+   * has been made to line up. Nothing is written back on the way, because a URL
+   * that disagrees with the data would otherwise be "fixed" by a navigation nobody
+   * asked for, and a hand-edited link would lose the parts of itself that *were*
+   * valid.
+   *
+   * The three checks are the ones that can be false in a real link: a grade the
+   * chosen section does not contain, a class in a different grade, and a grade with
+   * no classes at all. Each falls back to "not chosen" — which is what the dropdown
+   * would have shown anyway, and which leaves the page asking rather than showing
+   * a timetable for a class the section has nothing to do with.
+   */
+  const categoryValue = search.section;
+  const gradeValue = gradeOptions.some(
+    (option) => option.value === search.grade
+  )
+    ? search.grade
+    : "";
+  const selectedClassId = classOptions.some(
+    (option) => option.value === search.class
+  )
+    ? search.class
+    : "";
+
+  const writeSearch = useListSearchWriter<PeriodsSearch>(
+    validatePeriodsSearch,
+    toPeriodsSearchParams
+  );
+
+  const setCategory = useCallback(
+    (value: string) => {
+      writeSearch(
+        sectionChangedTo(
+          value as ClassCategoryKey | ""
+        ) as Partial<PeriodsSearch>
+      );
+    },
+    [writeSearch]
+  );
+
+  const setGrade = useCallback(
+    (value: string) => {
+      writeSearch(gradeChangedTo(value));
+    },
+    [writeSearch]
+  );
+
+  const setSelectedClassId = useCallback(
+    (value: string) => {
+      writeSearch({ class: value });
+    },
+    [writeSearch]
+  );
 
   const selectedClass = useMemo(() => {
     if (!selectedClassId) {

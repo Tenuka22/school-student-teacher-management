@@ -13,6 +13,7 @@ import { TeacherDialogs } from "@/components/staff/teacher-management/teacher-di
 import { TeachersDataTable } from "@/components/staff/teacher-management/teachers-data-table";
 import {
   toListTeachersInput,
+  validateTeachersRouteSearch,
   validateTeachersSearch,
 } from "@/components/staff/teacher-management/teachers-search";
 import type {
@@ -423,14 +424,25 @@ const toStaffRecord = (teacher: TeacherRow): Staff => ({
  * The validated params, read from the route rather than from `useSearch` in a child:
  * the page must not import this file, so the value is handed down.
  */
-const TeachersRoute = () => <RouteComponent search={Route.useSearch()} />;
+const TeachersRoute = () => (
+  <RouteComponent search={validateTeachersSearch(Route.useSearch())} />
+);
 
 /**
  * The teaching establishment, and the five query parameters that describe it.
  *
- * `?q=&sort=&dir=&page=&size=` are validated by `validateTeachersSearch` — the same
- * function the page's hook writes through — and read by the `loader` into
- * `listTeachers`' input.
+ * `?q=&sort=&dir=&page=&size=` are validated by `validateTeachersRouteSearch`:
+ * `validateTeachersSearch` — the same function the page's hook writes through —
+ * and then a strip of everything already at its default.
+ *
+ * **Clamp first, omit second, and the order is the fix.** A route's `validateSearch`
+ * return value is what the router serialises into the address bar, so a validator
+ * that returns the *filled* object puts the defaults on the URL: the register used
+ * to open at `?sort=createdAt&dir=asc&page=1&size=25`, five params of which not one
+ * narrowed anything, because the omission ran *before* validation and was
+ * therefore thrown away by it. Both the page and the `loader` re-run the full
+ * parser, so a bare path and a hand-typed URL cannot ask the server for two
+ * different things.
  *
  * The loader is why the first paint is the answer rather than a spinner:
  * `ensureQueryData` runs the paged query **on the server**, before the HTML is sent,
@@ -442,7 +454,7 @@ const TeachersRoute = () => <RouteComponent search={Route.useSearch()} />;
  */
 export const Route = createFileRoute("/_auth/admin/$year/staff/teachers")({
   component: TeachersRoute,
-  validateSearch: validateTeachersSearch,
+  validateSearch: validateTeachersRouteSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {
     // The whole establishment as well as the page of it: `listStaff` is the CSV
@@ -456,7 +468,7 @@ export const Route = createFileRoute("/_auth/admin/$year/staff/teachers")({
       context.queryClient.ensureQueryData(orpc.staff.listStaff.queryOptions()),
       context.queryClient.ensureQueryData(
         orpc.staff.listTeachers.queryOptions({
-          input: toListTeachersInput(deps),
+          input: toListTeachersInput(validateTeachersSearch(deps)),
         })
       ),
     ]);

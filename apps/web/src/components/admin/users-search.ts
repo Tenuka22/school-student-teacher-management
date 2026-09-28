@@ -1,13 +1,13 @@
 import { ALL_ROLES } from "@school-student-teacher-management/auth/roles";
 
 import {
-  omitEmptyParams,
   readDirection,
   readOneOf,
   readPage,
   readPageSize,
   readString,
 } from "@/components/ui-patterns/data-table/list-search";
+import type { RouteSearch } from "@/components/ui-patterns/data-table/list-search";
 
 import type {
   AccountSortKey,
@@ -146,24 +146,62 @@ export const toListAccountsInput = (search: UsersSearch) => ({
 /**
  * A `UsersSearch` back into query-string values, with every default left off.
  *
- * The omission is the whole point of a separate function: `?page=1&size=50` and
- * `?sort=createdAt&dir=asc` on every unfiltered URL is a URL nobody can read and
- * nobody can edit, and a "reset" that leaves four params behind is not a reset.
- * `undefined` is what tells TanStack Router to drop a key, so a value at its
- * default genuinely leaves the URL.
+ * **This runs after validation, not before, and that ordering is the whole fix.**
+ * A route's `validateSearch` return value is what the router serialises into the
+ * address bar, so a validator that returns the *filled* object puts every default
+ * back on the URL — which is exactly what happened: `?q=&role=all&status=all&
+ * sort=createdAt&dir=asc&page=1&size=50`, seven params of which none narrowed
+ * anything, on a page whose unfiltered state is the same thing with an empty
+ * string. The omission therefore has to be the last thing that happens to a value,
+ * and it is this function's job.
+ *
+ * It is also what makes the params optional to a `<Link>`: every key is absent
+ * when it is at its default, so a link may carry none of them.
  */
 export const toUsersSearchParams = (
   search: UsersSearch
-): Record<string, string | undefined> =>
-  omitEmptyParams({
-    q: search.q || undefined,
-    role: search.role === ANY_FILTER ? undefined : search.role,
-    status: search.status === ANY_FILTER ? undefined : search.status,
-    sort: search.sort === DEFAULT_SORT ? undefined : search.sort,
-    dir: search.dir === DEFAULT_DIRECTION ? undefined : search.dir,
-    page: search.page === 1 ? undefined : String(search.page),
-    size: search.size === DEFAULT_PAGE_SIZE ? undefined : String(search.size),
-  });
+): RouteSearch<UsersSearch> => {
+  const params: RouteSearch<UsersSearch> = {};
+
+  if (search.q !== "") {
+    params.q = search.q;
+  }
+
+  if (search.role !== ANY_FILTER) {
+    params.role = search.role;
+  }
+
+  if (search.status !== ANY_FILTER) {
+    params.status = search.status;
+  }
+
+  if (search.sort !== DEFAULT_SORT) {
+    params.sort = search.sort;
+  }
+
+  if (search.dir !== DEFAULT_DIRECTION) {
+    params.dir = search.dir;
+  }
+
+  if (search.page !== 1) {
+    params.page = search.page;
+  }
+
+  if (search.size !== DEFAULT_PAGE_SIZE) {
+    params.size = search.size;
+  }
+
+  return params;
+};
+
+/**
+ * What the route declares as its `validateSearch`: clamped, then stripped of its
+ * defaults. The page re-runs `validateUsersSearch` over the result, so a link
+ * written by hand and a link written by the app arrive in the same shape.
+ */
+export const validateUsersRouteSearch = (
+  search: Record<string, unknown>
+): RouteSearch<UsersSearch> => toUsersSearchParams(validateUsersSearch(search));
 
 /**
  * True when something is narrowing the list.

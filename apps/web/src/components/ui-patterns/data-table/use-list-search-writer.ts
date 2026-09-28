@@ -1,6 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 
+import type { RouteSearch } from "./list-search";
+
 /**
  * The one place a list's search params are written.
  *
@@ -18,7 +20,18 @@ import { useCallback } from "react";
  */
 export const useListSearchWriter = <TSearch extends object>(
   validate: (raw: Record<string, unknown>) => TSearch,
-  toParams: (search: TSearch) => Record<string, string | undefined>
+  /**
+   * The filled value back to query params, defaults omitted.
+   *
+   * Typed as `RouteSearch<TSearch>` rather than
+   * `Record<string, string | undefined>` because the search objects carry real
+   * numbers — `page: 3`, not `"3"` — and a `string | undefined` map is what forced
+   * every writer to stringify a page it was then parsed straight back out of. The
+   * `navigate` call below casts once, deliberately, because the router's own search
+   * type is the intersection of every registered route's and cannot be narrowed
+   * from here.
+   */
+  toParams: (search: TSearch) => RouteSearch<TSearch>
 ) => {
   const navigate = useNavigate();
 
