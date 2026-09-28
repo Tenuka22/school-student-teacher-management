@@ -46,6 +46,7 @@ import {
 import { useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { AttendanceExcelImport } from "@/components/staff/attendance/attendance-excel-import";
 import { AttendanceRegisterTable } from "@/components/staff/attendance/attendance-register-table";
 import type {
   AttendancePolicyValues,
@@ -571,6 +572,16 @@ export const AttendancePageContent = ({
               <IconCalendar data-icon="inline-start" />
               Today
             </Button>
+          </div>
+          <div className="ml-auto flex flex-wrap items-end gap-2">
+            <AttendanceExcelImport
+              academicYearId={page.currentYear?.id}
+              date={page.date}
+              onImported={() => {
+                void page.refetchAttendance();
+              }}
+              teachers={page.teachers}
+            />
           </div>
         </div>
       </div>
