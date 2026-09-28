@@ -256,9 +256,13 @@ export const TimetableGrid = ({
                     <div className="text-sm font-semibold">
                       {`Period ${period.periodNumber}`}
                     </div>
+                    {/*
+                      The separator is not decoration. Without it the two times
+                      are one token — "07:5008:25" — which is a time nobody can
+                      read and a value nobody can check a bell schedule against.
+                    */}
                     <div className="text-muted-foreground type-caption">
-                      {period.startTime}
-                      {period.endTime}
+                      {period.startTime}–{period.endTime}
                     </div>
                   </div>
                   <div className="group space-y-1">
@@ -342,8 +346,7 @@ export const TimetableGrid = ({
                     {`Period ${period.periodNumber}`}
                   </div>
                   <div className="text-muted-foreground type-caption font-normal">
-                    {period.startTime}
-                    {period.endTime}
+                    {period.startTime}–{period.endTime}
                   </div>
                 </TableHead>
                 {DAYS_OF_WEEK.map((day, dayIndex: number) => {
@@ -421,7 +424,13 @@ export const TimetableGrid = ({
 
       {subjectKeysPresent.length > 0 && (
         <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <span className="type-eyebrow">Subject key</span>
+          {/*
+            "Subjects", not "Subject key". A storage key is not a heading: the
+            legend exists so a colour can be read back to a subject, and the
+            reader is looking for a subject's name, which is what the swatch
+            beside it is coloured by.
+          */}
+          <span className="type-eyebrow">Subjects</span>
           {subjectKeysPresent.map((subjectKey) => (
             <span key={subjectKey} className="inline-flex items-center gap-2">
               <span
@@ -429,7 +438,7 @@ export const TimetableGrid = ({
                 className="size-3"
                 style={{ background: getSubjectColor(subjectKey) }}
               />
-              {subjectKey}
+              {subjectLabel(subjectKey)}
             </span>
           ))}
         </div>
