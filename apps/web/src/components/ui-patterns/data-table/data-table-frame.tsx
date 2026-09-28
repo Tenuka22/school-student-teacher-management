@@ -57,6 +57,14 @@ export interface DataTableFrameProps<TData extends RowData> {
   emptyContent?: React.ReactNode;
   /** Placeholder rows on a first read, at this table's row height. */
   skeletonRows?: number;
+  /**
+   * Optional group headings, positioned by **row index in the body**.
+   *
+   * The attendance register groups the roll by highest qualification; this is how
+   * a table says so. Off by default, and a list with no grouping passes nothing,
+   * so the lists that do not want a second shape never pay for one.
+   */
+  rowGroups?: { startsAt: number; label: string; count?: number }[];
 }
 
 const DEFAULT_SKELETON_ROWS = 8;
@@ -126,6 +134,7 @@ export const DataTableFrame = <TData extends RowData>({
   errorContent,
   emptyContent,
   skeletonRows = DEFAULT_SKELETON_ROWS,
+  rowGroups,
 }: DataTableFrameProps<TData>) => {
   if (isError) {
     return errorContent;
@@ -155,18 +164,73 @@ export const DataTableFrame = <TData extends RowData>({
       );
     }
 
-    return rows.map((row) => (
-      <TableRow
-        key={row.id}
-        data-state={row.getIsSelected() ? "selected" : undefined}
-      >
-        {row.getVisibleCells().map((cell) => (
-          <TableCell key={cell.id}>
-            <table.FlexRender cell={cell} />
-          </TableCell>
-        ))}
-      </TableRow>
-    ));
+    /**
+     * The body, with an optional group header before the first row of each group.
+     *
+     * `rowGroups` is keyed on the **row index within the body**, not on a data
+     * value, because the frame cannot know what a group means — "BEd" and
+     * "Postgraduate Diploma" are the same shape to it. The caller decides the
+     * grouping and says where the boundaries are; the frame only draws the rule
+     * and the label. That is why it takes indices and not a key: a key would have
+     * to be compared against every row to find its neighbours, and a caller that
+     * got the comparison wrong would merge two groups silently.
+     */
+    const renderedRows: React.ReactNode[] = [];
+    /**
+     * `startsAt` -> the group starting at that row index, built once.
+     *
+     * A `find` per row is O(rows x groups), and the frame renders every row on
+     * every keystroke that changes the data: a register of sixty teachers in five
+     * qualification bands is sixty searches sixty times. Group starts are unique by
+     * construction, so a Map is exact here rather than merely faster.
+     */
+    const groupAtRow = new Map<number, NonNullable<typeof rowGroups>[number]>();
+    for (const group of rowGroups ?? []) {
+      groupAtRow.set(group.startsAt, group);
+    }
+    for (const [index, row] of rows.entries()) {
+      const group = groupAtRow.get(index);
+      if (group) {
+        renderedRows.push(
+          <TableRow
+            className="bg-muted/40 hover:bg-muted/40"
+            key={`group-${group.label}`}
+          >
+            {/*
+              A `<th scope="rowgroup">` spanning the table, not a `<td>`: a screen
+              reader announcing 8 cells and then "BEd" would present the group name
+              as if it belonged to one column, and the whole point of grouping is
+              that the name applies to every column beneath it.
+            */}
+            <TableCell
+              className="text-foreground font-heading py-1.5 text-xs font-medium"
+              colSpan={columnCount}
+            >
+              {group.label}
+              {typeof group.count === "number" ? (
+                <span className="text-muted-foreground ml-2 font-normal tabular-nums">
+                  {group.count}
+                </span>
+              ) : null}
+            </TableCell>
+          </TableRow>
+        );
+      }
+      renderedRows.push(
+        <TableRow
+          data-state={row.getIsSelected() ? "selected" : undefined}
+          key={row.id}
+        >
+          {row.getVisibleCells().map((cell) => (
+            <TableCell key={cell.id}>
+              <table.FlexRender cell={cell} />
+            </TableCell>
+          ))}
+        </TableRow>
+      );
+    }
+
+    return renderedRows;
   };
 
   return (

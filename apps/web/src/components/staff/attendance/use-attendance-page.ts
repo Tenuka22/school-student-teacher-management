@@ -1,3 +1,4 @@
+import type { QualificationLevel } from "@school-student-teacher-management/db/constants/teachers";
 import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import type { SchoolPeriod } from "@school-student-teacher-management/db/periods";
 import type {
@@ -32,6 +33,10 @@ export interface AttendanceTeacher {
   email: string | null;
   phone: string | null;
   gradeLevels: number[];
+  /** The credential this teacher is grouped under — the highest they hold. */
+  highestQualification: QualificationLevel | null;
+  /** Every credential they hold, weakest first, for the disclosure in the cell. */
+  qualifications: QualificationLevel[];
 }
 
 interface ScheduleRow {
@@ -683,10 +688,36 @@ export interface AttendancePageApi {
    * different fact from "absent" and the register has to say which it is. */
   leaveFor: (staffId: string) => ApprovedLeave | null;
   rowStatus: (staffId: string) => RowStatus;
+  /**
+   * Every period a teacher is currently marked absent for.
+   *
+   * "Currently" includes unsaved ticks, so a table cell shows what the register
+   * says rather than what the database last accepted. A whole-day absence
+   * expands to every period the timetable defines, because that is what an
+   * absence means and the period list is only ever a detail of it.
+   */
+  expandedAbsentPeriods: (staffId: string) => Map<number, string>;
   isPeriodAbsent: (staffId: string, periodNumber: number) => boolean;
   periodReason: (staffId: string, periodNumber: number) => string;
   togglePeriod: (staffId: string, periodNumber: number) => Promise<boolean>;
   toggleSchool: (staffId: string) => Promise<boolean>;
+  /**
+   * Writes one teacher's day outright: the periods marked absent, and the day's
+   * note. Resolves to whether the server accepted it.
+   *
+   * Exposed rather than only used internally because the register table marks
+   * whole days from a row menu, and `toggleSchool` cannot express "present" —
+   * it flips whatever the row currently says, so a second click on an absent
+   * teacher is how you would *clear* an absence and not how you would mark a
+   * present one as present. Re-marking needs a write that states the answer
+   * rather than inverting it.
+   */
+  saveTeacherDay: (
+    staffId: string,
+    absentPeriods: Map<number, string>,
+    dayReason?: string,
+    overrideLeave?: boolean
+  ) => Promise<boolean>;
   /** Automatic late-arrival policy (LEAVE_SYSTEM_DESIGN.md §5). */
   recordArrival: (staffId: string, arrivalTime: string) => Promise<boolean>;
   isRecordingArrival: boolean;
@@ -1726,10 +1757,12 @@ export const useAttendancePage = (
     isLeaveLocked,
     leaveFor,
     rowStatus,
+    expandedAbsentPeriods,
     isPeriodAbsent,
     periodReason,
     togglePeriod,
     toggleSchool,
+    saveTeacherDay,
     dayReason,
     saveReason,
     recordArrival,

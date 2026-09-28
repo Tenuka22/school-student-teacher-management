@@ -48,7 +48,7 @@ import {
 import { useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { AttendanceGrid } from "@/components/staff/attendance/attendance-grid";
+import { AttendanceRegisterTable } from "@/components/staff/attendance/attendance-register-table";
 import type {
   AttendancePolicyValues,
   AttendancePageApi,
@@ -606,7 +606,8 @@ export const AttendancePageContent = ({
             </div>
             <FieldDescription id="attendance-filter-hint">
               Searches the {page.summary.onRoll} teachers on this year&apos;s
-              roll. The register&apos;s own row filter is above the grid.
+              roll, by name. The qualification and band filters are with the
+              table.
             </FieldDescription>
           </Field>
         </div>
@@ -627,10 +628,12 @@ export const AttendancePageContent = ({
           </EmptyContent>
         </Empty>
       ) : (
-        <AttendanceGrid
-          filter={filter}
-          onClearFilters={() => setFilter("")}
+        <AttendanceRegisterTable
+          onClearSearch={() => {
+            setFilter("");
+          }}
           page={page}
+          search={filter}
         />
       )}
 
