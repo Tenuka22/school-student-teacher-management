@@ -14,12 +14,33 @@ import {
   staff,
 } from "@school-student-teacher-management/db/schema/staff";
 import { and, eq } from "drizzle-orm";
+import type { Content } from "pdfmake/interfaces";
 import * as v from "valibot";
 
 import { adminProcedure } from "../../../index";
 import { buildPdfExport } from "../../../lib/export";
 
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+/**
+ * A slot with a subject on it and nobody teaching it.
+ *
+ * Grey and italic rather than a plain word: a timetable with forty cells in it
+ * has to let the two that need a decision be found without reading every one,
+ * and "Unassigned" set like a teacher's name reads as a name.
+ */
+const UNASSIGNED_COLOR = "#9ca3af";
+const FOOTER_COLOR = "#6b7280";
+
+/** A printed document says when it was printed, or nobody can tell later. */
+const formatGeneratedAt = (date: Date): string =>
+  date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 /** Exports one class's weekly timetable (5 days x 8 periods) as a printable PDF. */
 export const exportClassTimetablePdf = adminProcedure
@@ -79,21 +100,30 @@ export const exportClassTimetablePdf = adminProcedure
       subjectKeysBySlot.set(slotKey, slotSubjects);
     }
 
-    const cell = (dayOfWeek: number, periodNumber: number) => {
+    const cell = (dayOfWeek: number, periodNumber: number): Content => {
       const slotKey = `${dayOfWeek}-${periodNumber}`;
       const subjectIds = subjectKeysBySlot.get(slotKey) ?? [];
       if (subjectIds.length === 0) {
         return "—";
       }
-      return subjectIds
-        .map((subjectId) => {
+      return {
+        stack: subjectIds.map((subjectId) => {
           const subjectKey = subjectId.split("-").slice(2).join("-");
           const teacherNames = teacherNamesBySubjectKey.get(subjectId) ?? [];
-          const teacherLine =
-            teacherNames.length > 0 ? teacherNames.join(", ") : "Unassigned";
-          return `${subjectLabel(subjectKey)}\n${teacherLine}`;
-        })
-        .join("\n\n");
+          const assigned = teacherNames.length > 0;
+          return {
+            stack: [
+              { text: subjectLabel(subjectKey), bold: true },
+              {
+                text: assigned ? teacherNames.join(", ") : "Unassigned",
+                italics: !assigned,
+                color: assigned ? undefined : UNASSIGNED_COLOR,
+              },
+            ],
+            margin: [0, 0, 0, 6],
+          };
+        }),
+      };
     };
 
     const tableBody = [
@@ -103,6 +133,8 @@ export const exportClassTimetablePdf = adminProcedure
         ...DAY_LABELS.map((_, index) => cell(index + 1, period.periodNumber)),
       ]),
     ];
+
+    const generatedAt = formatGeneratedAt(new Date());
 
     return buildPdfExport(
       `${classRecord.name.replaceAll(/\s+/gu, "-")}-timetable.pdf`,
@@ -119,6 +151,25 @@ export const exportClassTimetablePdf = adminProcedure
             layout: "lightHorizontalLines",
           },
         ],
+        // Repeated on every page a long table spills onto: the sheet is handed
+        // round and stapled somewhere, and a page with no date on it is a page
+        // nobody can date later.
+        footer: (currentPage: number, pageCount: number) => ({
+          columns: [
+            {
+              text: `Generated ${generatedAt}`,
+              fontSize: 8,
+              color: FOOTER_COLOR,
+            },
+            {
+              text: `Page ${currentPage} of ${pageCount}`,
+              fontSize: 8,
+              color: FOOTER_COLOR,
+              alignment: "right",
+            },
+          ],
+          margin: [40, 0, 40, 0],
+        }),
         styles: {
           header: { fontSize: 16, bold: true, margin: [0, 0, 0, 12] },
         },
