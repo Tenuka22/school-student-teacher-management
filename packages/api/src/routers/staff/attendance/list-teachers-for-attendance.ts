@@ -71,6 +71,16 @@ export const listTeachersForAttendance = adminProcedure
           name: staff.name,
           email: staff.email,
           phone: staff.phone,
+          /**
+           * The identifier, not a contact detail.
+           *
+           * `staff.nic` is `text("nic").unique()` — unique at the database level,
+           * so it is the one column that can never be shared by two people and
+           * therefore the one that separates them. An email can be a personal
+           * address a teacher signs up with twice, and a name can repeat outright.
+           * Nullable, so a missing NIC has to be handled rather than assumed.
+           */
+          nic: staff.nic,
         })
         .from(staff)
         .where(teachingStaff)
@@ -137,6 +147,7 @@ export const listTeachersForAttendance = adminProcedure
         name: row.name,
         email: row.email,
         phone: row.phone,
+        nic: row.nic,
         gradeLevels: [...(gradesByStaff.get(row.id) ?? [])].toSorted(
           (a, b) => a - b
         ),

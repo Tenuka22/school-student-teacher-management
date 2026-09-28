@@ -17,6 +17,16 @@ import type { AttendancePageApi, RowStatus } from "./use-attendance-page";
 export interface RegisterRow {
   staffId: string;
   name: string;
+  /**
+   * The NIC — the thing that separates two people.
+   *
+   * `staff.nic` is `unique()` in the database, so unlike an email or a name it
+   * cannot be shared, and it is what a reader uses when two teachers are
+   * similarly named. Shown in the row rather than in a tooltip: if it is the
+   * identifier, hiding it defeats the purpose. Null is a real state — a teacher
+   * whose NIC has not been recorded yet.
+   */
+  nic: string | null;
   email: string | null;
   phone: string | null;
   /** The credential this row is filed under — the highest held. */
@@ -134,6 +144,7 @@ export const buildRegisterRows = (page: AttendancePageApi): RegisterRow[] =>
     return {
       staffId: teacher.id,
       name: teacher.name,
+      nic: teacher.nic,
       email: teacher.email,
       phone: teacher.phone,
       qualification: teacher.highestQualification,

@@ -158,9 +158,23 @@ export const buildRegisterColumns = ({
           sorted={column.getIsSorted()}
         />
       ),
+      /**
+       * Name, then the NIC, then a contact.
+       *
+       * **The NIC sits under the name because it is what separates two people.**
+       * `staff.nic` is unique in the database; an email can be a personal address
+       * two teachers sign up with, and a name can repeat outright. It is shown and
+       * not hidden behind a tooltip, because an identifier you have to go looking
+       * for does not help when the row above looks identical. A teacher with no NIC
+       * says so in the same place rather than leaving a gap — a blank would read as
+       * "no identifier needed", which is the opposite of what it means.
+       */
       cell: ({ getValue, row }) => (
         <div className="min-w-48">
           <p className="font-medium">{getValue()}</p>
+          <p className="text-muted-foreground font-mono text-xs tabular-nums">
+            {row.original.nic ?? "No NIC on file"}
+          </p>
           <p className="text-muted-foreground truncate text-xs">
             {row.original.email ?? row.original.phone ?? "No contact on file"}
           </p>

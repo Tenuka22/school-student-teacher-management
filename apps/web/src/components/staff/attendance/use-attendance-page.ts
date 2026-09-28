@@ -32,6 +32,15 @@ export interface AttendanceTeacher {
   name: string;
   email: string | null;
   phone: string | null;
+  /**
+   * The NIC, and the reason two rows are two people.
+   *
+   * `staff.nic` is unique at the database level. It is nullable, so a missing one
+   * is a real state the register has to display rather than an error — and a
+   * teacher with no NIC has not been identified by their number, only by their
+   * name.
+   */
+  nic: string | null;
   gradeLevels: number[];
   /** The credential this teacher is grouped under — the highest they hold. */
   highestQualification: QualificationLevel | null;

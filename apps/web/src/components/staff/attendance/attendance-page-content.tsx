@@ -40,10 +40,8 @@ import { Skeleton } from "@school-student-teacher-management/ui/components/skele
 import {
   IconCalendar,
   IconRefresh,
-  IconSearch,
   IconSettings,
   IconUsersPlus,
-  IconX,
 } from "@tabler/icons-react";
 import { useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
@@ -457,7 +455,7 @@ export const AttendancePageContent = ({
   academicYear,
 }: AttendancePageContentProps) => {
   const page = useAttendancePage(academicYear);
-  const [filter, setFilter] = useState("");
+
   const [isPortDialogOpen, setIsPortDialogOpen] = useState(false);
   const showImportBanner =
     page.registerState === "ready" &&
@@ -471,10 +469,11 @@ export const AttendancePageContent = ({
         title="Attendance"
         description={
           <>
-            Tick a period off to mark that teacher absent for it (with a reason)
-            - saves immediately, no separate save step. A teacher absent for
-            every scheduled period that day is treated as absent for the whole
-            day.
+            One row per teacher, grouped by highest qualification. Mark a whole
+            day from the row menu, record a remark, or re-mark a day that was
+            already written down. Changes save immediately — no separate save
+            step. A teacher absent for every scheduled period that day is
+            treated as absent for the whole day.
           </>
         }
       />
@@ -573,43 +572,6 @@ export const AttendancePageContent = ({
               Today
             </Button>
           </div>
-
-          <Field className="w-72 sm:ml-auto">
-            <FieldLabel htmlFor="attendance-filter">Filter teachers</FieldLabel>
-            <div className="flex items-end gap-2">
-              <div className="relative flex-1">
-                <IconSearch
-                  aria-hidden="true"
-                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
-                />
-                <Input
-                  aria-describedby="attendance-filter-hint"
-                  className="pl-8"
-                  id="attendance-filter"
-                  onChange={(event) => setFilter(event.target.value)}
-                  placeholder="Search by name…"
-                  value={filter}
-                />
-              </div>
-              {filter ? (
-                <Button
-                  aria-label="Clear the teacher search"
-                  onClick={() => setFilter("")}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <IconX data-icon="inline-start" />
-                  Clear
-                </Button>
-              ) : null}
-            </div>
-            <FieldDescription id="attendance-filter-hint">
-              Searches the {page.summary.onRoll} teachers on this year&apos;s
-              roll, by name. The qualification and band filters are with the
-              table.
-            </FieldDescription>
-          </Field>
         </div>
       </div>
 
@@ -628,13 +590,7 @@ export const AttendancePageContent = ({
           </EmptyContent>
         </Empty>
       ) : (
-        <AttendanceRegisterTable
-          onClearSearch={() => {
-            setFilter("");
-          }}
-          page={page}
-          search={filter}
-        />
+        <AttendanceRegisterTable page={page} />
       )}
 
       <PortTeachersDialog

@@ -10,6 +10,7 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 import {
   Field,
+  FieldDescription,
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
 import { Input } from "@school-student-teacher-management/ui/components/input";
@@ -21,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@school-student-teacher-management/ui/components/select";
+import { IconSearch, IconX } from "@tabler/icons-react";
 import { useTable } from "@tanstack/react-table";
 import type { SortingState } from "@tanstack/react-table";
 import { useCallback, useMemo, useState } from "react";
@@ -77,10 +79,66 @@ import { listTableFeatures } from "@/components/ui-patterns/data-table/list-tabl
  */
 interface AttendanceRegisterTableProps {
   page: AttendancePageApi;
-  /** Matched against the teacher's name, the one field the register searches. */
-  search: string;
-  onClearSearch: () => void;
 }
+
+/**
+ * The search box, beside the two filters it behaves like.
+ *
+ * It used to live on the page, in its own block to the right of the date picker,
+ * which put three *table* filters in two different places: a reader setting
+ * "Secondary + a name" had to clear one control that was above the row and two
+ * that were below it, and the screen had a ragged gap in the middle where the
+ * shorter of the two rows ended. Search is a filter on the rows, so it is where
+ * the other filters are — one row of controls, one count, one thing to clear.
+ */
+const SearchField = ({
+  onChange,
+  onClear,
+  value,
+}: {
+  onChange: (value: string) => void;
+  onClear: () => void;
+  value: string;
+}) => (
+  <Field className="w-72">
+    <FieldLabel htmlFor="register-search">Filter teachers</FieldLabel>
+    <div className="flex items-end gap-2">
+      <div className="relative flex-1">
+        <IconSearch
+          aria-hidden="true"
+          className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+        />
+        <Input
+          aria-describedby="register-search-hint"
+          className="pl-8"
+          id="register-search"
+          onChange={(event) => {
+            onChange(event.target.value);
+          }}
+          placeholder="Search by name or NIC…"
+          type="search"
+          value={value}
+        />
+      </div>
+      {value ? (
+        <Button
+          aria-label="Clear the teacher search"
+          onClick={onClear}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <IconX data-icon="inline-start" />
+          Clear
+        </Button>
+      ) : null}
+    </div>
+    <FieldDescription id="register-search-hint">
+      Searches by name or NIC — the NIC is unique, so it is the one that never
+      collides.
+    </FieldDescription>
+  </Field>
+);
 
 /**
  * The remark, typed into a dialog.
@@ -179,10 +237,9 @@ const RemarkDialog = ({
 };
 
 export const AttendanceRegisterTable = ({
-  onClearSearch,
   page,
-  search,
 }: AttendanceRegisterTableProps) => {
+  const [search, setSearch] = useState("");
   const [qualificationFilter, setQualificationFilter] = useState("all");
   const [bandFilter, setBandFilter] = useState(ANY_BAND);
   const [remarkFor, setRemarkFor] = useState<RegisterRow | null>(null);
@@ -193,16 +250,22 @@ export const AttendanceRegisterTable = ({
   /**
    * Search, then the two filters, then the grouping.
    *
-   * Search matches the **name only**, and the field says so. A register of sixty
-   * people is found by name; searching the remark as well would let a note
-   * written in March hide somebody from today's register, which is a filter that
-   * lies about who is present.
+   * Search matches the **name and the NIC**, and the field says so. A register of
+   * sixty people is found by name, and the NIC is the one identifier that cannot
+   * be shared, so it is the right thing to type when two teachers are similarly
+   * named. The remark is deliberately *not* searched: a note written in March
+   * would hide somebody from today's register, which is a filter that lies about
+   * who is present.
    */
   const visibleRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rows.filter((row) => {
-      if (term !== "" && !row.name.toLowerCase().includes(term)) {
-        return false;
+      if (term !== "") {
+        const hitsName = row.name.toLowerCase().includes(term);
+        const hitsNic = (row.nic ?? "").toLowerCase().includes(term);
+        if (!hitsName && !hitsNic) {
+          return false;
+        }
       }
       if (
         qualificationFilter !== "all" &&
@@ -273,6 +336,18 @@ export const AttendanceRegisterTable = ({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
+        <SearchField
+          onChange={setSearch}
+          onClear={() => {
+            setSearch("");
+          }}
+          value={search}
+        />
+        <SearchField
+          onChange={setSearch}
+          onClear={() => setSearch("")}
+          value={search}
+        />
         <Field className="w-64">
           <FieldLabel htmlFor="register-qualification">
             Qualification
@@ -341,7 +416,7 @@ export const AttendanceRegisterTable = ({
                 onClick={() => {
                   setQualificationFilter("all");
                   setBandFilter(ANY_BAND);
-                  onClearSearch();
+                  setSearch("");
                 }}
                 size="sm"
                 type="button"
