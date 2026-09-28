@@ -24,7 +24,7 @@ import { listGrades } from "./list-grades";
 import { listPositions } from "./list-positions";
 import { listPreviousYearTeachers } from "./list-previous-year-teachers";
 import { listQualifications } from "./list-qualifications";
-import { listStaff } from "./list-staff";
+import { listStaff, listTeachers } from "./list-staff";
 import { listStructureVersions } from "./list-structure-versions";
 import { listSubjects } from "./list-subjects";
 import { listTeacherSubjects } from "./list-teacher-subjects";
@@ -45,6 +45,8 @@ import { uploadQualification } from "./upload-qualification";
 export const staffRouter = {
   // Staff CRUD
   listStaff,
+  // The teachers register: one page, searched and ordered on the server
+  listTeachers,
   getStaff,
   createStaff,
   updateStaff,

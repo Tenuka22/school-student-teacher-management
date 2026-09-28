@@ -124,7 +124,18 @@ function hasSameLabels(
  * re-resolve a label that has not changed. Adjusting state in render is the
  * documented way to derive state from props, and it settles in one extra pass.
  */
-function Select({ children, items, ...props }: SelectPrimitive.Root.Props) {
+/**
+ * `string` and not `unknown`: every select in this app holds a string value, and
+ * typing the value as `unknown` would push a cast onto every `onValueChange` at
+ * every call site — thirty of them — to get back the narrowing this line gives for
+ * free. A select that needs another kind of value is a different component, and
+ * base-ui's generic root is still there underneath for whoever needs it.
+ */
+function Select({
+  children,
+  items,
+  ...props
+}: SelectPrimitive.Root.Props<string>) {
   const derived: Record<string, string> = {}
   collectItemLabels(children, derived)
 

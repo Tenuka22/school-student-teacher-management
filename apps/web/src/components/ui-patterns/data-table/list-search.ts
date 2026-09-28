@@ -14,6 +14,7 @@
  * as a statement about the school. The server still validates; this is the first
  * gate, not the only one.
  */
+import type { PaginationState, SortingState } from "@tanstack/react-table";
 
 /** A trimmed string, capped so a pasted novel cannot become a query parameter. */
 export const readString = (raw: unknown, maxLength = 200): string => {
@@ -68,3 +69,24 @@ export const omitEmptyParams = (
   Object.fromEntries(
     Object.entries(params).filter(([, value]) => value !== undefined)
   );
+
+/**
+ * The two translations between a list's URL and the two-word shape TanStack Table
+ * speaks, in one place because they are the same for every list.
+ *
+ * The page is the one that can go wrong quietly: a URL says `?page=1` to a person
+ * and `pageIndex: 0` to the table, and if two files each subtracted one there would
+ * be a list that showed page one while saying it was on page two.
+ */
+export const searchToSorting = <TSortKey extends string>(search: {
+  sort: TSortKey;
+  dir: "asc" | "desc";
+}): SortingState => [{ id: search.sort, desc: search.dir === "desc" }];
+
+export const searchToPagination = (search: {
+  page: number;
+  size: number;
+}): PaginationState => ({
+  pageIndex: search.page - 1,
+  pageSize: search.size,
+});

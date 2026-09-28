@@ -17,6 +17,17 @@
 | Nested `Card` per qualification | One `Card`, a bordered row per qualification | A card inside a card is a second ground, a second ring and a second set of padding wrapped around each row. |
 | "Position" as a profile field | "Account role" and "Positions", stated as different things | A staff record's **role** is what the sign-in may do (`teacher`, `admin`, `principal`, `vicePrincipal`) and is set by the linked account. A **position** is this year's appointment and is scoped to one academic year. Collapsing them tells a reader that a teacher is a deputy principal for 2026 and every year after. |
 | `staff.category` shown for a record with none | `—` | The old mapping fell through to "Teacher", asserting a staff category — the field that decides whether a person appears on a teaching roster — on a record that has never been given one. |
+| `TeachersList` — a hand-rolled `<table>` with a client-side search | `TeachersDataTable`, on the shared data-table kit | The list is now the server's: `staff.listTeachers` searches, orders and pages in SQL, and `?q=&sort=&dir=&page=&size=` is the list's state, so a refresh, a shared link and Back all arrive populated. The old component is deleted. See "The register is a server-side list table" below. |
+
+### The register is a server-side list table
+
+`teachers.tsx` is the second surface on the `ui-patterns/data-table` kit, and it is the pattern the remaining lists in the app are being moved onto. The account list (`admin/users-*`) is the reference; this one is deliberately the same shape with different content.
+
+- **`staff.listTeachers` is a second procedure, not a `limit` on `listStaff`.** `listStaff` has twelve callers — the class-assignment teacher picker, the timetable teacher picker, the sidebar's count, the class tab's teacher column — and every one of them wants _all_ of the establishment. A default limit there would cap the pickers at fifty with no way to reach the fifty-first, which is data loss wearing a performance feature. Both read through one `buildStaffScope` and one `selectStaff`, so the scope rule and the join exist once.
+- **The search moved into SQL.** It was a post-filter over the returned rows, which is correct for a list returned whole and wrong for one that is paged: a post-filter over twenty-five rows is a statement about the twenty-five, and the total beside it was a count of the wrong thing. `staffSearchPredicate` keeps the old meaning — every token must match one of name, email, phone, NIC or service number — and applies it before the page is taken.
+- **The order is the server's, and `?sort=createdAt` is not the default.** A staff register is read by name; the accounts list is read by "who is new". `phone` is a column and not sortable, because a phone number has no meaningful order in a register read by name.
+- **The row the table hands back is `listTeachers`' shape, not the `staff` row.** The list sends `createdAt`/`updatedAt` as ISO strings, because they crossed a wire, and the dialogs were written against `typeof staff.$inferSelect`, which has them as `Date`. The bridge is one named function (`toStaffRecord`) in the route, not a cast at four call sites.
+- **`listStaff` is still read on this page, for the CSV import only.** The importer has to decide create-or-update for every row in a file, which is a question about the whole establishment rather than about a page of it. Both reads are in the route's `loader`, issued together.
 
 ### Nothing dangles
 

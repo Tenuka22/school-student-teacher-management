@@ -4,7 +4,6 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { functionalUpdate } from "@tanstack/react-table";
 import type {
   OnChangeFn,
@@ -15,6 +14,11 @@ import type {
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  searchToPagination,
+  searchToSorting,
+} from "@/components/ui-patterns/data-table/list-search";
+import { useListSearchWriter } from "@/components/ui-patterns/data-table/use-list-search-writer";
 import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/utils/orpc";
 
@@ -23,8 +27,6 @@ import {
   DEFAULT_SORT,
   hasUsersFilters,
   toListAccountsInput,
-  toPagination,
-  toSorting,
   toUsersSearchParams,
   USERS_SORT_KEYS,
   validateUsersSearch,
@@ -79,7 +81,6 @@ const isSortableKey = (
  * `staff_position` row rather than from this table.
  */
 export const useAdminUsers = (search: UsersSearch) => {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [banDialog, setBanDialog] = useState<BanDialogState>(null);
   const [bulkDialog, setBulkDialog] = useState<{
@@ -90,31 +91,12 @@ export const useAdminUsers = (search: UsersSearch) => {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   /**
-   * The one place the URL is written.
-   *
-   * A functional `search` update, so the params this page does not own survive:
-   * a literal object would drop the rest of the query string, and the year or a
-   * sibling page's tab would disappear because somebody typed in a search box.
-   * The previous value is re-parsed rather than trusted, so a patch written on top
-   * of a hand-edited URL produces a valid one.
-   *
-   * `replace` is the default and paging is the exception, because the two have
-   * opposite histories: a search term is committed on a timer as somebody types
-   * and must not leave one Back step per letter, while a page is a place somebody
-   * was at and expects Back to return them to.
+   * The one place the URL is written — the shared writer, so every list in this app
+   * stacks a patch on the previous params the same way.
    */
-  const writeSearch = useCallback(
-    (patch: Partial<UsersSearch>, options?: { replace?: boolean }) => {
-      void navigate({
-        search: ((previous: Record<string, unknown>) =>
-          toUsersSearchParams({
-            ...validateUsersSearch(previous),
-            ...patch,
-          })) as never,
-        replace: options?.replace ?? true,
-      });
-    },
-    [navigate]
+  const writeSearch = useListSearchWriter<UsersSearch>(
+    validateUsersSearch,
+    toUsersSearchParams
   );
 
   /**
@@ -126,8 +108,8 @@ export const useAdminUsers = (search: UsersSearch) => {
    * reach the server. The callbacks above read the same two helpers from the
    * URL's own fields, so none of them depends on an object rebuilt every render.
    */
-  const sorting = toSorting(search);
-  const pagination = toPagination(search);
+  const sorting = searchToSorting(search);
+  const pagination = searchToPagination(search);
 
   /**
    * Every change to *what is listed* returns to the first page, and drops the
@@ -144,7 +126,7 @@ export const useAdminUsers = (search: UsersSearch) => {
    */
   const onSortingChange = useCallback<OnChangeFn<SortingState>>(
     (updater) => {
-      const [column] = functionalUpdate(updater, toSorting(search));
+      const [column] = functionalUpdate(updater, searchToSorting(search));
 
       writeSearch({
         sort: column && isSortableKey(column.id) ? column.id : DEFAULT_SORT,
@@ -161,7 +143,7 @@ export const useAdminUsers = (search: UsersSearch) => {
 
   const onPaginationChange = useCallback<OnChangeFn<PaginationState>>(
     (updater) => {
-      const next = functionalUpdate(updater, toPagination(search));
+      const next = functionalUpdate(updater, searchToPagination(search));
 
       writeSearch(
         { page: next.pageIndex + 1, size: next.pageSize },
