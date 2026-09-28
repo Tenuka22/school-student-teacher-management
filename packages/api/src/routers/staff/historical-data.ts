@@ -7,7 +7,10 @@ import {
   teacherPeriodAbsence,
 } from "@school-student-teacher-management/db/schema/attendance";
 import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYearIdSchema,
   staff,
@@ -71,15 +74,19 @@ export const getHistoricalData = adminProcedure
         .where(eq(class_.academicYearId, input.academicYearId)),
       context.db
         .select({
-          id: classPeriodAssignment.id,
-          classId: classPeriodAssignment.classId,
-          staffId: classPeriodAssignment.staffId,
-          dayOfWeek: classPeriodAssignment.dayOfWeek,
-          periodNumber: classPeriodAssignment.periodNumber,
-          subjectKey: classPeriodAssignment.subjectKey,
+          id: classPeriodTeacher.id,
+          classId: classPeriodSubject.classId,
+          staffId: classPeriodTeacher.staffId,
+          dayOfWeek: classPeriodSubject.dayOfWeek,
+          periodNumber: classPeriodSubject.periodNumber,
+          subjectKey: classPeriodSubject.subjectKey,
         })
-        .from(classPeriodAssignment)
-        .where(eq(classPeriodAssignment.academicYearId, input.academicYearId)),
+        .from(classPeriodTeacher)
+        .innerJoin(
+          classPeriodSubject,
+          eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+        )
+        .where(eq(classPeriodSubject.academicYearId, input.academicYearId)),
       context.db
         .select({
           id: classTeacherAssignmentHistory.id,

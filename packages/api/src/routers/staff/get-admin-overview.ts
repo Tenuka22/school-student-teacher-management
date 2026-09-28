@@ -2,7 +2,10 @@ import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/peri
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
 import { user } from "@school-student-teacher-management/db/schema/auth";
 import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYear,
   academicYearIdSchema,
@@ -39,7 +42,8 @@ export const getAdminOverview = adminProcedure
     const [
       yearRows,
       classRows,
-      slotRows,
+      subjectSlotRows,
+      teacherSlotRows,
       rosterTeacherIds,
       openLeaveRows,
       requestRows,
@@ -62,15 +66,27 @@ export const getAdminOverview = adminProcedure
         .where(eq(class_.academicYearId, academicYearId)),
       db
         .select({
-          id: classPeriodAssignment.id,
-          staffId: classPeriodAssignment.staffId,
-          classId: classPeriodAssignment.classId,
-          dayOfWeek: classPeriodAssignment.dayOfWeek,
-          periodNumber: classPeriodAssignment.periodNumber,
-          isCombinedSession: classPeriodAssignment.isCombinedSession,
+          id: classPeriodSubject.id,
+          classId: classPeriodSubject.classId,
+          dayOfWeek: classPeriodSubject.dayOfWeek,
+          periodNumber: classPeriodSubject.periodNumber,
         })
-        .from(classPeriodAssignment)
-        .where(eq(classPeriodAssignment.academicYearId, academicYearId)),
+        .from(classPeriodSubject)
+        .where(eq(classPeriodSubject.academicYearId, academicYearId)),
+      db
+        .select({
+          id: classPeriodTeacher.id,
+          staffId: classPeriodTeacher.staffId,
+          dayOfWeek: classPeriodSubject.dayOfWeek,
+          periodNumber: classPeriodSubject.periodNumber,
+          isCombinedSession: classPeriodTeacher.isCombinedSession,
+        })
+        .from(classPeriodTeacher)
+        .innerJoin(
+          classPeriodSubject,
+          eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+        )
+        .where(eq(classPeriodSubject.academicYearId, academicYearId)),
       getYearRosterTeacherIds(db, academicYearId),
       db
         .select({
@@ -105,9 +121,13 @@ export const getAdminOverview = adminProcedure
 
     // A class is "covered" when it has a teacher in every slot it needs; the
     // denominator is the whole school week, because that is what a complete
-    // timetable means.
+    // timetable means. Coverage is about a *subject* being on the slot, not
+    // about whether a teacher has been named for it yet \u2014 subject-first
+    // means a fully-subjected, fully-unstaffed timetable is still "covered"
+    // by this measure; `teachersWithoutPeriods` below is the separate,
+    // teacher-side measure of the same timetable.
     const slotsByClass = new Map<string, Set<string>>();
-    for (const slot of slotRows) {
+    for (const slot of subjectSlotRows) {
       const key = `${slot.dayOfWeek}-${slot.periodNumber}`;
       const existing = slotsByClass.get(slot.classId) ?? new Set<string>();
       existing.add(key);
@@ -120,15 +140,17 @@ export const getAdminOverview = adminProcedure
       return filled < expectedSlotsPerClass;
     });
 
-    const teachersWithSlots = new Set(slotRows.map((slot) => slot.staffId));
+    const teachersWithSlots = new Set(
+      teacherSlotRows.map((slot) => slot.staffId)
+    );
     const teachersWithoutPeriods = rosterTeacherIds.filter(
       (id) => !teachersWithSlots.has(id)
     );
 
     // A teacher booked into the same slot more than once is only legitimate
     // when the overlap is explicitly marked as a combined session.
-    const occupancy = new Map<string, typeof slotRows>();
-    for (const slot of slotRows) {
+    const occupancy = new Map<string, typeof teacherSlotRows>();
+    for (const slot of teacherSlotRows) {
       const key = `${slot.staffId}-${slot.dayOfWeek}-${slot.periodNumber}`;
       const group = occupancy.get(key) ?? [];
       group.push(slot);
@@ -179,7 +201,7 @@ export const getAdminOverview = adminProcedure
         withoutTimetable: classesWithoutTimetable.length,
       },
       timetable: {
-        assigned: slotRows.length,
+        assigned: subjectSlotRows.length,
         capacity: totalSlots,
         conflicts: conflictCount,
         periodsPerDay: periodCount,

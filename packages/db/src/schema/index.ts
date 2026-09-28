@@ -43,10 +43,15 @@ export {
 } from "./academics";
 
 export {
-  type ClassPeriodAssignmentId,
-  classPeriodAssignmentIdSchema,
-  classPeriodAssignment,
-  classPeriodAssignmentSelectSchema,
-  classPeriodAssignmentInsertSchema,
-  classPeriodAssignmentUpdateSchema,
+  type ClassPeriodSubjectId,
+  classPeriodSubjectIdSchema,
+  classPeriodSubject,
+  classPeriodSubjectSelectSchema,
+  classPeriodSubjectInsertSchema,
+  classPeriodSubjectUpdateSchema,
+  type ClassPeriodTeacherId,
+  classPeriodTeacherIdSchema,
+  classPeriodTeacher,
+  classPeriodTeacherSelectSchema,
+  classPeriodTeacherInsertSchema,
 } from "./periods";

@@ -5,7 +5,10 @@ import {
   class_,
   classIdSchema,
 } from "@school-student-teacher-management/db/schema/academics";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYearIdSchema,
   staff,
@@ -36,29 +39,61 @@ export const exportClassTimetablePdf = adminProcedure
       throw new ORPCError("NOT_FOUND", { message: "Class not found" });
     }
 
-    const assignments = await context.db
+    const rows = await context.db
       .select({
-        dayOfWeek: classPeriodAssignment.dayOfWeek,
-        periodNumber: classPeriodAssignment.periodNumber,
-        subjectKey: classPeriodAssignment.subjectKey,
+        dayOfWeek: classPeriodSubject.dayOfWeek,
+        periodNumber: classPeriodSubject.periodNumber,
+        subjectKey: classPeriodSubject.subjectKey,
         teacherName: staff.name,
       })
-      .from(classPeriodAssignment)
-      .innerJoin(staff, eq(classPeriodAssignment.staffId, staff.id))
+      .from(classPeriodSubject)
+      .leftJoin(
+        classPeriodTeacher,
+        eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+      )
+      .leftJoin(staff, eq(classPeriodTeacher.staffId, staff.id))
       .where(
         and(
-          eq(classPeriodAssignment.academicYearId, input.academicYearId),
-          eq(classPeriodAssignment.classId, input.classId)
+          eq(classPeriodSubject.academicYearId, input.academicYearId),
+          eq(classPeriodSubject.classId, input.classId)
         )
       );
 
+    // A slot can hold several subjects, and a subject can have several named
+    // teachers — group the (subject, teacher) pairs the join returns back
+    // into one entry per subject before rendering the cell.
+    const teacherNamesBySubjectKey = new Map<string, string[]>();
+    const subjectKeysBySlot = new Map<string, string[]>();
+    for (const row of rows) {
+      const subjectId = `${row.dayOfWeek}-${row.periodNumber}-${row.subjectKey}`;
+      if (row.teacherName) {
+        const names = teacherNamesBySubjectKey.get(subjectId) ?? [];
+        names.push(row.teacherName);
+        teacherNamesBySubjectKey.set(subjectId, names);
+      }
+      const slotKey = `${row.dayOfWeek}-${row.periodNumber}`;
+      const slotSubjects = subjectKeysBySlot.get(slotKey) ?? [];
+      if (!slotSubjects.includes(subjectId)) {
+        slotSubjects.push(subjectId);
+      }
+      subjectKeysBySlot.set(slotKey, slotSubjects);
+    }
+
     const cell = (dayOfWeek: number, periodNumber: number) => {
-      const assignment = assignments.find(
-        (a) => a.dayOfWeek === dayOfWeek && a.periodNumber === periodNumber
-      );
-      return assignment
-        ? `${subjectLabel(assignment.subjectKey)}\n${assignment.teacherName}`
-        : "—";
+      const slotKey = `${dayOfWeek}-${periodNumber}`;
+      const subjectIds = subjectKeysBySlot.get(slotKey) ?? [];
+      if (subjectIds.length === 0) {
+        return "—";
+      }
+      return subjectIds
+        .map((subjectId) => {
+          const subjectKey = subjectId.split("-").slice(2).join("-");
+          const teacherNames = teacherNamesBySubjectKey.get(subjectId) ?? [];
+          const teacherLine =
+            teacherNames.length > 0 ? teacherNames.join(", ") : "Unassigned";
+          return `${subjectLabel(subjectKey)}\n${teacherLine}`;
+        })
+        .join("\n\n");
     };
 
     const tableBody = [

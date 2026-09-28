@@ -1,14 +1,21 @@
 import { classIdSchema } from "@school-student-teacher-management/db/schema/academics";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import { academicYearIdSchema } from "@school-student-teacher-management/db/schema/staff";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
 import { adminProcedure } from "../../../index";
 
 /**
- * List all period assignments for a class in a given academic year.
- * Returns a timetable grid: (dayOfWeek, periodNumber) → (subject, teacher).
+ * List every subject on a class's timetable for a given academic year, each
+ * with the teacher(s) named for it so far.
+ *
+ * A slot ((dayOfWeek, periodNumber)) can hold more than one subject row now —
+ * the timetable is grouped by slot for rendering, but the query itself is
+ * flat: one row per subject, each carrying its own teacher list.
  */
 export const listClassTimetable = adminProcedure
   .input(
@@ -18,27 +25,53 @@ export const listClassTimetable = adminProcedure
     })
   )
   .handler(async ({ input, context }) => {
-    const records = await context.db
+    const subjects = await context.db
       .select()
-      .from(classPeriodAssignment)
+      .from(classPeriodSubject)
       .where(
         and(
-          eq(classPeriodAssignment.academicYearId, input.academicYearId),
-          eq(classPeriodAssignment.classId, input.classId)
+          eq(classPeriodSubject.academicYearId, input.academicYearId),
+          eq(classPeriodSubject.classId, input.classId)
         )
       )
-      .orderBy(
-        classPeriodAssignment.dayOfWeek,
-        classPeriodAssignment.periodNumber
+      .orderBy(classPeriodSubject.dayOfWeek, classPeriodSubject.periodNumber);
+
+    if (subjects.length === 0) {
+      return [];
+    }
+
+    const teachers = await context.db
+      .select()
+      .from(classPeriodTeacher)
+      .where(
+        // A single `IN` over every subject id on this class's timetable, not
+        // one query per subject \u2014 the timetable page renders every slot at
+        // once, so N+1 here would be N+1 on every load of the page.
+        inArray(
+          classPeriodTeacher.classPeriodSubjectId,
+          subjects.map((s) => s.id)
+        )
       );
 
-    return records.map((record) => ({
-      id: record.id,
-      dayOfWeek: record.dayOfWeek,
-      periodNumber: record.periodNumber,
-      subjectKey: record.subjectKey,
-      staffId: record.staffId,
-      isCombinedSession: record.isCombinedSession,
-      createdAt: record.createdAt.toISOString(),
+    const teachersBySubjectId = new Map<string, typeof teachers>();
+    for (const teacherRow of teachers) {
+      const group =
+        teachersBySubjectId.get(teacherRow.classPeriodSubjectId) ?? [];
+      group.push(teacherRow);
+      teachersBySubjectId.set(teacherRow.classPeriodSubjectId, group);
+    }
+
+    return subjects.map((subject) => ({
+      id: subject.id,
+      dayOfWeek: subject.dayOfWeek,
+      periodNumber: subject.periodNumber,
+      subjectKey: subject.subjectKey,
+      createdAt: subject.createdAt.toISOString(),
+      teachers: (teachersBySubjectId.get(subject.id) ?? []).map((t) => ({
+        id: t.id,
+        staffId: t.staffId,
+        isCombinedSession: t.isCombinedSession,
+        createdAt: t.createdAt.toISOString(),
+      })),
     }));
   });

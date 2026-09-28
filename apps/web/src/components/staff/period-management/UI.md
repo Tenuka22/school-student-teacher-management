@@ -11,6 +11,7 @@
 | Class / Teacher view toggle | Two pages: Period Assignment (per class) and Teacher Timetable (per teacher) | Splitting the route keeps each grid's query and its empty state honest. |
 | Keyboard shortcuts `A`/`E`/`D`/`P`/`T` | None | Shipped with no shortcut layer rather than half of one. Do not document shortcuts that do not exist. |
 | "Period configuration not yet set up" empty state | Cannot occur | The period list is code, not data. |
+| One subject + one teacher per class-period slot | Subject-first, multi-teacher: a slot holds one-or-more `classPeriodSubject` rows (what is taught), each with zero-or-more `classPeriodTeacher` rows (who teaches it) | The backend moved from a single `classPeriodAssignment` table to `classPeriodSubject` + `classPeriodTeacher` so a split period (two subjects in one slot) and co-teaching (two teachers on one subject) are both representable. The UI puts a subject on a slot first (`SubjectAssignmentForm`), then names a teacher for it as a separate step (`TeacherAssignmentForm`); deleting a subject cascades and removes its teachers. |
 
 Subjects are shown through `subjectLabel` (`packages/db/src/constants/display.ts`) and a slot marked as a combined session is labelled as such rather than reported as a conflict.
 

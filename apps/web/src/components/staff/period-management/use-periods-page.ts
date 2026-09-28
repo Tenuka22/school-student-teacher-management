@@ -1,5 +1,8 @@
 import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
-import type { classPeriodAssignment as periodAssignmentTable } from "@school-student-teacher-management/db/schema/periods";
+import type {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -15,7 +18,9 @@ import { downloadExportFile } from "@/lib/download-export";
 import { orpc } from "@/utils/orpc";
 
 type Staff = typeof staff.$inferSelect;
-type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
+type PeriodSubject = typeof classPeriodSubject.$inferSelect & {
+  teachers: (typeof classPeriodTeacher.$inferSelect)[];
+};
 
 const handleMutationError = (error: unknown, defaultMsg: string) => {
   toast.error(formatApiErrorMessage(error, defaultMsg));
@@ -174,7 +179,7 @@ export const usePeriodsPage = () => {
     conflictsQuery.isPending,
   ]);
 
-  const conflictingAssignmentIds = conflicts.ids;
+  const conflictingTeacherIds = conflicts.ids;
 
   const handleRetryConflicts = useCallback(() => {
     void conflictsQuery.refetch();
@@ -194,14 +199,18 @@ export const usePeriodsPage = () => {
     return map;
   }, [staffQuery.data]);
 
-  const assignMutation = useMutation(
-    orpc.staff.periods.assignClassPeriod.mutationOptions()
+  // Mutations for the new subject-first API
+  const createSubjectMutation = useMutation(
+    orpc.staff.periods.createClassPeriodSubject.mutationOptions()
   );
-  const updateMutation = useMutation(
-    orpc.staff.periods.updateClassPeriodAssignment.mutationOptions()
+  const deleteSubjectMutation = useMutation(
+    orpc.staff.periods.deleteClassPeriodSubject.mutationOptions()
   );
-  const deleteMutation = useMutation(
-    orpc.staff.periods.deleteClassPeriodAssignment.mutationOptions()
+  const assignTeacherMutation = useMutation(
+    orpc.staff.periods.assignTeacherToPeriodSubject.mutationOptions()
+  );
+  const removeTeacherMutation = useMutation(
+    orpc.staff.periods.removeTeacherFromPeriodSubject.mutationOptions()
   );
   const exportTimetablePdfMutation = useMutation(
     orpc.staff.exports.classTimetablePdf.mutationOptions()
@@ -210,16 +219,23 @@ export const usePeriodsPage = () => {
     orpc.staff.exports.allTimetablesExcel.mutationOptions()
   );
 
-  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isAddSubjectDialogOpen, setIsAddSubjectDialogOpen] = useState(false);
+  const [isAddTeacherDialogOpen, setIsAddTeacherDialogOpen] = useState(false);
+  const [isDeleteSubjectDialogOpen, setIsDeleteSubjectDialogOpen] =
+    useState(false);
+  const [isDeleteTeacherDialogOpen, setIsDeleteTeacherDialogOpen] =
+    useState(false);
 
   const [selectedSlot, setSelectedSlot] = useState<{
     dayOfWeek: number;
     periodNumber: number;
   } | null>(null);
-  const [selectedAssignment, setSelectedAssignment] =
-    useState<PeriodAssignment | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<PeriodSubject | null>(
+    null
+  );
+  const [selectedTeacher, setSelectedTeacher] = useState<
+    typeof classPeriodTeacher.$inferSelect | null
+  >(null);
 
   const handleExportTimetablePdf = useCallback(async () => {
     if (!(currentYear?.id && selectedClass?.id)) {
@@ -252,51 +268,59 @@ export const usePeriodsPage = () => {
     }
   }, [currentYear, exportAllTimetablesMutation]);
 
-  const handleAssignClick = useCallback(
+  const handleAddSubjectClick = useCallback(
     (dayOfWeek: number, periodNumber: number) => {
       setSelectedSlot({ dayOfWeek, periodNumber });
-      setSelectedAssignment(null);
-      setIsAssignDialogOpen(true);
+      setSelectedSubject(null);
+      setIsAddSubjectDialogOpen(true);
     },
     []
   );
 
-  const handleEditClick = useCallback((assignment: PeriodAssignment) => {
-    setSelectedAssignment(assignment);
+  const handleAddTeacherClick = useCallback((subject: PeriodSubject) => {
+    setSelectedSubject(subject);
     setSelectedSlot(null);
-    setIsEditDialogOpen(true);
+    setIsAddTeacherDialogOpen(true);
   }, []);
 
-  const handleDeleteClick = useCallback((assignment: PeriodAssignment) => {
-    setSelectedAssignment(assignment);
-    setIsDeleteDialogOpen(true);
+  const handleDeleteSubjectClick = useCallback((subject: PeriodSubject) => {
+    setSelectedSubject(subject);
+    setIsDeleteSubjectDialogOpen(true);
   }, []);
 
-  const handleAssignSubmit = useCallback(
+  const handleDeleteTeacherClick = useCallback(
+    (teacher: typeof classPeriodTeacher.$inferSelect) => {
+      setSelectedTeacher(teacher);
+      setIsDeleteTeacherDialogOpen(true);
+    },
+    []
+  );
+
+  const handleAddSubjectSubmit = useCallback(
     async (data: unknown) => {
       if (!selectedSlot || !selectedClass || !currentYear) {
         return;
       }
-      if (assignMutation.isPending) {
+      if (createSubjectMutation.isPending) {
         return;
       }
       try {
-        await assignMutation.mutateAsync({
+        await createSubjectMutation.mutateAsync({
           academicYearId: currentYear.id,
           classId: selectedClass.id,
           dayOfWeek: selectedSlot.dayOfWeek,
           periodNumber: selectedSlot.periodNumber,
           ...(data as Record<string, unknown>),
         } as never);
-        setIsAssignDialogOpen(false);
+        setIsAddSubjectDialogOpen(false);
         await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
-        toast.success("Period assigned successfully");
+        toast.success("Subject added successfully");
       } catch (error) {
-        rethrow(error, "Failed to assign the period");
+        rethrow(error, "Failed to add subject");
       }
     },
     [
-      assignMutation,
+      createSubjectMutation,
       conflictsQuery,
       currentYear,
       selectedClass,
@@ -305,44 +329,63 @@ export const usePeriodsPage = () => {
     ]
   );
 
-  const handleEditSubmit = useCallback(
+  const handleAddTeacherSubmit = useCallback(
     async (data: unknown) => {
-      if (!selectedAssignment || updateMutation.isPending) {
+      if (!selectedSubject || assignTeacherMutation.isPending) {
         return;
       }
       try {
-        await updateMutation.mutateAsync({
-          id: selectedAssignment.id,
+        await assignTeacherMutation.mutateAsync({
+          classPeriodSubjectId: selectedSubject.id,
           ...(data as Record<string, unknown>),
         } as never);
-        setIsEditDialogOpen(false);
+        setIsAddTeacherDialogOpen(false);
         await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
-        toast.success("Assignment updated successfully");
+        toast.success("Teacher assigned successfully");
       } catch (error) {
-        rethrow(error, "Failed to update the assignment");
+        rethrow(error, "Failed to assign teacher");
       }
     },
-    [conflictsQuery, selectedAssignment, timetableQuery, updateMutation]
+    [assignTeacherMutation, conflictsQuery, selectedSubject, timetableQuery]
   );
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!selectedAssignment || deleteMutation.isPending) {
+  const handleConfirmDeleteSubject = useCallback(async () => {
+    if (!selectedSubject || deleteSubjectMutation.isPending) {
       return;
     }
     try {
-      await deleteMutation.mutateAsync({ id: selectedAssignment.id } as never);
-      setIsDeleteDialogOpen(false);
-      setSelectedAssignment(null);
+      await deleteSubjectMutation.mutateAsync({
+        id: selectedSubject.id,
+      } as never);
+      setIsDeleteSubjectDialogOpen(false);
+      setSelectedSubject(null);
       await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
-      toast.success("Assignment removed successfully");
+      toast.success("Subject removed successfully");
     } catch (error) {
-      handleMutationError(error, "Failed to remove the assignment");
+      handleMutationError(error, "Failed to remove subject");
     }
-  }, [conflictsQuery, deleteMutation, selectedAssignment, timetableQuery]);
+  }, [conflictsQuery, deleteSubjectMutation, selectedSubject, timetableQuery]);
+
+  const handleConfirmDeleteTeacher = useCallback(async () => {
+    if (!selectedTeacher || removeTeacherMutation.isPending) {
+      return;
+    }
+    try {
+      await removeTeacherMutation.mutateAsync({
+        id: selectedTeacher.id,
+      } as never);
+      setIsDeleteTeacherDialogOpen(false);
+      setSelectedTeacher(null);
+      await Promise.all([timetableQuery.refetch(), conflictsQuery.refetch()]);
+      toast.success("Teacher removed successfully");
+    } catch (error) {
+      handleMutationError(error, "Failed to remove teacher");
+    }
+  }, [conflictsQuery, removeTeacherMutation, selectedTeacher, timetableQuery]);
 
   const timetableData = useMemo(() => {
     const data = timetableQuery.data as unknown[] | undefined;
-    return (data || []) as PeriodAssignment[];
+    return (data || []) as PeriodSubject[];
   }, [timetableQuery.data]);
 
   /**
@@ -387,31 +430,37 @@ export const usePeriodsPage = () => {
     timetableData,
     timetableRead,
     handleRetryTimetable,
-    conflictingAssignmentIds,
+    conflictingTeacherIds,
     conflictsState: conflicts.state,
     conflictsMessage: conflicts.message,
     handleRetryConflicts,
     staffMap,
-    isAssignDialogOpen,
-    setIsAssignDialogOpen,
-    isEditDialogOpen,
-    setIsEditDialogOpen,
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
+    isAddSubjectDialogOpen,
+    setIsAddSubjectDialogOpen,
+    isAddTeacherDialogOpen,
+    setIsAddTeacherDialogOpen,
+    isDeleteSubjectDialogOpen,
+    setIsDeleteSubjectDialogOpen,
+    isDeleteTeacherDialogOpen,
+    setIsDeleteTeacherDialogOpen,
     selectedSlot,
-    selectedAssignment,
-    assignMutation,
-    updateMutation,
-    deleteMutation,
+    selectedSubject,
+    selectedTeacher,
+    createSubjectMutation,
+    deleteSubjectMutation,
+    assignTeacherMutation,
+    removeTeacherMutation,
     exportAllTimetablesMutation,
     exportTimetablePdfMutation,
     handleExportTimetablePdf,
     handleExportAllTimetables,
-    handleAssignClick,
-    handleEditClick,
-    handleDeleteClick,
-    handleAssignSubmit,
-    handleEditSubmit,
-    handleConfirmDelete,
+    handleAddSubjectClick,
+    handleAddTeacherClick,
+    handleDeleteSubjectClick,
+    handleDeleteTeacherClick,
+    handleAddSubjectSubmit,
+    handleAddTeacherSubmit,
+    handleConfirmDeleteSubject,
+    handleConfirmDeleteTeacher,
   };
 };

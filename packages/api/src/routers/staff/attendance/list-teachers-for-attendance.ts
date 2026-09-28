@@ -1,5 +1,8 @@
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYearIdSchema,
   staff,
@@ -12,7 +15,7 @@ import { teachingStaff } from "../teacher-eligibility";
 
 /**
  * Every **active teaching staff member** plus the distinct grade levels they
- * teach this academic year (via `classPeriodAssignment`), so the caller can
+ * teach this academic year (via `classPeriodSubject`/`classPeriodTeacher`), so the caller can
  * group teachers into Primary/Secondary/Collegiate sections without an N+1 of
  * per-teacher timetable calls. A teacher with no period assignments yet gets an
  * empty `gradeLevels` array (still returned - they belong in an "unassigned"
@@ -67,12 +70,16 @@ export const listTeachersForAttendance = adminProcedure
         .orderBy(staff.name),
       context.db
         .selectDistinct({
-          staffId: classPeriodAssignment.staffId,
+          staffId: classPeriodTeacher.staffId,
           gradeLevel: class_.gradeLevel,
         })
-        .from(classPeriodAssignment)
-        .innerJoin(class_, eq(classPeriodAssignment.classId, class_.id))
-        .where(eq(classPeriodAssignment.academicYearId, input.academicYearId)),
+        .from(classPeriodTeacher)
+        .innerJoin(
+          classPeriodSubject,
+          eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+        )
+        .innerJoin(class_, eq(classPeriodSubject.classId, class_.id))
+        .where(eq(classPeriodSubject.academicYearId, input.academicYearId)),
     ]);
 
     const gradesByStaff = new Map<string, Set<number>>();

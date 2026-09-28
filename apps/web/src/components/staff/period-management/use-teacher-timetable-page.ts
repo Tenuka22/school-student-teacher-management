@@ -126,13 +126,16 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
   }, [staffQuery.data, staffId]);
 
   const assignMutation = useMutation(
-    orpc.staff.periods.assignClassPeriod.mutationOptions()
+    orpc.staff.periods.createClassPeriodSubject.mutationOptions()
+  );
+  const assignTeacherMutation = useMutation(
+    orpc.staff.periods.assignTeacherToPeriodSubject.mutationOptions()
   );
   const updateMutation = useMutation(
-    orpc.staff.periods.updateClassPeriodAssignment.mutationOptions()
+    orpc.staff.periods.assignTeacherToPeriodSubject.mutationOptions()
   );
   const deleteMutation = useMutation(
-    orpc.staff.periods.deleteClassPeriodAssignment.mutationOptions()
+    orpc.staff.periods.removeTeacherFromPeriodSubject.mutationOptions()
   );
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -176,10 +179,30 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
         return;
       }
       try {
-        await assignMutation.mutateAsync({
+        const {
+          classId,
+          dayOfWeek,
+          periodNumber,
+          subjectKey,
+          isCombinedSession,
+        } = data as {
+          classId: string;
+          dayOfWeek: number;
+          periodNumber: number;
+          subjectKey: string;
+          isCombinedSession?: boolean;
+        };
+        const subject = await assignMutation.mutateAsync({
           academicYearId: currentYear.id,
+          classId,
+          dayOfWeek,
+          periodNumber,
+          subjectKey,
+        } as never);
+        await assignTeacherMutation.mutateAsync({
+          classPeriodSubjectId: subject.id,
           staffId,
-          ...(data as Record<string, unknown>),
+          ...(isCombinedSession === undefined ? {} : { isCombinedSession }),
         } as never);
         setIsAddDialogOpen(false);
         setAddSlot(null);
@@ -189,7 +212,14 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
         rethrow(error, "Failed to add the assignment");
       }
     },
-    [assignMutation, conflictsQuery, currentYear, staffId, timetableQuery]
+    [
+      assignMutation,
+      assignTeacherMutation,
+      conflictsQuery,
+      currentYear,
+      staffId,
+      timetableQuery,
+    ]
   );
 
   const handleEditSubmit = useCallback(
@@ -198,13 +228,29 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
         return;
       }
       try {
-        const { subjectKey, isCombinedSession } = data as {
+        const {
+          classId,
+          dayOfWeek,
+          periodNumber,
+          subjectKey,
+          isCombinedSession,
+        } = data as {
+          classId: string;
+          dayOfWeek: number;
+          periodNumber: number;
           subjectKey: string;
           isCombinedSession?: boolean;
         };
-        await updateMutation.mutateAsync({
-          id: selectedEntry.id,
+        await deleteMutation.mutateAsync({ id: selectedEntry.id } as never);
+        const subject = await assignMutation.mutateAsync({
+          academicYearId: currentYear?.id ?? "",
+          classId,
+          dayOfWeek,
+          periodNumber,
           subjectKey,
+        } as never);
+        await updateMutation.mutateAsync({
+          classPeriodSubjectId: subject.id,
           staffId,
           ...(isCombinedSession === undefined ? {} : { isCombinedSession }),
         } as never);
@@ -215,7 +261,16 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
         rethrow(error, "Failed to update the assignment");
       }
     },
-    [conflictsQuery, selectedEntry, staffId, timetableQuery, updateMutation]
+    [
+      assignMutation,
+      conflictsQuery,
+      currentYear,
+      deleteMutation,
+      selectedEntry,
+      staffId,
+      timetableQuery,
+      updateMutation,
+    ]
   );
 
   const handleConfirmDelete = useCallback(async () => {
@@ -309,6 +364,7 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
     ),
     handleRetryClasses,
     periods: CODE_DEFINED_PERIODS,
+    periodConfig: CODE_DEFINED_PERIODS,
     entries,
     entriesRead,
     entriesMessage: formatApiErrorMessage(

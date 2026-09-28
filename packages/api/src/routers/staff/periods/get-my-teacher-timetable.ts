@@ -1,5 +1,8 @@
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYearIdSchema,
   staff,
@@ -24,27 +27,29 @@ export const getMyTeacherTimetable = teacherProcedure
 
     const records = await context.db
       .select({
-        id: classPeriodAssignment.id,
-        classId: classPeriodAssignment.classId,
+        id: classPeriodTeacher.id,
+        classId: classPeriodSubject.classId,
         className: class_.name,
         gradeLevel: class_.gradeLevel,
-        dayOfWeek: classPeriodAssignment.dayOfWeek,
-        periodNumber: classPeriodAssignment.periodNumber,
-        subjectKey: classPeriodAssignment.subjectKey,
-        createdAt: classPeriodAssignment.createdAt,
+        dayOfWeek: classPeriodSubject.dayOfWeek,
+        periodNumber: classPeriodSubject.periodNumber,
+        subjectKey: classPeriodSubject.subjectKey,
+        isCombinedSession: classPeriodTeacher.isCombinedSession,
+        createdAt: classPeriodTeacher.createdAt,
       })
-      .from(classPeriodAssignment)
-      .innerJoin(class_, eq(classPeriodAssignment.classId, class_.id))
+      .from(classPeriodTeacher)
+      .innerJoin(
+        classPeriodSubject,
+        eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+      )
+      .innerJoin(class_, eq(classPeriodSubject.classId, class_.id))
       .where(
         and(
-          eq(classPeriodAssignment.academicYearId, input.academicYearId),
-          eq(classPeriodAssignment.staffId, linkedStaff.id)
+          eq(classPeriodSubject.academicYearId, input.academicYearId),
+          eq(classPeriodTeacher.staffId, linkedStaff.id)
         )
       )
-      .orderBy(
-        classPeriodAssignment.dayOfWeek,
-        classPeriodAssignment.periodNumber
-      );
+      .orderBy(classPeriodSubject.dayOfWeek, classPeriodSubject.periodNumber);
 
     return records.map((record) => ({
       ...record,

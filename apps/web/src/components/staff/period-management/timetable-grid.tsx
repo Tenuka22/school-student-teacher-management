@@ -1,8 +1,9 @@
 "use client";
 
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import type {
-  classPeriodAssignment as periodAssignmentTable,
-  periodConfig as periodConfigTable,
+  classPeriodSubject,
+  classPeriodTeacher,
 } from "@school-student-teacher-management/db/schema/periods";
 import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
 import { Button } from "@school-student-teacher-management/ui/components/button";
@@ -21,16 +22,18 @@ import {
   TableHeader,
   TableRow,
 } from "@school-student-teacher-management/ui/components/table";
-import { IconDotsVertical, IconPlus } from "@tabler/icons-react";
+import { IconDotsVertical, IconPlus, IconX } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 
 type Staff = typeof staffTable.$inferSelect;
-type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
+type PeriodSubject = typeof classPeriodSubject.$inferSelect & {
+  teachers: (typeof classPeriodTeacher.$inferSelect)[];
+};
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-/** Subject colours live in the design tokens (`--subject-1` … `--subject-8`). */
+/** Subject colours live in the design tokens (`--subject-1`
+ /* --subject-8`). */
 const SUBJECT_COLOR_COUNT = 8;
 
 const getSubjectColor = (subjectKey: string) => {
@@ -41,20 +44,25 @@ const getSubjectColor = (subjectKey: string) => {
   return `var(--subject-${(hash % SUBJECT_COLOR_COUNT) + 1})`;
 };
 
-const getCellBackgroundClass = ({
-  assignment,
-  isConflict,
-}: {
-  assignment: unknown;
-  isConflict: boolean;
-}) => {
-  if (!assignment) {
-    return "bg-primary/2";
-  }
-  return isConflict ? "bg-destructive/6" : "";
+/** Monday-Friday -> 1-5; weekends open on Monday. */
+const todayOrMonday = () => {
+  const day = new Date().getDay();
+  return day >= 1 && day <= 5 ? day : 1;
 };
 
-const getInitials = (name: string) =>
+interface TimetableGridProps {
+  subjects: PeriodSubject[];
+  staff: Map<string, Staff>;
+  conflictingTeacherIds: Set<string>;
+  onAddSubjectClick: (dayOfWeek: number, periodNumber: number) => void;
+  onAddTeacherClick: (subject: PeriodSubject) => void;
+  onDeleteSubjectClick: (subject: PeriodSubject) => void;
+  onDeleteTeacherClick: (
+    teacher: typeof classPeriodTeacher.$inferSelect
+  ) => void;
+}
+
+const getInitialsCached = (name: string): string =>
   name
     .replace(/^(?<prefix>Mr\.|Mrs\.|Ms\.|Dr\.)\s*/iu, "")
     .split(" ")
@@ -64,179 +72,146 @@ const getInitials = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-/** Monday–Friday → 1–5; weekends open on Monday. */
-const todayOrMonday = () => {
-  const day = new Date().getDay();
-  return day >= 1 && day <= 5 ? day : 1;
-};
-
-interface TimetableGridProps {
-  assignments: PeriodAssignment[];
-  periodConfig: PeriodConfig[];
+const SubjectCard = ({
+  subject,
+  staff,
+  conflictingTeacherIds,
+  onAddTeacherClick,
+  onDeleteSubjectClick,
+  onDeleteTeacherClick,
+}: {
+  subject: PeriodSubject;
   staff: Map<string, Staff>;
-  conflictingAssignmentIds: Set<string>;
-  onAssignClick: (dayOfWeek: number, periodNumber: number) => void;
-  onEditClick: (assignment: PeriodAssignment) => void;
-  onDeleteClick: (assignment: PeriodAssignment) => void;
-}
-
-interface SlotProps extends Omit<
-  TimetableGridProps,
-  "assignments" | "periodConfig" | "staff" | "conflictingAssignmentIds"
-> {
-  dayOfWeek: number;
-  periodNumber: number;
-  assignment: PeriodAssignment | undefined;
-  assignedStaff: Staff | undefined;
-  isConflict: boolean;
-}
-
-/**
- * One timetable slot. The filled state is a container with two sibling
- * buttons — "edit this slot" and a "more actions" menu — rather than a menu
- * button nested inside a button (invalid HTML, unpredictable focus). The
- * menu is always reachable: it shows on hover, on keyboard focus, and
- * permanently on touch screens.
- */
-const SlotContent = ({
-  dayOfWeek,
-  periodNumber,
-  assignment,
-  assignedStaff,
-  isConflict,
-  onAssignClick,
-  onEditClick,
-  onDeleteClick,
-}: SlotProps) => {
-  const slotName = `${DAYS_OF_WEEK[dayOfWeek - 1]}, period ${periodNumber}`;
-
-  if (!(assignment && assignedStaff)) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="text-muted-foreground hover:text-primary w-full"
-        aria-label={`Assign ${slotName}`}
-        onClick={() => onAssignClick(dayOfWeek, periodNumber)}
-      >
-        <IconPlus aria-hidden="true" className="mr-1 size-3" />
-        Assign
-      </Button>
-    );
-  }
+  conflictingTeacherIds: Set<string>;
+  onAddTeacherClick: (subject: PeriodSubject) => void;
+  onDeleteSubjectClick: (subject: PeriodSubject) => void;
+  onDeleteTeacherClick: (
+    teacher: typeof classPeriodTeacher.$inferSelect
+  ) => void;
+}) => {
+  const hasConflict = subject.teachers.some((t) =>
+    conflictingTeacherIds.has(t.id)
+  );
 
   return (
-    <div className="group relative">
-      <button
-        type="button"
-        className="bg-card hover:bg-accent/8 focus-visible:ring-ring w-full cursor-pointer border-l-[3px] p-2 pr-8 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
-        style={{
-          borderLeftColor: isConflict
-            ? "var(--color-destructive)"
-            : getSubjectColor(assignment.subjectKey),
-        }}
-        aria-label={`Edit ${slotName}: ${assignment.subjectKey}, ${assignedStaff.name}${isConflict ? ", double-booked" : ""}`}
-        onClick={() => onEditClick(assignment)}
-      >
-        <span className="block text-sm leading-snug font-semibold">
-          {assignment.subjectKey}
-        </span>
-        <span className="mt-1.5 flex items-center gap-1.5">
-          <span
-            aria-hidden="true"
-            className="bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center text-xs font-semibold"
+    <div
+      className="bg-card hover:bg-accent/8 focus-visible:ring-ring mb-2 border-l-[3px] p-2 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      style={{
+        borderLeftColor: hasConflict
+          ? "var(--color-destructive)"
+          : getSubjectColor(subject.subjectKey),
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">{subject.subjectKey}</div>
+          <div className="mt-1.5 space-y-1">
+            {subject.teachers.length === 0 ? (
+              <div className="text-muted-foreground type-caption italic">
+                No teachers assigned
+              </div>
+            ) : (
+              subject.teachers.map((teacher) => {
+                const teacherStaff = staff.get(teacher.staffId);
+                const isConflict = conflictingTeacherIds.has(teacher.id);
+                return (
+                  <div key={teacher.id} className="flex items-center gap-1.5">
+                    <span
+                      className={`${
+                        isConflict
+                          ? "bg-destructive text-destructive-foreground"
+                          : "bg-primary/10 text-primary"
+                      } flex size-5 shrink-0 items-center justify-center text-xs font-semibold`}
+                    >
+                      {getInitialsCached(teacherStaff?.name ?? "?")}
+                    </span>
+                    <span className="text-muted-foreground type-caption flex-1 truncate">
+                      {teacherStaff?.name ?? "Unknown"}
+                    </span>
+                    {isConflict && (
+                      <span className="text-destructive text-xs font-semibold" />
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => onDeleteTeacherClick(teacher)}
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                      aria-label={`Remove ${teacherStaff?.name}`}
+                    >
+                      <IconX className="size-3" />
+                    </Button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`More actions for ${subject.subjectKey}`}
+                className="shrink-0 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+              />
+            }
           >
-            {getInitials(assignedStaff.name)}
-          </span>
-          <span className="text-muted-foreground type-caption truncate">
-            {assignedStaff.name}
-          </span>
-        </span>
-        {isConflict && (
-          <span className="text-destructive type-caption mt-1.5 inline-flex items-center gap-1.5 font-semibold">
-            <span
-              aria-hidden="true"
-              className="bg-destructive size-1.5 rotate-45"
-            />
-            Double-booked
-          </span>
-        )}
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`More actions for ${slotName}`}
-              className="absolute top-0.5 right-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
-            />
-          }
-        >
-          <IconDotsVertical aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onEditClick(assignment)}>
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => onDeleteClick(assignment)}
-            className="text-destructive"
-          >
-            Unassign
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <IconDotsVertical aria-hidden="true" className="size-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="text-xs">
+            <DropdownMenuItem onClick={() => onAddTeacherClick(subject)}>
+              Add teacher
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onDeleteSubjectClick(subject)}
+              className="text-destructive"
+            >
+              Remove subject
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 };
 
 export const TimetableGrid = ({
-  assignments,
-  periodConfig,
+  subjects,
   staff,
-  conflictingAssignmentIds,
-  onAssignClick,
-  onEditClick,
-  onDeleteClick,
+  conflictingTeacherIds,
+  onAddSubjectClick,
+  onAddTeacherClick,
+  onDeleteSubjectClick,
+  onDeleteTeacherClick,
 }: TimetableGridProps) => {
   const [mobileDay, setMobileDay] = useState(todayOrMonday);
 
-  // Build a map for quick lookup
-  const assignmentMap = useMemo(() => {
-    const map = new Map<string, PeriodAssignment>();
-    for (const a of assignments) {
-      const key = `${a.dayOfWeek}-${a.periodNumber}`;
-      map.set(key, a);
+  // Group subjects by slot
+  const subjectsBySlot = useMemo(() => {
+    const map = new Map<string, PeriodSubject[]>();
+    for (const subject of subjects) {
+      const key = `${subject.dayOfWeek}-${subject.periodNumber}`;
+      const group = map.get(key) ?? [];
+      group.push(subject);
+      map.set(key, group);
     }
     return map;
-  }, [assignments]);
+  }, [subjects]);
 
   const sortedConfig = useMemo(
-    () => periodConfig.toSorted((a, b) => a.periodNumber - b.periodNumber),
-    [periodConfig]
+    () =>
+      CODE_DEFINED_PERIODS.toSorted((a, b) => a.periodNumber - b.periodNumber),
+    []
   );
 
   const subjectKeysPresent = useMemo(
-    () => [...new Set(assignments.map((a) => a.subjectKey))].toSorted(),
-    [assignments]
+    () => [...new Set(subjects.map((s) => s.subjectKey))].toSorted(),
+    [subjects]
   );
 
-  const slotProps = (dayOfWeek: number, periodNumber: number): SlotProps => {
-    const assignment = assignmentMap.get(`${dayOfWeek}-${periodNumber}`);
-    return {
-      dayOfWeek,
-      periodNumber,
-      assignment,
-      assignedStaff: assignment ? staff.get(assignment.staffId) : undefined,
-      isConflict: assignment
-        ? conflictingAssignmentIds.has(assignment.id)
-        : false,
-      onAssignClick,
-      onEditClick,
-      onDeleteClick,
-    };
-  };
+  const getSubjectsForSlot = (dayOfWeek: number, periodNumber: number) =>
+    subjectsBySlot.get(`${dayOfWeek}-${periodNumber}`) ?? [];
 
   return (
     <div className="space-y-3">
@@ -265,19 +240,69 @@ export const TimetableGrid = ({
           </h3>
           <ul className="m-0 list-none p-0">
             {sortedConfig.map((period) => {
-              const props = slotProps(mobileDay, period.periodNumber);
+              const slotSubjects = getSubjectsForSlot(
+                mobileDay,
+                period.periodNumber
+              );
               return (
                 <li
-                  key={period.id}
-                  className={`border-border grid grid-cols-[5.5rem_1fr] items-center gap-2 border-b p-2 last:border-b-0 ${getCellBackgroundClass(props)}`}
+                  key={period.periodNumber}
+                  className="border-border border-b p-2 last:border-b-0"
                 >
-                  <div>
-                    <div className="text-sm font-semibold">{`Period ${period.periodNumber}`}</div>
+                  <div className="mb-2">
+                    <div className="text-sm font-semibold">
+                      {`Period ${period.periodNumber}`}
+                    </div>
                     <div className="text-muted-foreground type-caption">
-                      {period.startTime}–{period.endTime}
+                      {period.startTime}
+                      {period.endTime}
                     </div>
                   </div>
-                  <SlotContent {...props} />
+                  <div className="group space-y-1">
+                    {slotSubjects.length === 0 ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-primary w-full"
+                        aria-label={`Add subject to period ${period.periodNumber}`}
+                        onClick={() =>
+                          onAddSubjectClick(mobileDay, period.periodNumber)
+                        }
+                      >
+                        <IconPlus aria-hidden="true" className="mr-1 size-3" />
+                        Add subject
+                      </Button>
+                    ) : (
+                      <>
+                        {slotSubjects.map((subject) => (
+                          <SubjectCard
+                            key={subject.id}
+                            subject={subject}
+                            staff={staff}
+                            conflictingTeacherIds={conflictingTeacherIds}
+                            onAddTeacherClick={onAddTeacherClick}
+                            onDeleteSubjectClick={onDeleteSubjectClick}
+                            onDeleteTeacherClick={onDeleteTeacherClick}
+                          />
+                        ))}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-primary w-full"
+                          aria-label={`Add another subject to period ${period.periodNumber}`}
+                          onClick={() =>
+                            onAddSubjectClick(mobileDay, period.periodNumber)
+                          }
+                        >
+                          <IconPlus
+                            aria-hidden="true"
+                            className="mr-1 size-3"
+                          />
+                          Add another
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -305,24 +330,83 @@ export const TimetableGrid = ({
           </TableHeader>
           <TableBody>
             {sortedConfig.map((period) => (
-              <TableRow key={period.id}>
+              <TableRow key={period.periodNumber}>
                 <TableHead
                   scope="row"
                   className="border-primary/12 text-foreground h-auto border-r tracking-normal normal-case"
                 >
-                  <div className="text-sm font-semibold">{`Period ${period.periodNumber}`}</div>
+                  <div className="text-sm font-semibold">
+                    {`Period ${period.periodNumber}`}
+                  </div>
                   <div className="text-muted-foreground type-caption font-normal">
-                    {period.startTime}–{period.endTime}
+                    {period.startTime}
+                    {period.endTime}
                   </div>
                 </TableHead>
                 {DAYS_OF_WEEK.map((day, dayIndex: number) => {
-                  const props = slotProps(dayIndex + 1, period.periodNumber);
+                  const slotSubjects = getSubjectsForSlot(
+                    dayIndex + 1,
+                    period.periodNumber
+                  );
                   return (
                     <TableCell
                       key={day}
-                      className={`relative min-h-16.5 p-1 text-center ${getCellBackgroundClass(props)}`}
+                      className="relative min-h-16.5 p-1 text-center"
                     >
-                      <SlotContent {...props} />
+                      <div className="group">
+                        {slotSubjects.length === 0 ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-primary w-full"
+                            aria-label={`Add subject to ${day}, period ${period.periodNumber}`}
+                            onClick={() =>
+                              onAddSubjectClick(
+                                dayIndex + 1,
+                                period.periodNumber
+                              )
+                            }
+                          >
+                            <IconPlus
+                              aria-hidden="true"
+                              className="mr-1 size-3"
+                            />
+                            Add
+                          </Button>
+                        ) : (
+                          <div className="space-y-1 text-left">
+                            {slotSubjects.map((subject) => (
+                              <SubjectCard
+                                key={subject.id}
+                                subject={subject}
+                                staff={staff}
+                                conflictingTeacherIds={conflictingTeacherIds}
+                                onAddTeacherClick={onAddTeacherClick}
+                                onDeleteSubjectClick={onDeleteSubjectClick}
+                                onDeleteTeacherClick={onDeleteTeacherClick}
+                              />
+                            ))}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-muted-foreground hover:text-primary w-full"
+                              aria-label={`Add subject to ${day}, period ${period.periodNumber}`}
+                              onClick={() =>
+                                onAddSubjectClick(
+                                  dayIndex + 1,
+                                  period.periodNumber
+                                )
+                              }
+                            >
+                              <IconPlus
+                                aria-hidden="true"
+                                className="mr-1 size-3"
+                              />
+                              Add
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                   );
                 })}

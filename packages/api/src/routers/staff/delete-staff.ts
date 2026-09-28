@@ -18,7 +18,7 @@ import {
 } from "@school-student-teacher-management/db/schema/inventory";
 import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
 import { subjectMark } from "@school-student-teacher-management/db/schema/marking";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import { classPeriodTeacher } from "@school-student-teacher-management/db/schema/periods";
 import {
   employmentVerification,
   passwordRotationHistory,
@@ -94,9 +94,9 @@ export const deleteStaff = requireStaffPermission("delete")
         .where(eq(shortLeaveUsage.staffId, input.id))
         .limit(1),
       context.db
-        .select({ id: classPeriodAssignment.id })
-        .from(classPeriodAssignment)
-        .where(eq(classPeriodAssignment.staffId, input.id))
+        .select({ id: classPeriodTeacher.id })
+        .from(classPeriodTeacher)
+        .where(eq(classPeriodTeacher.staffId, input.id))
         .limit(1),
       context.db
         .select({ id: teacherSubjectAssignment.id })
@@ -155,22 +155,22 @@ export const deleteStaff = requireStaffPermission("delete")
       // accounts. Do not "fix" this by adding the two probes back.
       ...(existing.userId
         ? [
-      context.db
-        .select({ id: inventoryItem.id })
-        .from(inventoryItem)
-        .where(
-          or(
+            context.db
+              .select({ id: inventoryItem.id })
+              .from(inventoryItem)
+              .where(
+                or(
                   eq(inventoryItem.managerStaffId, existing.userId),
                   eq(inventoryItem.custodianStaffId, existing.userId),
                   eq(inventoryItem.voidedByStaffId, existing.userId)
-          )
-        )
-        .limit(1),
-      context.db
-        .select({ id: inventoryCustodyHistory.id })
-        .from(inventoryCustodyHistory)
-        .where(
-          or(
+                )
+              )
+              .limit(1),
+            context.db
+              .select({ id: inventoryCustodyHistory.id })
+              .from(inventoryCustodyHistory)
+              .where(
+                or(
                   eq(
                     inventoryCustodyHistory.previousCustodianStaffId,
                     existing.userId
@@ -188,36 +188,36 @@ export const deleteStaff = requireStaffPermission("delete")
                     existing.userId
                   ),
                   eq(inventoryCustodyHistory.changedByStaffId, existing.userId)
-          )
-        )
-        .limit(1),
-      context.db
-        .select({ id: inventoryBorrow.id })
-        .from(inventoryBorrow)
+                )
+              )
+              .limit(1),
+            context.db
+              .select({ id: inventoryBorrow.id })
+              .from(inventoryBorrow)
               .where(eq(inventoryBorrow.borrowerStaffId, existing.userId))
-        .limit(1),
+              .limit(1),
             // A notice recipient row is evidence that this person was told
             // about a custody change, same reasoning as the history row
             // itself: `set null` on `staffId` is the schema's answer to "a
             // person may leave", not permission for a delete to blank out
             // who was notified.
-      context.db
-        .select({ id: inventoryCustodyNoticeRecipient.id })
-        .from(inventoryCustodyNoticeRecipient)
+            context.db
+              .select({ id: inventoryCustodyNoticeRecipient.id })
+              .from(inventoryCustodyNoticeRecipient)
               .where(
                 eq(inventoryCustodyNoticeRecipient.staffId, existing.userId)
               )
-        .limit(1),
-      context.db
-        .select({ id: inventoryDisposalStatusHistory.id })
-        .from(inventoryDisposalStatusHistory)
+              .limit(1),
+            context.db
+              .select({ id: inventoryDisposalStatusHistory.id })
+              .from(inventoryDisposalStatusHistory)
               .where(
                 eq(
                   inventoryDisposalStatusHistory.changedByStaffId,
                   existing.userId
                 )
               )
-        .limit(1),
+              .limit(1),
           ]
         : []),
     ]);

@@ -9,9 +9,10 @@ import {
 import { createFileRoute } from "@tanstack/react-router";
 
 import {
-  AssignPeriodDialog,
-  DeleteConfirmDialog,
-  EditPeriodDialog,
+  AddSubjectDialog,
+  AddTeacherDialog,
+  DeleteSubjectConfirmDialog,
+  DeleteTeacherConfirmDialog,
 } from "@/components/staff/period-management/period-dialogs";
 import { TimetableGrid } from "@/components/staff/period-management/timetable-grid";
 import { usePeriodsPage } from "@/components/staff/period-management/use-periods-page";
@@ -28,7 +29,10 @@ const RouteComponent = () => {
         eyebrow="Staff management"
         title="Period assignment"
         description={
-          <>Weekly timetable for one class. Click any empty slot to fill it.</>
+          <>
+            Weekly timetable for one class. Click any slot to add subjects and
+            teachers.
+          </>
         }
         actions={
           <>
@@ -153,16 +157,16 @@ const RouteComponent = () => {
           </Select>
         </div>
 
-        {page.periodConfig.length > 0 && (
+        {page.periods.length > 0 && (
           <div className="ml-auto flex flex-wrap items-center gap-4">
             <div>
               <div className="text-muted-foreground type-eyebrow">
-                Slots filled
+                Subjects assigned
               </div>
               <div className="mt-1.5 text-2xl leading-none font-bold tracking-[-0.02em] tabular-nums">
                 {page.timetableData.length}{" "}
                 <span className="text-muted-foreground text-sm font-medium">
-                  / {page.periodConfig.length * 5}
+                  / {page.periods.length * 5}
                 </span>
               </div>
             </div>
@@ -170,26 +174,29 @@ const RouteComponent = () => {
             <div>
               <div className="text-destructive type-eyebrow">Conflicts</div>
               <div className="text-destructive mt-1.5 text-2xl leading-none font-bold tracking-[-0.02em] tabular-nums">
-                {
-                  page.timetableData.filter((a) =>
-                    page.conflictingAssignmentIds.has(a.id)
-                  ).length
-                }
+                {page.timetableData.reduce(
+                  (count, subject) =>
+                    count +
+                    subject.teachers.filter((t) =>
+                      page.conflictingTeacherIds.has(t.id)
+                    ).length,
+                  0
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {page.selectedClass && page.periodConfig && page.timetableData ? (
+      {page.selectedClass && page.periods && page.timetableData ? (
         <TimetableGrid
-          assignments={page.timetableData}
-          periodConfig={page.periodConfig}
+          subjects={page.timetableData}
           staff={page.staffMap}
-          conflictingAssignmentIds={page.conflictingAssignmentIds}
-          onAssignClick={page.handleAssignClick}
-          onEditClick={page.handleEditClick}
-          onDeleteClick={page.handleDeleteClick}
+          conflictingTeacherIds={page.conflictingTeacherIds}
+          onAddSubjectClick={page.handleAddSubjectClick}
+          onAddTeacherClick={page.handleAddTeacherClick}
+          onDeleteSubjectClick={page.handleDeleteSubjectClick}
+          onDeleteTeacherClick={page.handleDeleteTeacherClick}
         />
       ) : (
         <div className="border-primary/22 text-muted-foreground flex min-h-[40vh] items-center justify-center border border-dashed text-sm">
@@ -197,33 +204,42 @@ const RouteComponent = () => {
         </div>
       )}
 
-      <AssignPeriodDialog
-        isOpen={page.isAssignDialogOpen}
-        onOpenChange={(open) => page.setIsAssignDialogOpen(open)}
-        onSubmit={page.handleAssignSubmit}
-        staff={[...page.staffMap.values()]}
+      <AddSubjectDialog
+        isOpen={page.isAddSubjectDialogOpen}
+        onOpenChange={(open) => page.setIsAddSubjectDialogOpen(open)}
+        onSubmit={page.handleAddSubjectSubmit}
         selectedClass={page.selectedClass ?? undefined}
         selectedSlot={page.selectedSlot}
         academicYearId={page.currentYear?.id}
-        isLoading={page.assignMutation.isPending}
+        isLoading={page.createSubjectMutation.isPending}
       />
 
-      <EditPeriodDialog
-        isOpen={page.isEditDialogOpen}
-        onOpenChange={(open) => page.setIsEditDialogOpen(open)}
-        onSubmit={page.handleEditSubmit}
-        selectedAssignment={page.selectedAssignment}
+      <AddTeacherDialog
+        isOpen={page.isAddTeacherDialogOpen}
+        onOpenChange={(open) => page.setIsAddTeacherDialogOpen(open)}
+        onSubmit={page.handleAddTeacherSubmit}
+        subject={page.selectedSubject}
         staff={[...page.staffMap.values()]}
-        selectedClass={page.selectedClass ?? undefined}
         academicYearId={page.currentYear?.id}
-        isLoading={page.updateMutation.isPending}
+        isLoading={page.assignTeacherMutation.isPending}
       />
 
-      <DeleteConfirmDialog
-        isOpen={page.isDeleteDialogOpen}
-        onOpenChange={(open) => page.setIsDeleteDialogOpen(open)}
-        onConfirm={page.handleConfirmDelete}
-        isLoading={page.deleteMutation.isPending}
+      <DeleteSubjectConfirmDialog
+        isOpen={page.isDeleteSubjectDialogOpen}
+        onOpenChange={(open) => page.setIsDeleteSubjectDialogOpen(open)}
+        onConfirm={page.handleConfirmDeleteSubject}
+        isLoading={page.deleteSubjectMutation.isPending}
+        subjectKey={page.selectedSubject?.subjectKey}
+      />
+
+      <DeleteTeacherConfirmDialog
+        isOpen={page.isDeleteTeacherDialogOpen}
+        onOpenChange={(open) => page.setIsDeleteTeacherDialogOpen(open)}
+        onConfirm={page.handleConfirmDeleteTeacher}
+        isLoading={page.removeTeacherMutation.isPending}
+        teacherName={
+          page.staffMap.get(page.selectedTeacher?.staffId ?? "")?.name
+        }
       />
     </div>
   );

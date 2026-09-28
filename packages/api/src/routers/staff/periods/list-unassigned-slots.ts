@@ -1,6 +1,6 @@
 import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import { classIdSchema } from "@school-student-teacher-management/db/schema/academics";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import { classPeriodSubject } from "@school-student-teacher-management/db/schema/periods";
 import { academicYearIdSchema } from "@school-student-teacher-management/db/schema/staff";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
@@ -8,8 +8,10 @@ import * as v from "valibot";
 import { adminProcedure } from "../../../index";
 
 /**
- * List all unassigned period slots for a class.
- * Returns (dayOfWeek, periodNumber) pairs with no assignment yet.
+ * List every fully-empty period slot for a class — slots with no subject on
+ * them at all. A slot with one subject already on it is not "unassigned"
+ * anymore even though more subjects could still be added to it; this list is
+ * for finding the slots nothing has been put on yet.
  * School week: Monday–Friday (1–5), 8 periods (1–8) = 40 slots max.
  */
 export const listUnassignedSlots = adminProcedure
@@ -23,14 +25,14 @@ export const listUnassignedSlots = adminProcedure
     // Get all assigned slots for this class
     const assigned = await context.db
       .select({
-        dayOfWeek: classPeriodAssignment.dayOfWeek,
-        periodNumber: classPeriodAssignment.periodNumber,
+        dayOfWeek: classPeriodSubject.dayOfWeek,
+        periodNumber: classPeriodSubject.periodNumber,
       })
-      .from(classPeriodAssignment)
+      .from(classPeriodSubject)
       .where(
         and(
-          eq(classPeriodAssignment.academicYearId, input.academicYearId),
-          eq(classPeriodAssignment.classId, input.classId)
+          eq(classPeriodSubject.academicYearId, input.academicYearId),
+          eq(classPeriodSubject.classId, input.classId)
         )
       );
 

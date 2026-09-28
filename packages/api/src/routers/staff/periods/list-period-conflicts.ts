@@ -1,4 +1,7 @@
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import { academicYearIdSchema } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
@@ -6,25 +9,34 @@ import * as v from "valibot";
 import { adminProcedure } from "../../../index";
 
 /**
- * Finds real double-bookings: a teacher assigned to more than one class in
- * the same (dayOfWeek, periodNumber) slot, where the overlap was NOT
+ * Finds real double-bookings: a teacher named on more than one subject-slot
+ * row in the same (dayOfWeek, periodNumber), where the overlap was NOT
  * explicitly marked as an intentional combined session. Returns the IDs of
- * every assignment row involved in such a conflict, so callers can flag them
- * without re-deriving the grouping logic.
+ * every `classPeriodTeacher` row involved in such a conflict, so callers can
+ * flag them without re-deriving the grouping logic.
+ *
+ * Co-teaching (two teachers on the *same* subject-slot row) is never a
+ * conflict — it only groups rows that share (staffId, dayOfWeek,
+ * periodNumber), so two different teachers on one subject never collide with
+ * each other here.
  */
 export const listPeriodConflicts = adminProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const records = await context.db
       .select({
-        id: classPeriodAssignment.id,
-        staffId: classPeriodAssignment.staffId,
-        dayOfWeek: classPeriodAssignment.dayOfWeek,
-        periodNumber: classPeriodAssignment.periodNumber,
-        isCombinedSession: classPeriodAssignment.isCombinedSession,
+        id: classPeriodTeacher.id,
+        staffId: classPeriodTeacher.staffId,
+        dayOfWeek: classPeriodSubject.dayOfWeek,
+        periodNumber: classPeriodSubject.periodNumber,
+        isCombinedSession: classPeriodTeacher.isCombinedSession,
       })
-      .from(classPeriodAssignment)
-      .where(eq(classPeriodAssignment.academicYearId, input.academicYearId));
+      .from(classPeriodTeacher)
+      .innerJoin(
+        classPeriodSubject,
+        eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+      )
+      .where(eq(classPeriodSubject.academicYearId, input.academicYearId));
 
     const bySlot = new Map<string, typeof records>();
     for (const record of records) {

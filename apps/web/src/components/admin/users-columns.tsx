@@ -15,9 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@school-student-teacher-management/ui/components/dropdown-menu";
 import {
-  IconArrowDown,
-  IconArrowUp,
-  IconArrowsSort,
   IconBan,
   IconCircleCheck,
   IconDotsVertical,
@@ -26,11 +23,12 @@ import {
   IconMail,
 } from "@tabler/icons-react";
 import { createColumnHelper } from "@tanstack/react-table";
-import type { Header } from "@tanstack/react-table";
 import type * as React from "react";
 import { toast } from "sonner";
 
-import type { UsersTableFeatures } from "./users-table-features";
+import { DataTableColumnHeader } from "@/components/ui-patterns/data-table/data-table-column-header";
+import type { ListTableFeatures } from "@/components/ui-patterns/data-table/list-table-features";
+
 import type { AccountRow } from "./users-types";
 
 /**
@@ -59,7 +57,7 @@ import type { AccountRow } from "./users-types";
  * refuses it too (the `databaseHooks` in `packages/auth`). A disabled item that
  * names the reason is honest; a blank cell is not.
  */
-const columnHelper = createColumnHelper<UsersTableFeatures, AccountRow>();
+const columnHelper = createColumnHelper<ListTableFeatures, AccountRow>();
 
 const getInitials = (name: string) =>
   name
@@ -76,93 +74,6 @@ export const formatAccountDate = (value: string): string => {
   const date = new Date(value);
 
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
-};
-
-/**
- * The direction glyph, and the fact that it is `aria-hidden`.
- *
- * The direction is already announced — through `aria-sort` on the `<th>`, which
- * the table sets from this same state — so putting it in the accessible name as
- * well would say it twice. The glyph is for the reader looking at the table; the
- * `title` on the button is for the mouse, and it says what the *next* click will
- * do, which is the only question a sort control is ever asked.
- */
-const SortGlyph: React.FC<{ sorted: false | "asc" | "desc" }> = ({
-  sorted,
-}) => {
-  if (sorted === "asc") {
-    return <IconArrowUp aria-hidden="true" className="size-3.5" />;
-  }
-
-  if (sorted === "desc") {
-    return <IconArrowDown aria-hidden="true" className="size-3.5" />;
-  }
-
-  return (
-    <IconArrowsSort
-      aria-hidden="true"
-      className="text-muted-foreground size-3.5 opacity-60"
-    />
-  );
-};
-
-/**
- * The `title` on a sort control, **derived from the current state**.
- *
- * It says what the next click will do, which is the only question a sort control
- * is ever asked, and it changes when the state does: a fixed string reads
- * correctly once and then lies for the rest of the session.
- */
-const sortHint = (sorted: false | "asc" | "desc", label: string): string => {
-  const what = label.toLowerCase();
-
-  if (sorted === "asc") {
-    return `Sorted by ${what}, A to Z. Activate to sort Z to A.`;
-  }
-
-  if (sorted === "desc") {
-    return `Sorted by ${what}, Z to A. Activate to sort A to Z.`;
-  }
-
-  return `Not sorted by ${what}. Activate to sort A to Z.`;
-};
-
-/**
- * A header that is also the sort control for its column.
- *
- * The name comes from `columnMeta` rather than from `column.id`, because the two
- * disagree on the column an administrator reads most: the id is `createdAt` and
- * the name is "Created". A menu or a tooltip that offers `createdAt` is a list of
- * implementation details wearing a control's clothes.
- *
- * Two states per column and no third: the button toggles ascending and
- * descending, and *un*sorting is a thing this table does not offer, because the
- * server's order (`createdAt` ascending) is already the first thing on the page
- * and there is nothing for a third click to go back to.
- *
- * Generic in the column's value type because each accessor column has its own —
- * `Header<…, string>` for the name and `Header<…, string | null>` for the login,
- * and neither is the `Header<…, unknown>` a non-generic prop would declare.
- */
-const SortableHeader = <TValue,>({
-  header,
-}: {
-  header: Header<UsersTableFeatures, AccountRow, TValue>;
-}) => {
-  const label = header.column.columnDef.meta?.label ?? header.column.id;
-  const sorted = header.column.getIsSorted();
-
-  return (
-    <button
-      type="button"
-      className="hover:text-foreground -ml-2 flex h-8 items-center gap-1.5 px-2 text-left transition-colors"
-      onClick={() => header.column.toggleSorting(sorted !== "asc")}
-      title={sortHint(sorted, label)}
-    >
-      {label}
-      <SortGlyph sorted={sorted} />
-    </button>
-  );
 };
 
 export interface UserColumnOptions {
@@ -370,7 +281,13 @@ export const buildUserColumns = ({
 
     columnHelper.accessor("name", {
       meta: { label: "Name" },
-      header: ({ header }) => <SortableHeader header={header} />,
+      header: ({ column }) => (
+        <DataTableColumnHeader
+          label={column.columnDef.meta?.label ?? column.id}
+          onSort={(direction) => column.toggleSorting(direction === "desc")}
+          sorted={column.getIsSorted()}
+        />
+      ),
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -411,7 +328,13 @@ export const buildUserColumns = ({
 
     columnHelper.accessor("role", {
       meta: { label: "Role" },
-      header: ({ header }) => <SortableHeader header={header} />,
+      header: ({ column }) => (
+        <DataTableColumnHeader
+          label={column.columnDef.meta?.label ?? column.id}
+          onSort={(direction) => column.toggleSorting(direction === "desc")}
+          sorted={column.getIsSorted()}
+        />
+      ),
       cell: ({ getValue }) => (
         <span className="text-primary inline-flex items-center text-xs font-bold">
           {roleLabel(getValue())}
@@ -431,7 +354,13 @@ export const buildUserColumns = ({
 
     columnHelper.accessor("createdAt", {
       meta: { label: "Created" },
-      header: ({ header }) => <SortableHeader header={header} />,
+      header: ({ column }) => (
+        <DataTableColumnHeader
+          label={column.columnDef.meta?.label ?? column.id}
+          onSort={(direction) => column.toggleSorting(direction === "desc")}
+          sorted={column.getIsSorted()}
+        />
+      ),
       cell: ({ getValue }) => (
         <span className="text-muted-foreground text-xs">
           {formatAccountDate(getValue())}

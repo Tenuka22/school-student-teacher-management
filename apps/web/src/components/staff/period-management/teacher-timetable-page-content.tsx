@@ -101,7 +101,6 @@ export const TeacherTimetablePageContent = ({
 
           <TeacherTimetableDialogs
             classes={page.classes}
-            periodConfig={page.periodConfig}
             selectedEntry={page.selectedEntry}
             addSlot={page.addSlot}
             isAddOpen={page.isAddDialogOpen}

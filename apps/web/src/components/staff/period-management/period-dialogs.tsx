@@ -1,6 +1,6 @@
 import type {
-  classPeriodAssignment as periodAssignmentTable,
-  periodConfig as periodConfigTable,
+  classPeriodSubject,
+  classPeriodTeacher,
 } from "@school-student-teacher-management/db/schema/periods";
 import type { staff } from "@school-student-teacher-management/db/schema/staff";
 import { Button } from "@school-student-teacher-management/ui/components/button";
@@ -12,12 +12,15 @@ import {
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
 
-import { PeriodAssignmentForm } from "@/components/staff/period-management/period-assignment-form";
+import { SubjectAssignmentForm } from "@/components/staff/period-management/subject-assignment-form";
+import { TeacherAssignmentForm } from "@/components/staff/period-management/teacher-assignment-form";
 import { ConfirmDialog } from "@/components/ui-patterns/confirm-dialog";
 
 type Staff = typeof staff.$inferSelect;
-type PeriodAssignment = typeof periodAssignmentTable.$inferSelect;
-export type PeriodConfig = typeof periodConfigTable.$inferSelect;
+type PeriodSubject = typeof classPeriodSubject.$inferSelect & {
+  teachers: (typeof classPeriodTeacher.$inferSelect)[];
+};
+
 export interface AcademicYear {
   id: string;
   year: number;
@@ -29,11 +32,10 @@ export interface PeriodClass {
   gradeLevel: number;
 }
 
-export const AssignPeriodDialog = ({
+export const AddSubjectDialog = ({
   isOpen,
   onOpenChange,
   onSubmit,
-  staff,
   selectedClass,
   selectedSlot,
   academicYearId,
@@ -42,7 +44,6 @@ export const AssignPeriodDialog = ({
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: unknown) => Promise<void>;
-  staff: Staff[];
   selectedClass: PeriodClass | undefined;
   selectedSlot: { dayOfWeek: number; periodNumber: number } | null;
   academicYearId: string | undefined;
@@ -51,20 +52,19 @@ export const AssignPeriodDialog = ({
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
       <DialogHeader className="shrink-0 border-b px-6 py-4">
-        <DialogTitle>Assign period</DialogTitle>
+        <DialogTitle>Add subject to period</DialogTitle>
         <DialogDescription>
-          Assign a staff member to this time slot
+          Select a subject for this time slot
         </DialogDescription>
       </DialogHeader>
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {selectedClass && selectedSlot && (
-          <PeriodAssignmentForm
-            formId="assign-period-form"
+          <SubjectAssignmentForm
+            formId="add-subject-form"
             gradeLevel={selectedClass.gradeLevel}
             dayOfWeek={selectedSlot.dayOfWeek}
             periodNumber={selectedSlot.periodNumber}
             academicYearId={academicYearId}
-            staff={staff}
             onSubmit={onSubmit}
             isLoading={isLoading}
           />
@@ -79,50 +79,44 @@ export const AssignPeriodDialog = ({
         >
           Cancel
         </Button>
-        <Button type="submit" form="assign-period-form" disabled={isLoading}>
-          {isLoading ? "Saving…" : "Assign"}
+        <Button type="submit" form="add-subject-form" disabled={isLoading}>
+          {isLoading ? "Adding…" : "Add subject"}
         </Button>
       </div>
     </DialogContent>
   </Dialog>
 );
 
-export const EditPeriodDialog = ({
+export const AddTeacherDialog = ({
   isOpen,
   onOpenChange,
   onSubmit,
-  selectedAssignment,
+  subject,
   staff,
-  selectedClass,
   academicYearId,
   isLoading,
 }: {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: unknown) => Promise<void>;
-  selectedAssignment: PeriodAssignment | null;
+  subject: PeriodSubject | null;
   staff: Staff[];
-  selectedClass: PeriodClass | undefined;
   academicYearId: string | undefined;
   isLoading: boolean;
 }) => (
   <Dialog open={isOpen} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-lg">
       <DialogHeader className="shrink-0 border-b px-6 py-4">
-        <DialogTitle>Edit period</DialogTitle>
-        <DialogDescription>Update the assignment details</DialogDescription>
+        <DialogTitle>Assign teacher</DialogTitle>
+        <DialogDescription>Add a teacher to this subject</DialogDescription>
       </DialogHeader>
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        {selectedClass && selectedAssignment && (
-          <PeriodAssignmentForm
-            formId="edit-period-form"
-            gradeLevel={selectedClass.gradeLevel}
-            dayOfWeek={selectedAssignment.dayOfWeek}
-            periodNumber={selectedAssignment.periodNumber}
-            academicYearId={academicYearId}
-            currentAssignmentId={selectedAssignment.id}
+        {subject && (
+          <TeacherAssignmentForm
+            formId="add-teacher-form"
             staff={staff}
-            initialData={selectedAssignment}
+            subject={subject}
+            academicYearId={academicYearId}
             onSubmit={onSubmit}
             isLoading={isLoading}
           />
@@ -137,32 +131,60 @@ export const EditPeriodDialog = ({
         >
           Cancel
         </Button>
-        <Button type="submit" form="edit-period-form" disabled={isLoading}>
-          {isLoading ? "Saving…" : "Save"}
+        <Button type="submit" form="add-teacher-form" disabled={isLoading}>
+          {isLoading ? "Assigning…" : "Assign"}
         </Button>
       </div>
     </DialogContent>
   </Dialog>
 );
 
-export const DeleteConfirmDialog = ({
+export const DeleteSubjectConfirmDialog = ({
   isOpen,
   onOpenChange,
   onConfirm,
   isLoading,
+  subjectKey,
 }: {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => Promise<void>;
   isLoading: boolean;
+  subjectKey?: string;
 }) => (
   <ConfirmDialog
     open={isOpen}
     onOpenChange={onOpenChange}
-    title="Unassign this period?"
-    description="The teacher and subject will be removed from this timetable slot. This cannot be undone."
-    confirmLabel="Unassign"
-    pendingLabel="Unassigning…"
+    title="Remove this subject?"
+    description={`${subjectKey} and all its teachers will be removed from the timetable slot. This cannot be undone.`}
+    confirmLabel="Remove subject"
+    pendingLabel="Removing…"
+    isPending={isLoading}
+    tone="destructive"
+    onConfirm={onConfirm}
+  />
+);
+
+export const DeleteTeacherConfirmDialog = ({
+  isOpen,
+  onOpenChange,
+  onConfirm,
+  isLoading,
+  teacherName,
+}: {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => Promise<void>;
+  isLoading: boolean;
+  teacherName?: string;
+}) => (
+  <ConfirmDialog
+    open={isOpen}
+    onOpenChange={onOpenChange}
+    title="Unassign this teacher?"
+    description={`${teacherName} will be removed from this subject. The subject remains on the timetable.`}
+    confirmLabel="Remove teacher"
+    pendingLabel="Removing…"
     isPending={isLoading}
     tone="destructive"
     onConfirm={onConfirm}

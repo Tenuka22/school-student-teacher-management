@@ -43,6 +43,13 @@
       "when": 1790446539067,
       "tag": "0005_big_wiccan",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790530200131,
+      "tag": "0006_condemned_the_hunter",
+      "breakpoints": true
     }
   ]
 }

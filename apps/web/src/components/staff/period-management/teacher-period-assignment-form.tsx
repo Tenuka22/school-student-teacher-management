@@ -158,7 +158,10 @@ const SelectField = ({
 }: SelectFieldProps) => (
   <Field data-invalid={!!error}>
     <FieldLabel htmlFor={id}>{label}</FieldLabel>
-    <Select value={value} onValueChange={(next) => next && onValueChange(next)}>
+    <Select
+      value={value}
+      onValueChange={(next: string) => next && onValueChange(next)}
+    >
       <SelectTrigger {...fieldA11y(id, { error })} disabled={disabled}>
         <SelectValue placeholder={placeholder}>
           {(selectedValue: string | null) =>

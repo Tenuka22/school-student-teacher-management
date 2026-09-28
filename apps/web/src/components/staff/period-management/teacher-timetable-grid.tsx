@@ -1,6 +1,6 @@
 "use client";
 
-import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
+import type { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { Card } from "@school-student-teacher-management/ui/components/card";
 import {
@@ -20,7 +20,7 @@ import {
 import { IconDotsVertical, IconPlus } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
+type PeriodConfig = (typeof CODE_DEFINED_PERIODS)[number];
 
 interface TeacherTimetableEntry {
   id: string;
@@ -36,7 +36,7 @@ const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 interface TeacherTimetableGridProps {
   entries: TeacherTimetableEntry[];
-  periodConfig: PeriodConfig[];
+  periodConfig: readonly PeriodConfig[];
   onAssignClick: (dayOfWeek: number, periodNumber: number) => void;
   onEditClick: (entry: TeacherTimetableEntry) => void;
   onDeleteClick: (entry: TeacherTimetableEntry) => void;
@@ -190,7 +190,7 @@ export const TeacherTimetableGrid = ({
           <ul className="m-0 list-none p-0">
             {sortedConfig.map((period) => (
               <li
-                key={period.id}
+                key={period.periodNumber}
                 className="border-border grid grid-cols-[5.5rem_1fr] items-start gap-2 border-b p-2 last:border-b-0"
               >
                 <div>
@@ -236,7 +236,7 @@ export const TeacherTimetableGrid = ({
           </TableHeader>
           <TableBody>
             {sortedConfig.map((period) => (
-              <TableRow key={period.id}>
+              <TableRow key={period.periodNumber}>
                 <TableHead
                   scope="row"
                   className="text-foreground h-auto tracking-normal normal-case"

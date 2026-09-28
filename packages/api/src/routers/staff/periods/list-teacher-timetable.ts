@@ -1,6 +1,9 @@
 import { ORPCError } from "@orpc/server";
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYearIdSchema,
   staff,
@@ -12,11 +15,12 @@ import * as v from "valibot";
 import { adminProcedure } from "../../../index";
 
 /**
- * List all period assignments for a teacher in a given academic year, with
- * class name/grade joined in. A teacher may legitimately have more than one
- * row for the same (dayOfWeek, periodNumber) - combined sessions (e.g. one
- * Dance/Music teacher running several classes at once) are intentional, not
- * a data error.
+ * List every subject-slot a teacher is named on, for a given academic year,
+ * with the class name/grade joined in. A teacher may legitimately be named on
+ * more than one row for the same (dayOfWeek, periodNumber) — combined
+ * sessions (one Dance/Music teacher running several classes at once) are
+ * intentional, not a data error, and co-teaching a subject with someone else
+ * shows up as one row per teacher, not one row per subject.
  */
 export const listTeacherTimetable = adminProcedure
   .input(
@@ -44,27 +48,29 @@ export const listTeacherTimetable = adminProcedure
 
     const records = await context.db
       .select({
-        id: classPeriodAssignment.id,
-        classId: classPeriodAssignment.classId,
+        id: classPeriodTeacher.id,
+        classId: classPeriodSubject.classId,
         className: class_.name,
         gradeLevel: class_.gradeLevel,
-        dayOfWeek: classPeriodAssignment.dayOfWeek,
-        periodNumber: classPeriodAssignment.periodNumber,
-        subjectKey: classPeriodAssignment.subjectKey,
-        createdAt: classPeriodAssignment.createdAt,
+        dayOfWeek: classPeriodSubject.dayOfWeek,
+        periodNumber: classPeriodSubject.periodNumber,
+        subjectKey: classPeriodSubject.subjectKey,
+        isCombinedSession: classPeriodTeacher.isCombinedSession,
+        createdAt: classPeriodTeacher.createdAt,
       })
-      .from(classPeriodAssignment)
-      .innerJoin(class_, eq(classPeriodAssignment.classId, class_.id))
+      .from(classPeriodTeacher)
+      .innerJoin(
+        classPeriodSubject,
+        eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+      )
+      .innerJoin(class_, eq(classPeriodSubject.classId, class_.id))
       .where(
         and(
-          eq(classPeriodAssignment.academicYearId, input.academicYearId),
-          eq(classPeriodAssignment.staffId, input.staffId)
+          eq(classPeriodSubject.academicYearId, input.academicYearId),
+          eq(classPeriodTeacher.staffId, input.staffId)
         )
       )
-      .orderBy(
-        classPeriodAssignment.dayOfWeek,
-        classPeriodAssignment.periodNumber
-      );
+      .orderBy(classPeriodSubject.dayOfWeek, classPeriodSubject.periodNumber);
 
     return records.map((record) => ({
       ...record,

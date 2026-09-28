@@ -1,5 +1,9 @@
 "use client";
 
+import type {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import type { staff as staffTable } from "@school-student-teacher-management/db/schema/staff";
 import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
@@ -23,31 +27,24 @@ import { errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
 
 type Staff = typeof staffTable.$inferSelect;
-interface Subject {
-  subjectKey: string;
-  gradeLevel: number;
-}
+type PeriodSubject = typeof classPeriodSubject.$inferSelect & {
+  teachers: (typeof classPeriodTeacher.$inferSelect)[];
+};
+
 interface TeacherTimetableEntry {
   dayOfWeek: number;
   periodNumber: number;
   className: string;
+  id: string;
 }
 
-interface PeriodAssignmentFormProps {
+interface TeacherAssignmentFormProps {
   formId: string;
   staff: Staff[];
-  gradeLevel: number;
-  dayOfWeek: number;
-  periodNumber: number;
+  subject: PeriodSubject;
   academicYearId: string | undefined;
-  currentAssignmentId?: string;
   onSubmit: (data: unknown) => Promise<void>;
   isLoading?: boolean;
-  initialData?: {
-    staffId: string;
-    subjectKey: string;
-    isCombinedSession?: boolean;
-  };
 }
 
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -86,38 +83,21 @@ const AvailabilityNotice = ({
   </div>
 );
 
-export const PeriodAssignmentForm = ({
+export const TeacherAssignmentForm = ({
   formId,
   staff,
-  gradeLevel,
-  dayOfWeek,
-  periodNumber,
+  subject,
   academicYearId,
-  currentAssignmentId,
   onSubmit,
   isLoading = false,
-  initialData,
-}: PeriodAssignmentFormProps) => {
+}: TeacherAssignmentFormProps) => {
   const [formData, setFormData] = useState({
-    staffId: initialData?.staffId || "",
-    subjectKey: initialData?.subjectKey || "",
+    staffId: "",
   });
-  const [isCombinedSession, setIsCombinedSession] = useState(
-    initialData?.isCombinedSession ?? false
-  );
+  const [isCombinedSession, setIsCombinedSession] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
-
-  const subjectsQuery = useQuery(orpc.staff.listSubjects.queryOptions({}));
-
-  const filteredSubjects = useMemo(() => {
-    const subjects = subjectsQuery.data as unknown[] | undefined;
-    if (!subjects) {
-      return [];
-    }
-    return (subjects as Subject[]).filter((s) => s.gradeLevel === gradeLevel);
-  }, [gradeLevel, subjectsQuery.data]);
 
   const teacherTimetableQuery = useQuery({
     ...orpc.staff.periods.listTeacherTimetable.queryOptions({
@@ -133,33 +113,26 @@ export const PeriodAssignmentForm = ({
 
   const { weeklyPeriodCount, sameSlotElsewhere } = useMemo(() => {
     const entries = (teacherTimetableQuery.data ?? []) as
-      | (TeacherTimetableEntry & { id: string })[]
+      | TeacherTimetableEntry[]
       | undefined;
     if (!entries) {
       return { weeklyPeriodCount: 0, sameSlotElsewhere: [] as string[] };
     }
     const clash = entries.filter(
       (e) =>
-        e.dayOfWeek === dayOfWeek &&
-        e.periodNumber === periodNumber &&
-        e.id !== currentAssignmentId
+        e.dayOfWeek === subject.dayOfWeek &&
+        e.periodNumber === subject.periodNumber
     );
     return {
       weeklyPeriodCount: entries.length,
       sameSlotElsewhere: clash.map((c) => c.className),
     };
-  }, [
-    teacherTimetableQuery.data,
-    dayOfWeek,
-    periodNumber,
-    currentAssignmentId,
-  ]);
+  }, [teacherTimetableQuery.data, subject.dayOfWeek, subject.periodNumber]);
 
   const hasSlotClash = sameSlotElsewhere.length > 0;
 
   const schema = v.object({
     staffId: v.pipe(v.string(), v.minLength(1, "Staff is required")),
-    subjectKey: v.pipe(v.string(), v.minLength(1, "Subject is required")),
   });
 
   const handleChange = (field: string, value: string | null) => {
@@ -198,7 +171,7 @@ export const PeriodAssignmentForm = ({
       await onSubmit({ ...result.output, isCombinedSession });
     } catch (error) {
       setGeneralError(
-        error instanceof Error ? error.message : "Failed to assign period"
+        error instanceof Error ? error.message : "Failed to assign teacher"
       );
     }
   };
@@ -219,7 +192,8 @@ export const PeriodAssignmentForm = ({
           Timetable slot
         </p>
         <p className="text-muted-foreground m-0 mt-1 text-sm">
-          {DAY_NAMES[dayOfWeek]} · Period {periodNumber}
+          {DAY_NAMES[subject.dayOfWeek]} · Period {subject.periodNumber} ·{" "}
+          {subject.subjectKey}
         </p>
       </div>
 
@@ -255,42 +229,6 @@ export const PeriodAssignmentForm = ({
         {errors.staffId && (
           <FieldError id={errorId(`${formId}-staffId`)}>
             {errors.staffId}
-          </FieldError>
-        )}
-      </Field>
-
-      <Field data-invalid={Boolean(errors.subjectKey)}>
-        <FieldLabel htmlFor={`${formId}-subjectKey`}>
-          Subject <RequiredMark />
-        </FieldLabel>
-        <Select
-          value={formData.subjectKey}
-          onValueChange={(value: string) => {
-            if (value) {
-              handleChange("subjectKey", value);
-            }
-          }}
-        >
-          <SelectTrigger
-            {...fieldA11y(`${formId}-subjectKey`, {
-              error: errors.subjectKey,
-              required: true,
-            })}
-            disabled={isLoading || filteredSubjects.length === 0}
-          >
-            <SelectValue placeholder="Select subject" />
-          </SelectTrigger>
-          <SelectContent>
-            {filteredSubjects.map((subject) => (
-              <SelectItem key={subject.subjectKey} value={subject.subjectKey}>
-                {subject.subjectKey}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors.subjectKey && (
-          <FieldError id={errorId(`${formId}-subjectKey`)}>
-            {errors.subjectKey}
           </FieldError>
         )}
       </Field>

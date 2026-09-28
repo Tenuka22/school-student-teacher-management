@@ -102,7 +102,10 @@ import { ORPCError } from "@orpc/server";
 import { isAdminRole } from "@school-student-teacher-management/auth";
 import { class_ } from "@school-student-teacher-management/db/schema/academics";
 import { studentClassAssignment } from "@school-student-teacher-management/db/schema/marking";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import {
+  classPeriodSubject,
+  classPeriodTeacher,
+} from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYear,
   staff,
@@ -382,13 +385,17 @@ export const assertCallerTeachesClass = async (
   let isPeriodTeacher = false;
   if (!isHomeroom && !isSubHomeroom) {
     const [slot] = await db
-      .select({ id: classPeriodAssignment.id })
-      .from(classPeriodAssignment)
+      .select({ id: classPeriodTeacher.id })
+      .from(classPeriodTeacher)
+      .innerJoin(
+        classPeriodSubject,
+        eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+      )
       .where(
         and(
-          eq(classPeriodAssignment.classId, input.classId),
-          eq(classPeriodAssignment.academicYearId, classRow.academicYearId),
-          eq(classPeriodAssignment.staffId, staffId)
+          eq(classPeriodSubject.classId, input.classId),
+          eq(classPeriodSubject.academicYearId, classRow.academicYearId),
+          eq(classPeriodTeacher.staffId, staffId)
         )
       )
       .limit(1);
@@ -477,12 +484,16 @@ export const listCallerTaughtClassIds = async (
         )
       ),
     db
-      .selectDistinct({ classId: classPeriodAssignment.classId })
-      .from(classPeriodAssignment)
+      .selectDistinct({ classId: classPeriodSubject.classId })
+      .from(classPeriodTeacher)
+      .innerJoin(
+        classPeriodSubject,
+        eq(classPeriodTeacher.classPeriodSubjectId, classPeriodSubject.id)
+      )
       .where(
         and(
-          eq(classPeriodAssignment.academicYearId, academicYearId),
-          eq(classPeriodAssignment.staffId, staffId)
+          eq(classPeriodSubject.academicYearId, academicYearId),
+          eq(classPeriodTeacher.staffId, staffId)
         )
       ),
   ]);

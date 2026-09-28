@@ -1,4 +1,3 @@
-import type { periodConfig as periodConfigTable } from "@school-student-teacher-management/db/schema/periods";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -16,8 +15,6 @@ interface Class {
   name: string;
   gradeLevel: number;
 }
-type PeriodConfig = typeof periodConfigTable.$inferSelect;
-
 interface TeacherTimetableEntry {
   id: string;
   classId: string;
@@ -30,7 +27,6 @@ interface TeacherTimetableEntry {
 
 interface TeacherTimetableDialogsProps {
   classes: Class[];
-  periodConfig: PeriodConfig[];
   selectedEntry: TeacherTimetableEntry | null;
   addSlot: { dayOfWeek: number; periodNumber: number } | null;
   isAddOpen: boolean;
@@ -49,7 +45,6 @@ interface TeacherTimetableDialogsProps {
 
 export const TeacherTimetableDialogs = ({
   classes,
-  periodConfig,
   selectedEntry,
   addSlot,
   isAddOpen,
@@ -81,7 +76,6 @@ export const TeacherTimetableDialogs = ({
           <TeacherPeriodAssignmentForm
             formId="add-teacher-period-form"
             classes={classes}
-            periodConfig={periodConfig}
             onSubmit={onAddSubmit}
             isLoading={isAddPending}
             prefillSlot={addSlot ?? undefined}
@@ -121,7 +115,6 @@ export const TeacherTimetableDialogs = ({
             <TeacherPeriodAssignmentForm
               formId="edit-teacher-period-form"
               classes={classes}
-              periodConfig={periodConfig}
               onSubmit={onEditSubmit}
               isLoading={isEditPending}
               initialData={{

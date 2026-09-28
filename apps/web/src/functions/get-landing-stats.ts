@@ -5,7 +5,7 @@ import {
   student,
   studentClassAssignment,
 } from "@school-student-teacher-management/db/schema/marking";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import { classPeriodSubject } from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYear,
   staff,
@@ -124,9 +124,9 @@ export const getLandingStats = createServerFn({ method: "GET" }).handler(
               .from(class_)
               .where(eq(class_.academicYearId, yearId)),
             db
-              .select({ id: classPeriodAssignment.id })
-              .from(classPeriodAssignment)
-              .where(eq(classPeriodAssignment.academicYearId, yearId)),
+              .select({ id: classPeriodSubject.id })
+              .from(classPeriodSubject)
+              .where(eq(classPeriodSubject.academicYearId, yearId)),
             db
               .select({ id: leaveRequest.id })
               .from(leaveRequest)

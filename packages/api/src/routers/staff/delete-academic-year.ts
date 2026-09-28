@@ -19,7 +19,7 @@ import {
   studentClassAssignment,
   studentSubjectSelection,
 } from "@school-student-teacher-management/db/schema/marking";
-import { classPeriodAssignment } from "@school-student-teacher-management/db/schema/periods";
+import { classPeriodSubject } from "@school-student-teacher-management/db/schema/periods";
 import {
   academicYear,
   academicYearIdSchema,
@@ -57,7 +57,7 @@ const DEPENDENT_TABLES = [
   { table: teacherAttendance, label: "attendance records" },
   { table: attendancePolicy, label: "attendance policy" },
   { table: shortLeaveUsage, label: "attendance usage" },
-  { table: classPeriodAssignment, label: "period assignments" },
+  { table: classPeriodSubject, label: "period assignments" },
   { table: classTeacherAssignmentHistory, label: "homeroom history" },
   { table: examType, label: "exam types" },
   { table: gradeScale, label: "grade scales" },
