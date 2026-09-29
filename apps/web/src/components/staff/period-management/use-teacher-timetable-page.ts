@@ -59,7 +59,19 @@ const readStateOf = (query: {
 };
 
 export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
-  const [staffId, setStaffId] = useState(initialStaffId ?? "");
+  const [pickedStaffId, setPickedStaffId] = useState("");
+
+  /**
+   * The teacher on screen.
+   *
+   * The route's id always wins when there is one. Seeding `useState` from it
+   * would capture the first teacher this component mounted with and keep
+   * showing them: `/teacher-timetable/A` to `/teacher-timetable/B` re-renders
+   * this component, it does not remount it. Derived instead, so a new param
+   * takes effect on the very render that carries it. `setPickedStaffId`
+   * matters only on the index route, where there is no param to read.
+   */
+  const staffId = initialStaffId ?? pickedStaffId;
 
   const currentYearQuery = useQuery(
     orpc.staff.listAcademicYears.queryOptions()
@@ -319,6 +331,22 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
     ? readStateOf(timetableQuery)
     : "unread";
 
+  /**
+   * Distinct day-and-period slots the teacher occupies.
+   *
+   * `entries` is one row per class taught, so a combined session covering
+   * three classes in one period counts as three. The header figures are about
+   * periods, not classes: three classes taught at once is one period taught
+   * and one slot fewer free.
+   */
+  const occupiedSlotCount = useMemo(
+    () =>
+      new Set(
+        entries.map((entry) => `${entry.dayOfWeek}-${entry.periodNumber}`)
+      ).size,
+    [entries]
+  );
+
   const handleRetryEntries = useCallback(() => {
     void timetableQuery.refetch();
   }, [timetableQuery]);
@@ -341,7 +369,7 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
 
   return {
     staffId,
-    setStaffId,
+    setStaffId: setPickedStaffId,
     currentYear,
     currentYearRead: readStateOf(currentYearQuery),
     currentYearMessage: formatApiErrorMessage(
@@ -363,16 +391,15 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
       "The class list could not be read."
     ),
     handleRetryClasses,
-    periods: CODE_DEFINED_PERIODS,
     periodConfig: CODE_DEFINED_PERIODS,
     entries,
+    occupiedSlotCount,
     entriesRead,
     entriesMessage: formatApiErrorMessage(
       timetableQuery.error,
       "This teacher's timetable could not be read."
     ),
     handleRetryEntries,
-    isLoadingEntries: timetableQuery.isPending,
     conflictsRead,
     conflictsMessage: formatApiErrorMessage(
       conflictsQuery.error,

@@ -1,6 +1,7 @@
 "use client";
 
 import type { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
+import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { Card } from "@school-student-teacher-management/ui/components/card";
 import {
@@ -30,6 +31,12 @@ interface TeacherTimetableEntry {
   dayOfWeek: number;
   periodNumber: number;
   subjectKey: string;
+  /**
+   * Whether the server's conflict scan reported this row as an overlap the
+   * school never declared. Absent whenever the scan has not run, so a blank
+   * here is never read as "checked and clean".
+   */
+  isClash?: boolean;
 }
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -90,6 +97,15 @@ const SlotStack = ({
             <span className="text-muted-foreground type-caption block">
               {entry.subjectKey}
             </span>
+            {entry.isClash && (
+              <Badge
+                className="mt-1"
+                title="This teacher is teaching another class in this same period, and the slot is not recorded as a combined session."
+                variant="warning"
+              >
+                Double-booked
+              </Badge>
+            )}
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger
