@@ -710,9 +710,7 @@ export const getLockedVoidedItem = async (
   const [record] = await db
     .select()
     .from(inventoryItem)
-    .where(
-      and(eq(inventoryItem.id, itemId), isNotNull(inventoryItem.voidedAt))
-    )
+    .where(and(eq(inventoryItem.id, itemId), isNotNull(inventoryItem.voidedAt)))
     .limit(1)
     .for("update");
 
@@ -787,7 +785,9 @@ export const assertStaffIsAssignable = async (
   const [record] = await db
     .select({ id: user.id, name: user.name, role: user.role })
     .from(user)
-    .where(and(eq(user.id, userId), or(eq(user.banned, false), isNull(user.banned))))
+    .where(
+      and(eq(user.id, userId), or(eq(user.banned, false), isNull(user.banned)))
+    )
     .limit(1);
 
   if (!record) {
@@ -1329,7 +1329,8 @@ export const getUpstreamSubManagerStaffIds = async (
   }
 
   const idx = chain.lastIndexOf(immediatePreviousCustodianStaffId);
-  const upstream = idx >= 0 ? chain.slice(0, idx) : chain.slice(0, -1);
+  const isInChain = chain.includes(immediatePreviousCustodianStaffId);
+  const upstream = isInChain ? chain.slice(0, idx) : chain.slice(0, -1);
   return [...new Set(upstream)];
 };
 
@@ -1356,7 +1357,10 @@ export const insertCustodyNoticeRecipients = async (
   db: Executor,
   input: InsertCustodyNoticeRecipientsInput
 ): Promise<void> => {
-  const roleByStaffId = new Map<string, "manager" | "previous_custodian" | "sub_manager">();
+  const roleByStaffId = new Map<
+    string,
+    "manager" | "previous_custodian" | "sub_manager"
+  >();
 
   const consider = (
     staffId: string | null,
@@ -1481,7 +1485,7 @@ export const computeDepreciatedValue = (row: {
   purchaseDate: Date | null;
   depreciationRatePercent: string | null;
 }): string | null => {
-  if (!(row.purchaseValue && row.purchaseDate && row.depreciationRatePercent)) {
+  if (!row.purchaseValue || !row.purchaseDate || !row.depreciationRatePercent) {
     return null;
   }
 

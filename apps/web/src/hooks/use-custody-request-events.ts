@@ -1,9 +1,8 @@
+import type { CustodyRequestEvent } from "@school-student-teacher-management/api/routers/inventory/custody-request-events";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { client, orpc } from "@/utils/orpc";
-
-import type { CustodyRequestEvent } from "@school-student-teacher-management/api/routers/inventory/custody-request-events";
 
 export type { CustodyRequestEvent } from "@school-student-teacher-management/api/routers/inventory/custody-request-events";
 
@@ -36,6 +35,7 @@ export const useCustodyRequestEvents = (
     onEventRef.current = onEvent;
   }, [onEvent]);
 
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup -- subscribe() opens inside run()'s async body, which the static check cannot follow; the cleanup below is real: controller.abort() cancels it whether or not it has resolved yet, and iterator?.return() unwinds it if it has
   useEffect(() => {
     const controller = new AbortController();
     // Held here, outside the async body, so the cleanup function below can
@@ -55,6 +55,10 @@ export const useCustodyRequestEvents = (
         // A manual pull loop rather than `for await…of`: it does the exact
         // same thing, and it is the form every reviewer here can step
         // through one `.next()` at a time.
+        // oxlint-disable-next-line no-await-in-loop -- an async generator's
+        // `.next()` is inherently sequential: the next event cannot be
+        // fetched before this one is handled, so there is nothing to batch
+        // into a `Promise.all` here.
         let step = await iterator.next();
         while (!step.done) {
           const event = step.value;
@@ -65,28 +69,38 @@ export const useCustodyRequestEvents = (
           // event landed on (incoming for the custodian, outgoing for the
           // requester) and the equipment views built from `myItems`, which
           // change the moment an `approved` event actually moves the item.
-          await queryClient.invalidateQueries({
-            queryKey: orpc.inventory.custody.requests.listIncoming.queryOptions(
-              { input: {} }
-            ).queryKey,
-          });
-          await queryClient.invalidateQueries({
-            queryKey: orpc.inventory.custody.requests.listOutgoing.queryOptions(
-              { input: {} }
-            ).queryKey,
-          });
+          const invalidations = [
+            queryClient.invalidateQueries({
+              queryKey:
+                orpc.inventory.custody.requests.listIncoming.queryOptions({
+                  input: {},
+                }).queryKey,
+            }),
+            queryClient.invalidateQueries({
+              queryKey:
+                orpc.inventory.custody.requests.listOutgoing.queryOptions({
+                  input: {},
+                }).queryKey,
+            }),
+          ];
           if (event.type === "approved") {
-            await queryClient.invalidateQueries({
-              queryKey: orpc.inventory.custody.myItems.queryOptions({
-                input: {},
-              }).queryKey,
-            });
-            await queryClient.invalidateQueries({
-              queryKey: orpc.inventory.custody.lent.queryOptions({ input: {} })
-                .queryKey,
-            });
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: orpc.inventory.custody.myItems.queryOptions({
+                  input: {},
+                }).queryKey,
+              }),
+              queryClient.invalidateQueries({
+                queryKey: orpc.inventory.custody.lent.queryOptions({
+                  input: {},
+                }).queryKey,
+              })
+            );
           }
+          // oxlint-disable-next-line no-await-in-loop -- already collected into one Promise.all per the rule's own advice; this is the one unavoidable wait for this event's invalidations before reading the next
+          await Promise.all(invalidations);
 
+          // oxlint-disable-next-line no-await-in-loop -- an async generator's .next() is inherently sequential, same as the first call above
           step = await iterator.next();
         }
       } catch (error) {
@@ -105,7 +119,7 @@ export const useCustodyRequestEvents = (
 
     return () => {
       controller.abort();
-      void iterator?.return(undefined);
+      void iterator?.return();
     };
   }, [queryClient]);
 
