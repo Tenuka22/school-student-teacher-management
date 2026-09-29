@@ -3,6 +3,14 @@
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { Input } from "@school-student-teacher-management/ui/components/input";
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@school-student-teacher-management/ui/components/select";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -26,6 +34,7 @@ import {
 } from "@tabler/icons-react";
 import { formatDistanceToNow } from "date-fns";
 import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 
 import type {
   CustodyHistoryEntry,
@@ -44,8 +53,12 @@ import {
 } from "@/components/staff/inventory/stock-dialogs";
 import { CustodyNotices } from "@/components/staff/teacher-portal/custody-notices";
 import { LentOutSection } from "@/components/staff/teacher-portal/lent-out-section";
+import {
+  ANY_EQUIPMENT_FILTER,
+  useMyEquipment,
+} from "@/components/staff/teacher-portal/use-my-equipment";
 import type { MyEquipmentApi } from "@/components/staff/teacher-portal/use-my-equipment";
-import { useMyEquipment } from "@/components/staff/teacher-portal/use-my-equipment";
+import { DataTableColumnHeader } from "@/components/ui-patterns/data-table/data-table-column-header";
 
 /**
  * One person's name on a custody-history row is `PartyName`, imported from the
@@ -310,13 +323,43 @@ const EquipmentSection = ({
 }) => {
   let body: ReactNode;
 
+  const [sort, setSort] = useState<{
+    key: "name" | "categoryName" | "condition";
+    direction: "asc" | "desc";
+  } | null>(null);
+
+  /**
+   * The one place any of these three rows get reordered. `null` is the
+   * server's own order (whatever `listMyItems`/`custody.lent` returned), so
+   * "back to the default" in the header menu is a real third state and not a
+   * relabelled ascending sort.
+   */
+  const sortedItems = useMemo(() => {
+    if (!sort) {
+      return items;
+    }
+    const direction = sort.direction === "asc" ? 1 : -1;
+    return items.toSorted(
+      (a, b) => a[sort.key].localeCompare(b[sort.key]) * direction
+    );
+  }, [items, sort]);
+
+  const sortedFor = (key: "name" | "categoryName" | "condition") =>
+    sort?.key === key ? sort.direction : false;
+
+  const onSort =
+    (key: "name" | "categoryName" | "condition") =>
+    (direction: "asc" | "desc" | null) => {
+      setSort(direction ? { key, direction } : null);
+    };
+
   if (isLoading) {
     body = (
       <div className="p-3">
         <InventorySkeleton rows={4} />
       </div>
     );
-  } else if (items.length === 0) {
+  } else if (sortedItems.length === 0) {
     body = (
       <InventoryEmptyState title={emptyTitle} description={emptyDescription} />
     );
@@ -336,13 +379,21 @@ const EquipmentSection = ({
               className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]"
               scope="col"
             >
-              ITEM
+              <DataTableColumnHeader
+                label="Item"
+                onSort={onSort("name")}
+                sorted={sortedFor("name")}
+              />
             </TableHead>
             <TableHead
               className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]"
               scope="col"
             >
-              CATEGORY
+              <DataTableColumnHeader
+                label="Category"
+                onSort={onSort("categoryName")}
+                sorted={sortedFor("categoryName")}
+              />
             </TableHead>
             <TableHead
               className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]"
@@ -360,7 +411,11 @@ const EquipmentSection = ({
               className="text-accent h-11 text-xs font-extrabold tracking-[0.16em]"
               scope="col"
             >
-              CONDITION
+              <DataTableColumnHeader
+                label="Condition"
+                onSort={onSort("condition")}
+                sorted={sortedFor("condition")}
+              />
             </TableHead>
             <TableHead
               className="text-accent h-11 text-right text-xs font-extrabold tracking-[0.16em]"
@@ -371,7 +426,7 @@ const EquipmentSection = ({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => (
+          {sortedItems.map((item) => (
             <EquipmentRow
               key={item.id}
               item={item}
@@ -644,13 +699,19 @@ const ThreeIdeasNotice = ({ hidden }: { hidden: boolean }) => {
 };
 
 /**
- * Search only, and the whole of the page's filter.
+ * Search, category and condition — the whole of the page's filter.
  *
  * The status picker that used to sit here was removed with the status column, and
  * for the same reason: it filtered a derived value that says nothing about the
  * teacher's own property, and it sent that value to `listMyItems`, where a
  * hand-edited `?status=` could fail its picklist and replace the whole page with an
  * error. One box, one param, one thing that cannot be made to fail.
+ *
+ * Category and condition sit beside it as two selects, not two more text boxes:
+ * both are closed sets read off the teacher's own rows (`categoryOptions` /
+ * `conditionOptions` in the hook), so a select can never be typed into a state
+ * nothing on the page matches — the same asymmetry that kept the status filter
+ * out is what allows these two back in.
  *
  * **The label is `sr-only` and the placeholder carries the rest**, which is the
  * arrangement the rest of this app's search boxes use: the placeholder disappears
@@ -660,11 +721,23 @@ const ThreeIdeasNotice = ({ hidden }: { hidden: boolean }) => {
 const EquipmentSearchBar = ({
   search,
   onSearchChange,
+  categoryFilter,
+  onCategoryChange,
+  categoryOptions,
+  conditionFilter,
+  onConditionChange,
+  conditionOptions,
   hasActiveFilters,
   onClearFilters,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
+  categoryFilter: string;
+  onCategoryChange: (value: string) => void;
+  categoryOptions: string[];
+  conditionFilter: string;
+  onConditionChange: (value: string) => void;
+  conditionOptions: string[];
   hasActiveFilters: boolean;
   onClearFilters: () => void;
 }) => (
@@ -682,6 +755,48 @@ const EquipmentSearchBar = ({
         onChange={(event) => onSearchChange(event.target.value)}
       />
     </div>
+
+    <Select
+      onValueChange={(value: string | null) => {
+        onCategoryChange(value ?? ANY_EQUIPMENT_FILTER);
+      }}
+      value={categoryFilter}
+    >
+      <SelectTrigger aria-label="Filter by category" className="w-44">
+        <SelectValue placeholder="All categories" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectItem value={ANY_EQUIPMENT_FILTER}>All categories</SelectItem>
+          {categoryOptions.map((category) => (
+            <SelectItem key={category} value={category}>
+              {category}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+
+    <Select
+      onValueChange={(value: string | null) => {
+        onConditionChange(value ?? ANY_EQUIPMENT_FILTER);
+      }}
+      value={conditionFilter}
+    >
+      <SelectTrigger aria-label="Filter by condition" className="w-40">
+        <SelectValue placeholder="All conditions" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectItem value={ANY_EQUIPMENT_FILTER}>All conditions</SelectItem>
+          {conditionOptions.map((condition) => (
+            <SelectItem key={condition} value={condition}>
+              {condition}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
 
     {hasActiveFilters ? (
       <Button type="button" variant="ghost" onClick={onClearFilters}>
@@ -814,6 +929,12 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
     copyProblemReport,
     search,
     setSearch,
+    categoryFilter,
+    setCategoryFilter,
+    categoryOptions,
+    conditionFilter,
+    setConditionFilter,
+    conditionOptions,
     hasActiveFilters,
     clearFilters,
     openHistory,
@@ -924,6 +1045,12 @@ const MyEquipmentImpl = ({ section }: { section: EquipmentSectionFilter }) => {
           <EquipmentSearchBar
             search={search}
             onSearchChange={setSearch}
+            categoryFilter={categoryFilter}
+            onCategoryChange={setCategoryFilter}
+            categoryOptions={categoryOptions}
+            conditionFilter={conditionFilter}
+            onConditionChange={setConditionFilter}
+            conditionOptions={conditionOptions}
             hasActiveFilters={hasActiveFilters}
             onClearFilters={clearFilters}
           />

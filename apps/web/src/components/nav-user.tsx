@@ -18,7 +18,12 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@school-student-teacher-management/ui/components/sidebar";
-import { IconLogout, IconSelector, IconUserCircle } from "@tabler/icons-react";
+import {
+  IconLogout,
+  IconSelector,
+  IconUserCircle,
+  IconUsersGroup,
+} from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -40,8 +45,8 @@ export interface AccountMenuUser {
 }
 
 /**
- * The account dropdown's own content \u2014 profile summary, "Account &
- * password", "Log out" \u2014 detached from the sidebar-specific trigger that
+ * The account dropdown's own content — profile summary, "Account &
+ * password", "Log out" — detached from the sidebar-specific trigger that
  * `NavUser` wraps it in below. The teacher workspace's mobile top bar needs
  * the identical menu behind a different trigger (a bare avatar button, not a
  * full `SidebarMenuButton` row), so the menu itself is the reusable unit and
@@ -99,6 +104,20 @@ export const UserAccountMenu = ({
         >
           <IconUserCircle className="size-4" />
           Account &amp; password
+        </DropdownMenuItem>
+        {/* The only other route to this is Account settings' "Manage accounts"
+            button, which almost nobody finds — "Log out" below revokes every
+            session in the multi-session cookie (that is Better Auth's own
+            behaviour for `signOut`), so it is not how you add a second account
+            without losing the first. This is the direct path to `?switch=1`. */}
+        <DropdownMenuItem
+          className="cursor-pointer gap-2 rounded-none font-semibold"
+          onClick={() => {
+            navigate({ to: "/login", search: { switch: 1 } });
+          }}
+        >
+          <IconUsersGroup className="size-4" />
+          Switch or add account
         </DropdownMenuItem>
         <DropdownMenuItem
           className="text-destructive hover:bg-destructive/8 cursor-pointer gap-2 rounded-none font-semibold"

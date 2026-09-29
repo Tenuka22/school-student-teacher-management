@@ -59,7 +59,7 @@ export const applyLeave = teacherProcedure
   )
   .handler(async ({ input, context }) => {
     const [staffRecord] = await context.db
-      .select({ id: staff.id })
+      .select({ id: staff.id, gender: staff.gender })
       .from(staff)
       .where(eq(staff.userId, context.session.user.id))
       .limit(1);
@@ -67,6 +67,16 @@ export const applyLeave = teacherProcedure
     if (!staffRecord) {
       throw new ORPCError("NOT_FOUND", {
         message: "No staff profile is linked to your account yet",
+      });
+    }
+
+    // The College grants maternity leave per person (see the AGENTS.md leave
+    // section); it is not a request a male teacher's record can carry —
+    // the UI already hides the option, and this is the write-side backstop
+    // for a request built by hand.
+    if (input.type === "maternity" && staffRecord.gender === "male") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Maternity leave is not available for this staff record",
       });
     }
 

@@ -39,31 +39,34 @@ interface RouteSearch {
 const asString = (value: unknown): string =>
   typeof value === "string" ? value : "";
 
+/** The unpicked state of the category and condition selects below. */
+export const ANY_EQUIPMENT_FILTER = "all";
+
 /**
  * Everything the "My Equipment" page does, apart from drawing it.
  *
  * ## The three reads, and the one that is not on this page
  *
- * A `teacher` holds `inventory: ["read", "acknowledge"]` \u2014 read-only, plus the
- * narrow notice-acknowledgement action. Custody itself \u2014 who holds what, when
- * it moves, when it comes back \u2014 is set exclusively by the seeded Inventory
+ * A `teacher` holds `inventory: ["read", "acknowledge"]` — read-only, plus the
+ * narrow notice-acknowledgement action. Custody itself — who holds what, when
+ * it moves, when it comes back — is set exclusively by the seeded Inventory
  * Administrator account (`packages/auth/src/permissions.ts`); this page has no
  * mutation of its own left in it. `read`, on its own, says
  * nothing about *which rows* any of those reach; every read below is scoped to
  * the caller in its own query, and that scoping is the whole of its security. The
  * page makes three of them:
  *
- * - `custody.myItems` \u2014 `managerStaffId = me OR custodianStaffId = me`.
- * - `custody.lent` \u2014 `managerStaffId = me AND custodianStaffId IS NOT NULL AND
+ * - `custody.myItems` — `managerStaffId = me OR custodianStaffId = me`.
+ * - `custody.lent` — `managerStaffId = me AND custodianStaffId IS NOT NULL AND
  *   custodianStaffId <> me`. The third section, and the only read here that names
  *   a colleague; unavoidable, because you cannot act on a colleague's custody of
  *   your own equipment without knowing whose custody it is.
- * - `custody.history` \u2014 one item at a time, and only once the teacher has asked.
+ * - `custody.history` — one item at a time, and only once the teacher has asked.
  *
  * **`items.list` is the school-wide register and is not called from here**, by
  * any of them. It is `adminProcedure`, and a picker built on it would hand a
- * teacher the whole storebook \u2014 every item with every manager's and custodian's
- * name beside it \u2014 through a search box. `inventory.options.teachers` is
+ * teacher the whole storebook — every item with every manager's and custodian's
+ * name beside it — through a search box. `inventory.options.teachers` is
  * `adminProcedure` for the same reason and is **not** called from here either;
  * a teacher has no reason to see it now that assignment is the Inventory
  * Administrator's job, not theirs.
@@ -133,10 +136,27 @@ export const useMyEquipment = () => {
     return () => clearTimeout(timeout);
   }, [search, syncedSearch, writeSearchParams]);
 
-  const hasActiveFilters = committedSearch !== "";
+  /**
+   * Category and condition, unlike the search term, are never sent to the
+   * server and never reach the URL. Both are per-item facts already present on
+   * every row `listMyItems` and `custody.lent` return, so filtering on them is
+   * a client-side narrowing of a list already in hand — the same tier the
+   * attendance register's qualification and band filters sit at, and for the
+   * same reason: a second request would not answer a question the first
+   * response cannot already answer.
+   */
+  const [categoryFilter, setCategoryFilter] = useState(ANY_EQUIPMENT_FILTER);
+  const [conditionFilter, setConditionFilter] = useState(ANY_EQUIPMENT_FILTER);
+
+  const hasActiveFilters =
+    committedSearch !== "" ||
+    categoryFilter !== ANY_EQUIPMENT_FILTER ||
+    conditionFilter !== ANY_EQUIPMENT_FILTER;
 
   const clearFilters = useCallback(() => {
     writeSearchParams({ [SEARCH_PARAM]: undefined });
+    setCategoryFilter(ANY_EQUIPMENT_FILTER);
+    setConditionFilter(ANY_EQUIPMENT_FILTER);
   }, [writeSearchParams]);
 
   /**
@@ -160,6 +180,31 @@ export const useMyEquipment = () => {
   const items = useMemo(
     () => myItemsQuery.data?.items ?? [],
     [myItemsQuery.data]
+  );
+
+  /**
+   * Category and condition are per-item facts, so one predicate over one row
+   * is all three sections need — unlike the split below, which is about
+   * *whose* row this is, this is about *what kind* of row it is, and every
+   * section asks the same question of it.
+   */
+  const matchesFilters = useCallback(
+    (item: InventoryItemView) => {
+      if (
+        categoryFilter !== ANY_EQUIPMENT_FILTER &&
+        item.categoryName !== categoryFilter
+      ) {
+        return false;
+      }
+      if (
+        conditionFilter !== ANY_EQUIPMENT_FILTER &&
+        item.condition !== conditionFilter
+      ) {
+        return false;
+      }
+      return true;
+    },
+    [categoryFilter, conditionFilter]
   );
 
   /**
@@ -201,8 +246,11 @@ export const useMyEquipment = () => {
    * the teacher nothing, which is the whole cost of not splitting.
    */
   const inCharge = useMemo(
-    () => items.filter((item) => item.managerStaffId === staffId),
-    [items, staffId]
+    () =>
+      items.filter(
+        (item) => item.managerStaffId === staffId && matchesFilters(item)
+      ),
+    [items, staffId, matchesFilters]
   );
 
   /**
@@ -221,9 +269,11 @@ export const useMyEquipment = () => {
     () =>
       items.filter(
         (item) =>
-          item.custodianStaffId === staffId && item.managerStaffId !== staffId
+          item.custodianStaffId === staffId &&
+          item.managerStaffId !== staffId &&
+          matchesFilters(item)
       ),
-    [items, staffId]
+    [items, staffId, matchesFilters]
   );
 
   /**
@@ -285,7 +335,43 @@ export const useMyEquipment = () => {
     orpc.inventory.custody.lent.queryOptions({ input: myItemsInput })
   );
 
-  const lentOut = useMemo(() => lentQuery.data?.items ?? [], [lentQuery.data]);
+  const lentOut = useMemo(
+    () => (lentQuery.data?.items ?? []).filter(matchesFilters),
+    [lentQuery.data, matchesFilters]
+  );
+
+  /**
+   * The category and condition selects' own options, read off the rows the
+   * teacher actually has rather than off the school-wide category list —
+   * `categories.list` and `options.assignableStaff` are both `adminProcedure`
+   * and this page calls neither (see the note above on the three reads this
+   * page makes and no more), so a picklist of every category the College owns
+   * would offer a teacher choices that filter their own three sections down to
+   * nothing. Built from `items` and `lentQuery.data`, unfiltered by the
+   * selects themselves — an option a teacher just picked must stay in its own
+   * list, or picking it would empty the very control that picked it.
+   */
+  const categoryOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const item of items) {
+      names.add(item.categoryName);
+    }
+    for (const item of lentQuery.data?.items ?? []) {
+      names.add(item.categoryName);
+    }
+    return [...names].toSorted((a, b) => a.localeCompare(b));
+  }, [items, lentQuery.data]);
+
+  const conditionOptions = useMemo(() => {
+    const conditions = new Set<string>();
+    for (const item of items) {
+      conditions.add(item.condition);
+    }
+    for (const item of lentQuery.data?.items ?? []) {
+      conditions.add(item.condition);
+    }
+    return [...conditions].toSorted((a, b) => a.localeCompare(b));
+  }, [items, lentQuery.data]);
 
   /**
    * A partial key covering **every** input this procedure has been called with,
@@ -473,6 +559,12 @@ export const useMyEquipment = () => {
     // Filters
     search,
     setSearch,
+    categoryFilter,
+    setCategoryFilter,
+    categoryOptions,
+    conditionFilter,
+    setConditionFilter,
+    conditionOptions,
     hasActiveFilters,
     clearFilters,
 

@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@school-student-teacher-management/ui/components/select";
 import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -71,6 +71,17 @@ export const ApplyLeaveForm = ({
   const [errors, setErrors] = useState<
     Partial<Record<keyof FormState, string>>
   >({});
+
+  // Maternity is not a leave type every teacher can apply for — the College's
+  // own policy (see `DEFAULT_LEAVE_ENTITLEMENTS`) grants it per person, and a
+  // male teacher selecting it is not a real request the Deputy Principal or
+  // Principal can act on. Only hidden for a staff row that says "male";
+  // missing gender data leaves it visible rather than guessing.
+  const myStaffQuery = useQuery(orpc.staff.getMyStaff.queryOptions({}));
+  const isMale = myStaffQuery.data?.profile?.gender === "male";
+  const leaveTypes = isMale
+    ? LEAVE_TYPES.filter((type) => type.value !== "maternity")
+    : LEAVE_TYPES;
 
   const applyMutation = useMutation(
     orpc.staff.leaves.applyLeave.mutationOptions({
@@ -161,7 +172,7 @@ export const ApplyLeaveForm = ({
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {LEAVE_TYPES.map((type) => (
+                  {leaveTypes.map((type) => (
                     <SelectItem key={type.value} value={type.value}>
                       {type.label}
                     </SelectItem>
