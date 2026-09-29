@@ -5,6 +5,7 @@ import type { HeaderContext } from "@tanstack/react-table";
 
 import { DataTableColumnHeader } from "@/components/ui-patterns/data-table/data-table-column-header";
 import type { ListTableFeatures } from "@/components/ui-patterns/data-table/list-table-features";
+import { sortColumn } from "@/components/ui-patterns/data-table/sort-column";
 
 import type { LeaveAuthority, LeaveRequest } from "./leave-request";
 import { canReviewLeave } from "./leave-request";
@@ -34,7 +35,7 @@ const sortableHeader = <TValue,>({
   <DataTableColumnHeader
     label={column.columnDef.meta?.label ?? column.id}
     onSort={(direction) => {
-      column.toggleSorting(direction === "desc");
+      sortColumn(column, direction);
     }}
     sorted={column.getIsSorted()}
   />

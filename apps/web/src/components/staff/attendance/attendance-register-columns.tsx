@@ -25,6 +25,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import type { AttendancePageApi } from "@/components/staff/attendance/use-attendance-page";
 import { DataTableColumnHeader } from "@/components/ui-patterns/data-table/data-table-column-header";
 import type { ListTableFeatures } from "@/components/ui-patterns/data-table/list-table-features";
+import { sortColumn } from "@/components/ui-patterns/data-table/sort-column";
 
 import type { RegisterRow } from "./attendance-register-rows";
 
@@ -118,7 +119,7 @@ export const buildRegisterColumns = (
       header: ({ column }) => (
         <DataTableColumnHeader
           label={column.columnDef.meta?.label ?? column.id}
-          onSort={(direction) => column.toggleSorting(direction === "desc")}
+          onSort={(direction) => sortColumn(column, direction)}
           sorted={column.getIsSorted()}
         />
       ),

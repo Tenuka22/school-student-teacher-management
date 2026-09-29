@@ -28,6 +28,7 @@ import { toast } from "sonner";
 
 import { DataTableColumnHeader } from "@/components/ui-patterns/data-table/data-table-column-header";
 import type { ListTableFeatures } from "@/components/ui-patterns/data-table/list-table-features";
+import { sortColumn } from "@/components/ui-patterns/data-table/sort-column";
 
 import type { AccountRow } from "./users-types";
 
@@ -284,7 +285,7 @@ export const buildUserColumns = ({
       header: ({ column }) => (
         <DataTableColumnHeader
           label={column.columnDef.meta?.label ?? column.id}
-          onSort={(direction) => column.toggleSorting(direction === "desc")}
+          onSort={(direction) => sortColumn(column, direction)}
           sorted={column.getIsSorted()}
         />
       ),
@@ -331,7 +332,7 @@ export const buildUserColumns = ({
       header: ({ column }) => (
         <DataTableColumnHeader
           label={column.columnDef.meta?.label ?? column.id}
-          onSort={(direction) => column.toggleSorting(direction === "desc")}
+          onSort={(direction) => sortColumn(column, direction)}
           sorted={column.getIsSorted()}
         />
       ),
@@ -357,7 +358,7 @@ export const buildUserColumns = ({
       header: ({ column }) => (
         <DataTableColumnHeader
           label={column.columnDef.meta?.label ?? column.id}
-          onSort={(direction) => column.toggleSorting(direction === "desc")}
+          onSort={(direction) => sortColumn(column, direction)}
           sorted={column.getIsSorted()}
         />
       ),

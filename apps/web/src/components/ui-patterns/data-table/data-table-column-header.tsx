@@ -68,7 +68,9 @@ const sortHint = (sorted: false | "asc" | "desc", label: string): string => {
  * toggle, because a list whose order is in the URL has a third state to reach —
  * its own default — and a toggle has nowhere to put it. The default belongs to the
  * list, so `onSort(null)` is what "back to the default" means here; the caller
- * decides what its default is.
+ * decides what its default is. A caller that holds the `column` rather than a
+ * URL hands the direction to `sortColumn` (`./sort-column.ts`), which is the
+ * only thing that knows how to reach that third state through TanStack.
  *
  * A column the server cannot order by gets a plain string in its column
  * definition, not this with a handler that does nothing.
