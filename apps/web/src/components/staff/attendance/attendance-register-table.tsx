@@ -403,7 +403,7 @@ export const AttendanceRegisterTable = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="bg-card flex flex-wrap items-end gap-3 rounded-lg border px-4 py-3">
         <SearchField
           onChange={setSearch}
           onClear={() => {

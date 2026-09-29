@@ -131,7 +131,7 @@ export const recordArrival = adminProcedure
         }
       }
 
-      if (status === "halfDay") {
+      if (status === "halfDay" || status === "lateShortLeave") {
         const [existing] = await tx
           .select({ id: teacherAttendance.id })
           .from(teacherAttendance)
@@ -145,10 +145,16 @@ export const recordArrival = adminProcedure
           .limit(1);
         const id = existing?.id ?? crypto.randomUUID();
 
+        // "lateShortLeave" is a whole-day status with no missed periods (the
+        // arrival used up an allowance, it didn't cancel any period), while
+        // "halfDay" is recorded as "partial" plus the Primary block's periods
+        // -- the two need different rows, not one shape reused for both.
+        const dbStatus = status === "halfDay" ? "partial" : "lateShortLeave";
+
         if (existing) {
           await tx
             .update(teacherAttendance)
-            .set({ status: "partial", reason: note, markedAt: new Date() })
+            .set({ status: dbStatus, reason: note, markedAt: new Date() })
             .where(eq(teacherAttendance.id, id));
           await tx
             .delete(teacherPeriodAbsence)
@@ -159,19 +165,23 @@ export const recordArrival = adminProcedure
             staffId: input.staffId,
             academicYearId: input.academicYearId,
             date: input.date,
-            status: "partial",
+            status: dbStatus,
             reason: note,
           });
         }
 
-        await tx.insert(teacherPeriodAbsence).values(
-          missedPeriods.map((periodNumber) => ({
-            id: crypto.randomUUID(),
-            teacherAttendanceId: id,
-            periodNumber,
-            reason: note ?? "Late arrival",
-          }))
-        );
+        // A short leave misses no periods, so there is nothing to insert here
+        // for it -- an empty `.values([])` call is rejected by the driver.
+        if (missedPeriods.length > 0) {
+          await tx.insert(teacherPeriodAbsence).values(
+            missedPeriods.map((periodNumber) => ({
+              id: crypto.randomUUID(),
+              teacherAttendanceId: id,
+              periodNumber,
+              reason: note ?? "Late arrival",
+            }))
+          );
+        }
       }
 
       return {

@@ -481,108 +481,100 @@ export const AttendancePageContent = ({
 
       <AttendancePolicySection page={page} />
 
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-wrap items-end gap-2">
-            <Field className="w-24">
-              <FieldLabel htmlFor="attendance-day">Day</FieldLabel>
-              <Select
-                onValueChange={(value: string | null) => {
-                  if (value) {
-                    page.setDay(Number(value));
-                  }
-                }}
-                value={String(page.day)}
-              >
-                <SelectTrigger id="attendance-day">
-                  <SelectValue placeholder="Day" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {page.dayOptions.map((option) => (
-                      <SelectItem
-                        key={option.value}
-                        value={String(option.value)}
-                      >
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field className="w-40">
-              <FieldLabel htmlFor="attendance-month">Month</FieldLabel>
-              <Select
-                onValueChange={(value: string | null) => {
-                  if (value) {
-                    page.setMonth(Number(value));
-                  }
-                }}
-                value={String(page.month)}
-              >
-                <SelectTrigger id="attendance-month">
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {page.monthOptions.map((option) => (
-                      <SelectItem
-                        key={option.value}
-                        value={String(option.value)}
-                      >
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field className="w-28">
-              <FieldLabel htmlFor="attendance-year">Calendar year</FieldLabel>
-              <Select
-                onValueChange={(value: string | null) => {
-                  if (value) {
-                    page.setYear(Number(value));
-                  }
-                }}
-                value={String(page.year)}
-              >
-                <SelectTrigger id="attendance-year">
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {page.yearOptions.map((yearOption) => (
-                      <SelectItem key={yearOption} value={String(yearOption)}>
-                        {yearOption}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Button
-              disabled={page.isToday}
-              onClick={() => page.setDate(page.todayIso)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <IconCalendar data-icon="inline-start" />
-              Today
-            </Button>
-          </div>
-          <div className="ml-auto flex flex-wrap items-end gap-2">
-            <AttendanceExcelImport
-              academicYearId={page.currentYear?.id}
-              date={page.date}
-              onImported={() => {
-                void page.refetchAttendance();
+      <div className="bg-card flex flex-wrap items-end gap-4 rounded-lg border px-4 py-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <Field className="w-24">
+            <FieldLabel htmlFor="attendance-day">Day</FieldLabel>
+            <Select
+              onValueChange={(value: string | null) => {
+                if (value) {
+                  page.setDay(Number(value));
+                }
               }}
-              teachers={page.teachers}
-            />
-          </div>
+              value={String(page.day)}
+            >
+              <SelectTrigger id="attendance-day">
+                <SelectValue placeholder="Day" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {page.dayOptions.map((option) => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="w-40">
+            <FieldLabel htmlFor="attendance-month">Month</FieldLabel>
+            <Select
+              onValueChange={(value: string | null) => {
+                if (value) {
+                  page.setMonth(Number(value));
+                }
+              }}
+              value={String(page.month)}
+            >
+              <SelectTrigger id="attendance-month">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {page.monthOptions.map((option) => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="w-28">
+            <FieldLabel htmlFor="attendance-year">Calendar year</FieldLabel>
+            <Select
+              onValueChange={(value: string | null) => {
+                if (value) {
+                  page.setYear(Number(value));
+                }
+              }}
+              value={String(page.year)}
+            >
+              <SelectTrigger id="attendance-year">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {page.yearOptions.map((yearOption) => (
+                    <SelectItem key={yearOption} value={String(yearOption)}>
+                      {yearOption}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Button
+            disabled={page.isToday}
+            onClick={() => page.setDate(page.todayIso)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <IconCalendar data-icon="inline-start" />
+            Today
+          </Button>
+        </div>
+        <div className="ml-auto flex flex-wrap items-end gap-2">
+          <AttendanceExcelImport
+            academicYearId={page.currentYear?.id}
+            date={page.date}
+            onImported={() => {
+              void page.refetchAttendance();
+            }}
+            teachers={page.teachers}
+          />
         </div>
       </div>
 

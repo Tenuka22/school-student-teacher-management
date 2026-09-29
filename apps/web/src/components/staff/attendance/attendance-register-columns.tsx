@@ -165,10 +165,11 @@ export const buildRegisterColumns = (
         const absent = isAbsentStatus(record.status);
         const present = record.status === "present";
         const locked = record.isLeaveLocked;
+        const unmarked = record.status === "unmarked";
 
         return (
-          <div className="min-w-80 space-y-2">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="min-w-96 space-y-1.5 py-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <StatusBadge status={record.status} />
               {record.absentPeriods.length > 0 ? (
                 <span className="text-muted-foreground text-xs tabular-nums">
@@ -180,10 +181,171 @@ export const buildRegisterColumns = (
                   {record.leaveLabel}
                 </span>
               ) : null}
+
+              <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                {/* Nobody has said anything about this day yet: the three ways
+                    to say it are the row's whole reason for existing, so they
+                    stay in view. Once a day is marked, repeating the same three
+                    buttons next to the badge that already answers the question
+                    is noise — the kebab below takes over as the one place to
+                    change a mark, exactly the way "undo" replaces a toolbar
+                    button once the action it undoes has happened. */}
+                {unmarked ? (
+                  <>
+                    <Button
+                      aria-label={`Mark ${record.name} present`}
+                      disabled={locked}
+                      onClick={() => {
+                        // The reason goes with the status: `markAttendance` nulls
+                        // the column on a write that omits it, so a re-mark would
+                        // silently drop the note this row is carrying.
+                        void page.saveTeacherDay(
+                          record.staffId,
+                          new Map(),
+                          page.dayReason(record.staffId)
+                        );
+                      }}
+                      size="xs"
+                      type="button"
+                      variant="outline"
+                    >
+                      <IconCheck data-icon="inline-start" />
+                      Present
+                    </Button>
+                    <Button
+                      aria-label={`Mark ${record.name} absent for the day`}
+                      disabled={locked}
+                      onClick={() => {
+                        void page.toggleSchool(record.staffId);
+                      }}
+                      size="xs"
+                      type="button"
+                      variant="outline"
+                    >
+                      <IconUserOff data-icon="inline-start" />
+                      Absent
+                    </Button>
+                    {/* Arrival is a quick button, not buried in the kebab: it is
+                      the one action that can turn a day into a half day or a
+                      short leave (see `use-attendance-page.ts`'s cut-off and
+                      period-range rules), and that outcome deserves to be one
+                      click away, not two. */}
+                    <Button
+                      aria-label={`Record ${record.name}'s arrival time`}
+                      disabled={locked}
+                      onClick={() => {
+                        onArrival(record);
+                      }}
+                      size="xs"
+                      type="button"
+                      variant="outline"
+                    >
+                      <IconClock data-icon="inline-start" />
+                      Arrival
+                    </Button>
+                  </>
+                ) : null}
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        aria-label={`More ways to mark ${record.name}`}
+                        size="icon-xs"
+                        variant="ghost"
+                      >
+                        <IconDotsVertical />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="start">
+                    {/* A `DropdownMenuLabel` outside a `DropdownMenuGroup` throws
+                      "MenuGroupContext is missing" — the group is what gives the
+                      label a menu to sit in. */}
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>{record.name}</DropdownMenuLabel>
+                    </DropdownMenuGroup>
+                    {unmarked ? null : (
+                      <>
+                        <DropdownMenuItem
+                          disabled={locked}
+                          onClick={() => {
+                            void page.saveTeacherDay(
+                              record.staffId,
+                              new Map(),
+                              page.dayReason(record.staffId)
+                            );
+                          }}
+                        >
+                          <IconCheck />
+                          {present ? "Already present" : "Mark present"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={locked}
+                          onClick={() => {
+                            void page.toggleSchool(record.staffId);
+                          }}
+                        >
+                          <IconUserOff />
+                          {absent ? "Clear the absence" : "Mark absent"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={locked}
+                          onClick={() => {
+                            onArrival(record);
+                          }}
+                        >
+                          <IconClock />
+                          Record arrival…
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem
+                      disabled={locked}
+                      onClick={() => {
+                        onPeriods(record);
+                      }}
+                    >
+                      <IconListCheck />
+                      Pick the periods…
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onRemark(record);
+                      }}
+                    >
+                      <IconMessage2 />
+                      {record.remark === ""
+                        ? "Add a remark"
+                        : "Edit the remark"}
+                    </DropdownMenuItem>
+                    {locked ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <p className="text-muted-foreground flex items-start gap-2 px-2 py-1.5 text-xs">
+                          <IconAlertTriangle
+                            aria-hidden="true"
+                            className="mt-0.5 size-3.5 shrink-0"
+                          />
+                          {record.leaveLabel} is approved for this date, so the
+                          marks are locked.
+                        </p>
+                      </>
+                    ) : null}
+                    {record.status === "unmarked" ? null : (
+                      <p className="text-muted-foreground px-2 py-1.5 text-xs">
+                        This day is already marked — marking again replaces it.
+                      </p>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             {record.remark === "" ? null : (
-              <p className="text-muted-foreground max-w-72 text-xs">
+              <p className="text-muted-foreground max-w-96 text-xs">
                 <IconMessage2
                   aria-hidden="true"
                   className="mr-1 inline size-3.5"
@@ -191,109 +353,6 @@ export const buildRegisterColumns = (
                 {record.remark}
               </p>
             )}
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button
-                aria-label={`Mark ${record.name} present`}
-                disabled={locked}
-                onClick={() => {
-                  // The reason goes with the status: `markAttendance` nulls the
-                  // column on a write that omits it, so a re-mark would silently
-                  // drop the note this row is carrying.
-                  void page.saveTeacherDay(
-                    record.staffId,
-                    new Map(),
-                    page.dayReason(record.staffId)
-                  );
-                }}
-                size="xs"
-                type="button"
-                variant={present ? "secondary" : "outline"}
-              >
-                <IconCheck data-icon="inline-start" />
-                Present
-              </Button>
-              <Button
-                aria-label={`Mark ${record.name} absent for the day`}
-                disabled={locked}
-                onClick={() => {
-                  void page.toggleSchool(record.staffId);
-                }}
-                size="xs"
-                type="button"
-                variant={absent ? "destructive" : "outline"}
-              >
-                <IconUserOff data-icon="inline-start" />
-                {absent ? "Clear absence" : "Absent"}
-              </Button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      aria-label={`More ways to mark ${record.name}`}
-                      size="icon-xs"
-                      variant="ghost"
-                    >
-                      <IconDotsVertical />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="start">
-                  {/* A `DropdownMenuLabel` outside a `DropdownMenuGroup` throws
-                      "MenuGroupContext is missing" — the group is what gives the
-                      label a menu to sit in. */}
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>{record.name}</DropdownMenuLabel>
-                  </DropdownMenuGroup>
-                  <DropdownMenuItem
-                    disabled={locked}
-                    onClick={() => {
-                      onArrival(record);
-                    }}
-                  >
-                    <IconClock />
-                    Record arrival…
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={locked}
-                    onClick={() => {
-                      onPeriods(record);
-                    }}
-                  >
-                    <IconListCheck />
-                    Pick the periods…
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      onRemark(record);
-                    }}
-                  >
-                    <IconMessage2 />
-                    {record.remark === "" ? "Add a remark" : "Edit the remark"}
-                  </DropdownMenuItem>
-                  {locked ? (
-                    <>
-                      <DropdownMenuSeparator />
-                      <p className="text-muted-foreground flex items-start gap-2 px-2 py-1.5 text-xs">
-                        <IconAlertTriangle
-                          aria-hidden="true"
-                          className="mt-0.5 size-3.5 shrink-0"
-                        />
-                        {record.leaveLabel} is approved for this date, so the
-                        marks are locked.
-                      </p>
-                    </>
-                  ) : null}
-                  {record.status === "unmarked" ? null : (
-                    <p className="text-muted-foreground px-2 py-1.5 text-xs">
-                      This day is already marked — marking again replaces it.
-                    </p>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
           </div>
         );
       },

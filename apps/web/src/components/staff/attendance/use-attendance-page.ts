@@ -1045,17 +1045,23 @@ export const useAttendancePage = (
    * result into the draft. Used after an arrival is recorded, because the
    * server decides which periods a late arrival loses and the grid must show
    * its decision rather than guess at it.
+   *
+   * `staleTime: 0` overrides the app-wide 60s default: without it, `fetchQuery`
+   * happily hands back the cached pre-arrival snapshot whenever this runs
+   * inside that window, and the row that was just recorded reads as
+   * "Not marked" until the cache ages out on its own.
    */
   const refreshTeacherFromServer = useCallback(
     async (staffId: string) => {
       if (!hasYearId) {
         return;
       }
-      const rows = (await queryClient.fetchQuery(
-        orpc.staff.attendance.listAttendanceForDate.queryOptions({
+      const rows = (await queryClient.fetchQuery({
+        ...orpc.staff.attendance.listAttendanceForDate.queryOptions({
           input: { academicYearId: yearId, date },
-        })
-      )) as unknown as AttendanceForDateRow[];
+        }),
+        staleTime: 0,
+      })) as unknown as AttendanceForDateRow[];
       const row = rows.find((candidate) => candidate.staffId === staffId);
       setDraft((previous) => {
         const next = new Map(previous);
