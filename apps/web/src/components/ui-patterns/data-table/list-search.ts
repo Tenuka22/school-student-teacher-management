@@ -90,3 +90,22 @@ export const searchToPagination = (search: {
   pageIndex: search.page - 1,
   pageSize: search.size,
 });
+
+/**
+ * The search type a route **declares**, as opposed to the one its page reads.
+ *
+ * TanStack Router makes a route's search params *required* when the type its
+ * `validateSearch` returns has no optional member, and the consequence is at every
+ * `<Link>` to the page: `search={{ q: "", role: "all", status: "all", sort:
+ * "createdAt", dir: "asc", page: 1, size: 50 }}` — a full copy of the defaults at
+ * every link site, which is the duplication this whole arrangement exists to
+ * remove, and a copy that goes stale the first time a default changes.
+ *
+ * So a route declares `RouteSearch<T>` — every field optional, which is the
+ * truthful statement that a bare `/admin/2026/users` is a valid link — and the page
+ * re-runs the same parser over what it is handed. The parser is idempotent, so
+ * this is a second pass over an already-valid object and not a second opinion.
+ */
+export type RouteSearch<TSearch> = {
+  [TKey in keyof TSearch]?: TSearch[TKey];
+};
