@@ -1,3 +1,4 @@
+import { employmentStatusLabel } from "@school-student-teacher-management/db/constants/display";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +9,20 @@ import {
 } from "@school-student-teacher-management/ui/components/dialog";
 import { useState } from "react";
 
-/** One row of the review, as `listTeacherRequests` returns it. */
+import { describeBlocker } from "./request-blocker";
+import { formatDateTime, getWaitingFor } from "./teacher-request-format";
+
+/**
+ * One row of the review, as `listTeacherRequests` returns it.
+ *
+ * Hand-written to match the handler's return shape rather than inferred from it,
+ * because there is no `inferRouterOutput` helper in the installed `@orpc` — the
+ * schema lives in `packages/api/src/routers/staff/teacher-requests.ts` and this
+ * is its mirror. It drifted once (`sessionCount` became `signInCount`, and
+ * `staffRecord` was added for the blocker rules) and the queue broke at three
+ * call sites before the compiler noticed, which is exactly the failure a mirror
+ * is supposed to catch early.
+ */
 export interface TeacherRequest {
   id: string;
   name: string;
@@ -16,16 +30,22 @@ export interface TeacherRequest {
   username: string | null;
   displayUsername: string | null;
   hasAvatar: boolean;
-  role: string;
+  role: string | null;
   emailVerified: boolean;
   banned: boolean;
   banReason: string | null;
   createdAt: string;
   updatedAt: string;
-  sessionCount: number;
-  lastSeenAt: string | null;
-  lastSeenIp: string | null;
-  lastSeenAgent: string | null;
+  signInCount: number;
+  lastSignInAt: string | null;
+  lastSignInIp: string | null;
+  lastSignInAgent: string | null;
+  /** The staff record linked to this account, when there is one. */
+  staffRecord: {
+    id: string;
+    staffCategory: "teacher" | "officeStaff";
+    employmentStatus: string | null;
+  } | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -33,45 +53,6 @@ const ROLE_LABELS: Record<string, string> = {
   user: "General account",
 };
 
-const formatDateTime = (value: string | null): string => {
-  if (!value) {
-    return "Never";
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const getWaitingFor = (createdAt: string): string => {
-  const created = new Date(createdAt).getTime();
-
-  if (Number.isNaN(created)) {
-    return "—";
-  }
-
-  const days = Math.floor((Date.now() - created) / 86_400_000);
-
-  if (days <= 0) {
-    return "Today";
-  }
-
-  if (days === 1) {
-    return "1 day";
-  }
-
-  return `${days} days`;
-};
 const getToneClass = (tone: "default" | "good" | "bad"): string => {
   if (tone === "good") {
     return "text-[#0B5E1A]";
@@ -190,6 +171,25 @@ const getConfirmLabel = (isPending: boolean, isConfirming: boolean): string => {
   return isConfirming ? "Yes — approve as teacher" : "Approve as teacher";
 };
 
+/**
+ * What the linked staff record is, in one line.
+ *
+ * The deciding fact behind three of the server's four refusals, printed as a
+ * *fact* rather than a verdict — the verdict is `describeBlocker`'s, and it
+ * appears below as its own sentence. "None linked" rather than "Not set",
+ * because an account with no staff record is not a record with a gap in it.
+ */
+const describeStaffRecord = (record: TeacherRequest["staffRecord"]): string => {
+  if (!record) {
+    return "None linked";
+  }
+
+  const category =
+    record.staffCategory === "teacher" ? "Teacher" : "Office staff";
+
+  return `${category} · ${employmentStatusLabel(record.employmentStatus)}`;
+};
+
 interface ApproveTeacherDialogProps {
   request: TeacherRequest | null;
   isPending: boolean;
@@ -215,6 +215,14 @@ export const ApproveTeacherDialog = ({
 }: ApproveTeacherDialogProps) => {
   const [isConfirming, setIsConfirming] = useState(false);
   const isOpen = request !== null;
+  /**
+   * The server's four rules, decided once for the whole dialog.
+   *
+   * The primary button, the sentence under the footer and the queue's Status
+   * column all read this same answer, so a reader cannot be told two different
+   * things about one account depending on which of them they happen to look at.
+   */
+  const blocker = request === null ? null : describeBlocker(request);
 
   // The second click is the approval: the first reveals what is about to
   // happen, so nobody grants a role by muscle memory.
@@ -268,7 +276,15 @@ export const ApproveTeacherDialog = ({
               />
               <DetailRow
                 label="Registered as"
-                value={ROLE_LABELS[request.role] ?? request.role}
+                value={
+                  request.role === null
+                    ? "Not recorded"
+                    : (ROLE_LABELS[request.role] ?? request.role)
+                }
+              />
+              <DetailRow
+                label="Staff record"
+                value={describeStaffRecord(request.staffRecord)}
               />
               <DetailRow
                 label="Email verified"
@@ -286,19 +302,19 @@ export const ApproveTeacherDialog = ({
               />
               <DetailRow
                 label="Last active"
-                value={formatDateTime(request.lastSeenAt)}
+                value={formatDateTime(request.lastSignInAt)}
               />
               <DetailRow
                 label="Active sessions"
                 value={
-                  request.sessionCount === 0
+                  request.signInCount === 0
                     ? "None — they have not signed in since registering"
-                    : `${request.sessionCount}`
+                    : `${request.signInCount}`
                 }
               />
               <DetailRow
                 label="Last used from"
-                value={`${getAgentSummary(request.lastSeenAgent)}${request.lastSeenIp ? ` · ${request.lastSeenIp}` : ""}`}
+                value={`${getAgentSummary(request.lastSignInAgent)}${request.lastSignInIp ? ` · ${request.lastSignInIp}` : ""}`}
               />
             </dl>
           </div>
@@ -314,7 +330,7 @@ export const ApproveTeacherDialog = ({
           </button>
           <button
             type="button"
-            disabled={isPending || request?.emailVerified !== true}
+            disabled={isPending || blocker !== null}
             onClick={handlePrimary}
             className="bg-primary text-primary-foreground hover:bg-primary-hover px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
           >
@@ -322,11 +338,15 @@ export const ApproveTeacherDialog = ({
           </button>
         </DialogFooter>
 
-        {request && !request.emailVerified && (
+        {request !== null && !request.emailVerified && (
           <p className="text-destructive text-sm font-medium">
             This account has not confirmed its email address. Ask them to enter
             the code already sent to {request.email}, then review again.
           </p>
+        )}
+
+        {request !== null && request.emailVerified && blocker !== null && (
+          <p className="text-destructive text-sm font-medium">{blocker}</p>
         )}
       </DialogContent>
     </Dialog>

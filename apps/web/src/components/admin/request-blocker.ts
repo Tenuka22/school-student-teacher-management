@@ -1,15 +1,6 @@
-import { EMPLOYMENT_STATUSES } from "@school-student-teacher-management/db/constants/teachers";
-import type { EmploymentStatus } from "@school-student-teacher-management/db/constants/teachers";
+import { employmentStatusLabel } from "@school-student-teacher-management/db/constants/display";
 
 import type { TeacherRequest } from "./approve-teacher-dialog";
-
-/**
- * A stored employment status as a word. A status this build does not know is
- * shown as it is stored rather than as a blank, so a future value is visible
- * instead of silently missing.
- */
-export const employmentStatusLabel = (status: string): string =>
-  EMPLOYMENT_STATUSES[status as EmploymentStatus]?.label ?? status;
 
 /**
  * Why an account cannot be approved yet, or `null` when it can.

@@ -2,21 +2,53 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useListSearchWriter } from "@/components/ui-patterns/data-table/use-list-search-writer";
 import { PageHeader } from "@/components/ui-patterns/page-header";
 import { orpc } from "@/utils/orpc";
 
 import { ApproveTeacherDialog } from "./approve-teacher-dialog";
 import type { TeacherRequest } from "./approve-teacher-dialog";
+import { TeacherRequestsDataTable } from "./teacher-requests-data-table";
+import {
+  toTeacherRequestsSearchParams,
+  validateTeacherRequestsSearch,
+} from "./teacher-requests-search";
+import type { TeacherRequestsSearch } from "./teacher-requests-search";
 
 /**
  * People waiting on a staffing decision. The Principal and the administrator
  * approve; the server enforces that (`approveTeacherRequest` rejects anyone
  * else), so this view is only a convenience, never the gate. Approving opens
  * a review dialog first — see `ApproveTeacherDialog`.
+ *
+ * ## Why this is a table and not two lists
+ *
+ * It used to be two hand-rolled sections — "Ready to review" above, "Awaiting
+ * email verification" below — each row its own `<li>` with a button. The split
+ * named one of the four reasons the server refuses, so the other three sat in
+ * the "ready" pile with a button that always failed, and neither section could
+ * be searched, sorted or filtered. One list with a status column and a status
+ * filter answers the same question in one screenful, and the reason a row cannot
+ * be acted on is on the row.
+ *
+ * `search` is the route's validated query string, handed down rather than read
+ * here: the route owns the URL contract (`teacher-requests-search.ts`) and this
+ * component must not import the route file, because the route imports this one.
+ * Every write goes back out through `useListSearchWriter`, which navigates — one
+ * copy of the queue's view state, in the URL, and no second one here.
  */
-export const TeacherRequestsContent = () => {
+export const TeacherRequestsContent = ({
+  search,
+}: {
+  search: TeacherRequestsSearch;
+}) => {
   const queryClient = useQueryClient();
   const [reviewing, setReviewing] = useState<TeacherRequest | null>(null);
+
+  const write = useListSearchWriter(
+    validateTeacherRequestsSearch,
+    toTeacherRequestsSearchParams
+  );
 
   const requestsQuery = useQuery(orpc.staff.listTeacherRequests.queryOptions());
 
@@ -33,10 +65,6 @@ export const TeacherRequestsContent = () => {
     })
   );
 
-  const requests = requestsQuery.data ?? [];
-  const waiting = requests.filter((request) => request.emailVerified);
-  const blocked = requests.filter((request) => !request.emailVerified);
-
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
@@ -51,85 +79,22 @@ export const TeacherRequestsContent = () => {
         }
       />
 
-      {requestsQuery.isPending && (
-        <p className="text-muted-foreground text-sm">Loading requests…</p>
-      )}
+      <TeacherRequestsDataTable
+        isApproving={approveMutation.isPending}
+        isError={requestsQuery.isError}
+        isFetching={requestsQuery.isFetching}
+        isLoading={requestsQuery.isPending}
+        onRetry={() => {
+          void requestsQuery.refetch();
+        }}
+        onReview={setReviewing}
+        onSearchChange={(patch) => {
+          write(patch);
+        }}
+        requests={requestsQuery.data}
+        search={search}
+      />
 
-      {!requestsQuery.isPending && requests.length === 0 && (
-        <p className="text-muted-foreground text-sm">
-          Nobody is waiting to be approved.
-        </p>
-      )}
-
-      {waiting.length > 0 && (
-        <section className="border-border bg-card">
-          <h2 className="border-border text-muted-foreground type-eyebrow border-b px-[22px] py-3">
-            Ready to review
-          </h2>
-          <ul>
-            {waiting.map((request) => (
-              <li
-                key={request.id}
-                className="border-border flex flex-wrap items-center gap-3 border-b px-[22px] py-4 last:border-b-0"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="text-foreground type-body block font-semibold">
-                    {request.name}
-                  </span>
-                  <span className="text-muted-foreground block text-sm">
-                    {request.email} · username{" "}
-                    <span className="font-mono">{request.username ?? "—"}</span>
-                  </span>
-                  <span className="text-success mt-1 block text-sm">
-                    Email verified ·{" "}
-                    {request.role === "teacher-requester"
-                      ? "Asked to join as staff"
-                      : "General account"}
-                    {request.lastSeenAt === null
-                      ? " · never signed in"
-                      : ` · ${request.sessionCount} active session${request.sessionCount === 1 ? "" : "s"}`}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  disabled={approveMutation.isPending}
-                  onClick={() => setReviewing(request)}
-                  className="border-primary bg-primary text-primary-foreground hover:bg-primary-hover shrink-0 border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
-                >
-                  Review &amp; approve
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {blocked.length > 0 && (
-        <section className="border-border bg-card">
-          <h2 className="border-border text-muted-foreground type-eyebrow border-b px-[22px] py-3">
-            Awaiting email verification
-          </h2>
-          <ul>
-            {blocked.map((request) => (
-              <li
-                key={request.id}
-                className="border-border border-b px-[22px] py-4 last:border-b-0"
-              >
-                <span className="text-foreground type-body block font-semibold">
-                  {request.name}
-                </span>
-                <span className="text-muted-foreground block text-sm">
-                  {request.email}
-                </span>
-                <span className="text-destructive mt-1 block text-sm">
-                  Has not entered the code sent to their address yet — they
-                  cannot be approved until they do.
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
       <ApproveTeacherDialog
         isPending={approveMutation.isPending}
         onApprove={(userId) => approveMutation.mutate({ userId })}
