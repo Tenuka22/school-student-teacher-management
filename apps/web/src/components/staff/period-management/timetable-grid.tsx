@@ -96,7 +96,7 @@ const SubjectCard = ({
 
   return (
     <div
-      className="bg-card hover:bg-accent/8 focus-visible:ring-ring mb-2 border-l-[3px] p-2 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      className="bg-card hover:bg-accent/8 focus-visible:ring-ring ring-foreground/15 mb-2 border-l-[3px] p-2 text-left text-sm ring-1 transition-colors focus-visible:ring-2 focus-visible:outline-none"
       style={{
         borderLeftColor: hasConflict
           ? "var(--color-destructive)"
@@ -261,7 +261,7 @@ export const TimetableGrid = ({
                       are one token — "07:5008:25" — which is a time nobody can
                       read and a value nobody can check a bell schedule against.
                     */}
-                    <div className="text-muted-foreground type-caption">
+                    <div className="text-foreground/80 type-caption">
                       {period.startTime}–{period.endTime}
                     </div>
                   </div>
@@ -270,7 +270,7 @@ export const TimetableGrid = ({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-muted-foreground hover:text-primary w-full"
+                        className="text-foreground hover:text-primary w-full"
                         aria-label={`Add subject to period ${period.periodNumber}`}
                         onClick={() =>
                           onAddSubjectClick(mobileDay, period.periodNumber)
@@ -295,7 +295,7 @@ export const TimetableGrid = ({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-muted-foreground hover:text-primary w-full"
+                          className="text-foreground hover:text-primary w-full"
                           aria-label={`Add another subject to period ${period.periodNumber}`}
                           onClick={() =>
                             onAddSubjectClick(mobileDay, period.periodNumber)
@@ -337,15 +337,15 @@ export const TimetableGrid = ({
           </TableHeader>
           <TableBody>
             {sortedConfig.map((period) => (
-              <TableRow key={period.periodNumber}>
+              <TableRow key={period.periodNumber} className="border-primary/25">
                 <TableHead
                   scope="row"
-                  className="border-primary/12 text-foreground h-auto border-r tracking-normal normal-case"
+                  className="bg-card border-primary/25 text-foreground h-auto border-r tracking-normal normal-case"
                 >
                   <div className="text-sm font-semibold">
                     {`Period ${period.periodNumber}`}
                   </div>
-                  <div className="text-muted-foreground type-caption font-normal">
+                  <div className="text-foreground/80 type-caption font-normal">
                     {period.startTime}–{period.endTime}
                   </div>
                 </TableHead>
@@ -354,17 +354,28 @@ export const TimetableGrid = ({
                     dayIndex + 1,
                     period.periodNumber
                   );
+                  /*
+                    The first day column is bounded by the period cell's own
+                    right rule; every column after it needs its own, because two
+                    `bg-muted` cells touching have no edge between them and
+                    Monday quietly runs into Tuesday. `--border` (16%) was what
+                    was here and it does not survive being asked to divide a
+                    grey field from itself: at 1.2:1 nobody can see it.
+                  */
+                  const columnRule =
+                    dayIndex > 0 ? "border-l border-primary/25" : "";
+
                   return (
                     <TableCell
                       key={day}
-                      className="relative min-h-16.5 p-1 text-center"
+                      className={`bg-muted relative min-h-16.5 p-1 text-center ${columnRule}`}
                     >
                       <div className="group">
                         {slotSubjects.length === 0 ? (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-muted-foreground hover:text-primary w-full"
+                            className="text-foreground hover:text-primary w-full"
                             aria-label={`Add subject to ${day}, period ${period.periodNumber}`}
                             onClick={() =>
                               onAddSubjectClick(
@@ -395,7 +406,7 @@ export const TimetableGrid = ({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-muted-foreground hover:text-primary w-full"
+                              className="text-foreground hover:text-primary w-full"
                               aria-label={`Add subject to ${day}, period ${period.periodNumber}`}
                               onClick={() =>
                                 onAddSubjectClick(
