@@ -25,6 +25,26 @@ A year that does not exist is still refused, and `/account` is unaffected.
 
 All six read the year from the URL segment, and the header states the year and its record count, so the reader always knows which year they are looking at.
 
+## The table
+
+Each tab renders one shared data table — `historical-data-table.tsx` (`HistoryDataTable<TRow>`), fed by tab-specific column builders in `historical-data-columns.tsx` and typed row accessors in `historical-data-rows.ts`. It composes the house `ui-patterns/data-table` pieces (`DataTableFrame`, `DataTableSearchField`, `DataTableViewOptions`) rather than hand-rolled markup. Until this was built the six tabs were six independent hand-written lists, each with its own filtering and ordering held in component state.
+
+**URL state** (`historical-data-search.ts`), five params, no defaults in the address bar:
+
+| Param | Values | Notes |
+| --- | --- | --- |
+| `tab` | `staff` (default), `subjects`, `timetables`, `homerooms`, `leaves`, `attendance` | Absent when default |
+| `q` | free text | Matched against what each row _renders_, not stored keys |
+| `sort` | per-tab column id | Rejected for the current tab falls back to that tab's default |
+| `dir` | `asc` \| `desc` | Absent when the tab's default |
+| `status` | per-tab picklist, `""` = all | Homerooms → Change, Leaves → Decision, Attendance → Status |
+
+`tab` is what makes the page shareable: the route's `validateSearch` clamps first and strips defaults second, so a hand-typed link and an in-app link arrive in the same shape, and a `sort` key that belongs to another tab becomes the current tab's default instead of a header that highlights nothing.
+
+**Filtering and sorting are client-side**, in `historical-data-table.tsx`. `getHistoricalData` returns a whole year in one response, so there is nothing to page: no `pagination` state and no paging bar — the toolbar says `n of m shown` while narrowed, `m records` otherwise. Sorting goes through the table's `manualSorting` contract — the table only _reads_ `state.sorting`, and `orderHistoryRows` does the ordering — because TanStack's `toggleSorting` never removes a sort, so the "Back to the default order" header state cannot be reached through it.
+
+Headers call `onSort(columnId, direction)`; the page writes `HISTORY_SORT_DEFAULTS[tab]` for the reset case. The filter is one text field plus the tab's own status picklist, both written straight to the URL.
+
 ## What it deliberately does not do
 
 - **No export.** Exports were specified here once and never built. The Excel and PDF exports that do exist are the class timetable and teacher workbook, under Period Assignment and Teachers.
