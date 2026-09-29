@@ -8,15 +8,19 @@ import {
   EmptyTitle,
 } from "@school-student-teacher-management/ui/components/empty";
 import {
-  Field,
-  FieldLabel,
-} from "@school-student-teacher-management/ui/components/field";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@school-student-teacher-management/ui/components/select";
 import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
 import type { ReactNode } from "react";
 
 import { TeacherCombobox } from "@/components/staff/class-assignment/teacher-combobox";
 import { TeacherTimetableDialogs } from "@/components/staff/period-management/teacher-timetable-dialogs";
 import { TeacherTimetableGrid } from "@/components/staff/period-management/teacher-timetable-grid";
+import type { TeacherTimetableSearch } from "@/components/staff/period-management/teacher-timetable-search";
 import { useTeacherTimetablePage } from "@/components/staff/period-management/use-teacher-timetable-page";
 import { PageHeader } from "@/components/ui-patterns/page-header";
 
@@ -28,6 +32,8 @@ const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 interface TeacherTimetablePageContentProps {
   /** When set, the teacher is fixed by the route and never asked for again. */
   staffId?: string;
+  /** The validated URL picks, handed over by the route that declared them. */
+  search: TeacherTimetableSearch;
 }
 
 interface ReadProblemProps {
@@ -166,11 +172,34 @@ interface TimetableAreaProps {
 }
 
 /**
+ * The narrowing picks matched nothing on a week that does have periods.
+ *
+ * Deliberately not the "no periods are assigned" sentence: the teacher *does*
+ * teach, and the reason nothing is on screen is the three dropdowns above. The
+ * one thing that resolves it is here rather than back up in the bar, because
+ * this is the sentence the reader is already looking at.
+ */
+const FilteredEmpty = ({ onClear }: { onClear: () => void }) => (
+  <div className="border-primary/22 text-muted-foreground flex min-h-[40vh] flex-col items-center justify-center gap-3 border border-dashed p-6 text-center text-sm">
+    <p>No period on this teacher&apos;s timetable matches those filters.</p>
+    <Button onClick={onClear} size="sm" type="button" variant="outline">
+      Clear filters
+    </Button>
+  </div>
+);
+
+/**
  * The grid, and everything that decides whether it may be shown.
  *
  * The read is `[]` before a teacher is chosen, while it is in flight and after
  * a failure. Handing the grid any of those would render forty free slots and
  * call it a timetable, so each state has its own answer here.
+ *
+ * **The grid is fed `filteredEntries`, the strip above it is fed `entries`.**
+ * The strip describes the teacher's whole week — that is what "Periods / week"
+ * means — while the grid shows the slice the picks selected. A summary that
+ * narrowed with the grid would report two periods per week for a teacher who
+ * teaches thirty, which is false.
  */
 const TimetableArea = ({ page }: TimetableAreaProps) => {
   if (page.entriesRead === "failed") {
@@ -209,13 +238,17 @@ const TimetableArea = ({ page }: TimetableAreaProps) => {
         </p>
       )}
 
-      <TeacherTimetableGrid
-        entries={page.entries}
-        periodConfig={page.periodConfig}
-        onAssignClick={page.handleAssignClick}
-        onEditClick={page.handleEditClick}
-        onDeleteClick={page.handleDeleteClick}
-      />
+      {page.entries.length > 0 && page.filteredEntries.length === 0 ? (
+        <FilteredEmpty onClear={page.handleClearFilters} />
+      ) : (
+        <TeacherTimetableGrid
+          entries={page.filteredEntries}
+          periodConfig={page.periodConfig}
+          onAssignClick={page.handleAssignClick}
+          onEditClick={page.handleEditClick}
+          onDeleteClick={page.handleDeleteClick}
+        />
+      )}
     </div>
   );
 };
@@ -262,9 +295,10 @@ const setupProblemOf = (
 };
 
 export const TeacherTimetablePageContent = ({
+  search,
   staffId: fixedStaffId,
 }: TeacherTimetablePageContentProps) => {
-  const page = useTeacherTimetablePage(fixedStaffId);
+  const page = useTeacherTimetablePage(search, fixedStaffId);
   const setupProblem = setupProblemOf(page);
 
   let body: ReactNode = null;
@@ -320,16 +354,138 @@ export const TeacherTimetablePageContent = ({
         }
       />
 
-      {!fixedStaffId && (
-        <Field className="max-w-sm">
-          <FieldLabel htmlFor="teacher-timetable-select">Teacher</FieldLabel>
-          <TeacherCombobox
-            id="teacher-timetable-select"
-            value={page.staffId}
-            onValueChange={(next) => page.setStaffId(next)}
-          />
-        </Field>
-      )}
+      {/*
+        The narrowing bar, laid out the way the period-assignment page lays out
+        its own: one bordered row of labelled picks, each free to wrap onto the
+        next line rather than the row growing a horizontal scrollbar.
+
+        It renders even on `/teacher-timetable/$staffId`, where the teacher is
+        fixed by the route and its control is left out — the three picks below
+        still narrow a teacher nobody on that route can change.
+      */}
+      <div className="border-primary/14 bg-card flex flex-wrap items-end gap-3 border p-4">
+        {!fixedStaffId && (
+          <div className="block min-w-0 flex-1 basis-44">
+            <label
+              htmlFor="teacher-timetable-select"
+              className="text-foreground mb-1.5 block text-sm font-semibold"
+            >
+              Teacher
+            </label>
+            <TeacherCombobox
+              id="teacher-timetable-select"
+              value={page.staffId}
+              onValueChange={(next) => page.setStaffId(next)}
+            />
+          </div>
+        )}
+
+        <div className="block min-w-0 flex-1 basis-36">
+          <label
+            htmlFor="teacher-timetable-section"
+            className="text-foreground mb-1.5 block text-sm font-semibold"
+          >
+            Section
+          </label>
+          <Select
+            value={page.section}
+            onValueChange={(value: string | null) => {
+              if (value) {
+                page.setSection(value);
+              }
+            }}
+          >
+            <SelectTrigger
+              id="teacher-timetable-section"
+              className="w-full"
+              disabled={!page.staffId}
+            >
+              <SelectValue
+                placeholder={
+                  page.staffId ? "Select section" : "Select a teacher first"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {page.categoryOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="block min-w-0 flex-1 basis-36">
+          <label
+            htmlFor="teacher-timetable-grade"
+            className="text-foreground mb-1.5 block text-sm font-semibold"
+          >
+            Grade
+          </label>
+          <Select
+            value={page.grade}
+            onValueChange={(value: string | null) => {
+              if (value) {
+                page.setGrade(value);
+              }
+            }}
+          >
+            <SelectTrigger
+              id="teacher-timetable-grade"
+              className="w-full"
+              disabled={!page.section}
+            >
+              <SelectValue
+                placeholder={
+                  page.section ? "Select grade" : "Select section first"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {page.gradeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="block min-w-0 flex-1 basis-36">
+          <label
+            htmlFor="teacher-timetable-class"
+            className="text-foreground mb-1.5 block text-sm font-semibold"
+          >
+            Class
+          </label>
+          <Select
+            value={page.selectedClassId}
+            onValueChange={(value: string | null) => {
+              if (value) {
+                page.setSelectedClassId(value);
+              }
+            }}
+          >
+            <SelectTrigger
+              id="teacher-timetable-class"
+              className="w-full"
+              disabled={!page.grade}
+            >
+              <SelectValue
+                placeholder={page.grade ? "Select class" : "Select grade first"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {page.classOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       {body}
     </div>

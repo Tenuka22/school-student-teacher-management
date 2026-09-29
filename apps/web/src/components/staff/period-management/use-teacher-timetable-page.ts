@@ -5,6 +5,19 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  categoryForGrade,
+  CLASS_CATEGORIES,
+} from "@/components/staff/class-assignment/class-categories";
+import type { ClassCategoryKey } from "@/components/staff/class-assignment/class-categories";
+import {
+  gradeChangedTo,
+  sectionChangedTo,
+  toTeacherTimetableSearchParams,
+  validateTeacherTimetableSearch,
+} from "@/components/staff/period-management/teacher-timetable-search";
+import type { TeacherTimetableSearch } from "@/components/staff/period-management/teacher-timetable-search";
+import { useListSearchWriter } from "@/components/ui-patterns/data-table/use-list-search-writer";
 import { formatApiErrorMessage } from "@/lib/api-error";
 import { orpc } from "@/utils/orpc";
 
@@ -58,20 +71,30 @@ const readStateOf = (query: {
   return query.isPending ? "pending" : "known";
 };
 
-export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
-  const [pickedStaffId, setPickedStaffId] = useState("");
+export const useTeacherTimetablePage = (
+  search: TeacherTimetableSearch,
+  fixedStaffId?: string
+) => {
+  const writeSearch = useListSearchWriter<TeacherTimetableSearch>(
+    validateTeacherTimetableSearch,
+    toTeacherTimetableSearchParams
+  );
 
   /**
-   * The teacher on screen.
+   * The teacher on screen, and where it lives.
    *
-   * The route's id always wins when there is one. Seeding `useState` from it
-   * would capture the first teacher this component mounted with and keep
-   * showing them: `/teacher-timetable/A` to `/teacher-timetable/B` re-renders
-   * this component, it does not remount it. Derived instead, so a new param
-   * takes effect on the very render that carries it. `setPickedStaffId`
-   * matters only on the index route, where there is no param to read.
+   * The route's id always wins when there is one: `/teacher-timetable/A` fixes A
+   * and the picker is hidden, so nothing on that route can disagree. Otherwise the
+   * pick is **in the URL**, which is the whole point of moving it out of
+   * `useState` — a refresh, a shared link and the Back button all used to lose the
+   * teacher and land on forty free slots with no answer to "whose week was I
+   * looking at?".
+   *
+   * Derived, not stored, so a new param or a new search takes effect on the very
+   * render that carries it: `/teacher-timetable/A` to `/teacher-timetable/B`
+   * re-renders this component, it does not remount it.
    */
-  const staffId = initialStaffId ?? pickedStaffId;
+  const staffId = fixedStaffId ?? search.teacher;
 
   const currentYearQuery = useQuery(
     orpc.staff.listAcademicYears.queryOptions()
@@ -331,6 +354,150 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
     ? readStateOf(timetableQuery)
     : "unread";
 
+  const categoryOptions = useMemo(
+    () => CLASS_CATEGORIES.map((c) => ({ value: c.key, label: c.label })),
+    []
+  );
+
+  /**
+   * What the three narrowing picks offer, derived from **this teacher's week**.
+   *
+   * Not from the year's class list, which is what the period-assignment page uses
+   * because there the picks choose which class's timetable to fetch. Here the
+   * timetable is already fetched and the picks only narrow it, so the honest
+   * options are the grades and classes this teacher actually teaches: a grade
+   * select offering every grade in the school would be a list of mostly empty
+   * grids.
+   *
+   * Consequence worth stating: with no teacher chosen there is nothing to derive
+   * from, so grade and class are disabled until one is. That is the cascade doing
+   * its job, not a bug — the teacher is the first pick.
+   */
+  const gradeOptions = useMemo(() => {
+    const activeCategory = CLASS_CATEGORIES.find(
+      (c) => c.key === search.section
+    );
+    if (!activeCategory) {
+      return [];
+    }
+    const taught = new Set(entries.map((entry) => entry.gradeLevel));
+    const options: { value: string; label: string }[] = [];
+    for (const grade of activeCategory.grades) {
+      if (taught.has(grade)) {
+        options.push({ value: String(grade), label: `Grade ${grade}` });
+      }
+    }
+    return options;
+  }, [entries, search.section]);
+
+  const classOptions = useMemo(() => {
+    if (!search.grade) {
+      return [];
+    }
+    const gradeNumber = Number(search.grade);
+    const seen = new Map<string, string>();
+    for (const entry of entries) {
+      if (entry.gradeLevel === gradeNumber && !seen.has(entry.classId)) {
+        seen.set(entry.classId, entry.className);
+      }
+    }
+    return [...seen]
+      .map(([value, label]) => ({ value, label }))
+      .toSorted((a, b) => a.label.localeCompare(b.label));
+  }, [entries, search.grade]);
+
+  /**
+   * The picks, after checking them against the week actually on screen.
+   *
+   * **Derived, not stored, and not written back.** The URL is the only copy;
+   * these are what the page works with once a link that does not line up has been
+   * made to line up. Nothing is written back on the way, because a URL that
+   * disagrees with the data would otherwise be "fixed" by a navigation nobody
+   * asked for.
+   *
+   * A grade the section does not contain, and a class outside the chosen grade,
+   * each fall back to "not chosen" — which is what the dropdown would have shown
+   * anyway. A grade this teacher does not teach is *not* one of those cases: it
+   * stays chosen and shows an honest empty grid, because "teaches nothing in
+   * grade 9" is an answer and "the filter silently vanished" is not.
+   */
+  const gradeValue = gradeOptions.some(
+    (option) => option.value === search.grade
+  )
+    ? search.grade
+    : "";
+  const selectedClassId = classOptions.some(
+    (option) => option.value === search.class
+  )
+    ? search.class
+    : "";
+
+  /**
+   * The week, narrowed.
+   *
+   * Client-side over rows already fetched: none of the three picks changes what
+   * the server was asked, only which of the answers are shown. `entries` stays
+   * unfiltered and feeds the summary strip, so the header keeps describing the
+   * teacher's whole week while the grid below shows the slice.
+   */
+  const filteredEntries = useMemo(() => {
+    const gradeNumber = Number(gradeValue);
+    return entries.filter((entry) => {
+      if (selectedClassId && entry.classId !== selectedClassId) {
+        return false;
+      }
+      if (gradeValue && entry.gradeLevel !== gradeNumber) {
+        return false;
+      }
+      if (
+        search.section &&
+        categoryForGrade(entry.gradeLevel) !== search.section
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [entries, gradeValue, search.section, selectedClassId]);
+
+  const hasFilters = Boolean(search.section || gradeValue || selectedClassId);
+
+  const setStaffId = useCallback(
+    (next: string) => {
+      // The grade and class options are derived from the timetable being
+      // replaced, so carrying them over would leave the URL naming a grade the
+      // next teacher may not teach — dropped by reconciliation a moment later,
+      // without a word. Section is a band of the school, not a fact about the
+      // teacher, so it survives.
+      writeSearch({ teacher: next, grade: "", class: "" });
+    },
+    [writeSearch]
+  );
+
+  const setSection = useCallback(
+    (value: string) => {
+      writeSearch(sectionChangedTo(value as ClassCategoryKey | ""));
+    },
+    [writeSearch]
+  );
+
+  const setGrade = useCallback(
+    (value: string) => {
+      writeSearch(gradeChangedTo(value));
+    },
+    [writeSearch]
+  );
+
+  const setSelectedClassId = useCallback(
+    (value: string) => {
+      writeSearch({ class: value });
+    },
+    [writeSearch]
+  );
+
+  const handleClearFilters = useCallback(() => {
+    writeSearch({ section: "", grade: "", class: "" });
+  }, [writeSearch]);
+
   /**
    * Distinct day-and-period slots the teacher occupies.
    *
@@ -369,7 +536,7 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
 
   return {
     staffId,
-    setStaffId: setPickedStaffId,
+    setStaffId,
     currentYear,
     currentYearRead: readStateOf(currentYearQuery),
     currentYearMessage: formatApiErrorMessage(
@@ -393,6 +560,18 @@ export const useTeacherTimetablePage = (initialStaffId: string | undefined) => {
     handleRetryClasses,
     periodConfig: CODE_DEFINED_PERIODS,
     entries,
+    filteredEntries,
+    hasFilters,
+    handleClearFilters,
+    categoryOptions,
+    section: search.section,
+    setSection,
+    grade: gradeValue,
+    setGrade,
+    gradeOptions,
+    classOptions,
+    selectedClassId,
+    setSelectedClassId,
     occupiedSlotCount,
     entriesRead,
     entriesMessage: formatApiErrorMessage(
