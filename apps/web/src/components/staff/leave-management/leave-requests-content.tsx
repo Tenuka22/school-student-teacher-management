@@ -1,75 +1,71 @@
 "use client";
 
-import type { LeaveQueue } from "@school-student-teacher-management/api/routers/staff/leaves/list-leave-requests";
-import type { LeaveStatus } from "@school-student-teacher-management/db/schema/leaves";
-import { Badge } from "@school-student-teacher-management/ui/components/badge";
-import { Button } from "@school-student-teacher-management/ui/components/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyTitle,
-} from "@school-student-teacher-management/ui/components/empty";
-import { Skeleton } from "@school-student-teacher-management/ui/components/skeleton";
-import { IconCircleX } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { useListSearchWriter } from "@/components/ui-patterns/data-table/use-list-search-writer";
 import { PageHeader } from "@/components/ui-patterns/page-header";
 import { useActiveYear } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
-import { LeaveRequestCard } from "./leave-request-card";
-import type { ReviewDecision } from "./leave-request-card";
-
-type StatusFilter = LeaveStatus | "all";
-
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "recommended", label: "Recommended" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "cancelled", label: "Cancelled" },
-];
+import type { LeaveAction, LeaveRequest } from "./leave-request";
+import { LeaveRequestsDataTable } from "./leave-requests-data-table";
+import {
+  toLeaveLedgerInput,
+  toLeaveRequestsSearchParams,
+  validateLeaveRequestsSearch,
+} from "./leave-requests-search";
+import type { LeaveRequestsSearch } from "./leave-requests-search";
+import { LeaveReviewDialog } from "./leave-review-dialog";
 
 /**
- * Review-chain queues. "All" is the full ledger; the other two are the
- * slices a Deputy and a Principal are actually acting on.
+ * The leadership leave queue: the ledger as one table, and the decision behind
+ * each row's button.
+ *
+ * ## Why this is a table and not a column of cards
+ *
+ * It was a stack of cards, each one a `<Card>` carrying the teacher, the type,
+ * the dates, the reason, the Deputy's note, the reviewer's note and its own
+ * inline textarea with up to four buttons — forty of those is a screenful of
+ * paragraph that cannot be scanned, sorted, searched or filtered, and the
+ * textarea meant every row on the page was a live form. The row now carries the
+ * five things a reviewer scans for and the rest moved into
+ * `LeaveReviewDialog`, opened from the row's button.
+ *
+ * ## What the URL owns
+ *
+ * Search, queue, status and sort are the route's validated query string, handed
+ * down rather than read here: the route owns the contract
+ * (`leave-requests-search.ts`) and this component must not import the route file,
+ * because the route imports this one. Every write goes back out through
+ * `useListSearchWriter`, which navigates — one copy of the queue's view state,
+ * in the URL, and no second one here.
+ *
+ * ## The queue is derived, not stored
+ *
+ * "Which queue should I open on?" is a question about the reviewer's role, so it
+ * is answered by `resolveLeaveQueue` from the authority query rather than kept
+ * in `useState`: it corrects itself the moment authority resolves, and an
+ * explicit pick in the URL always wins.
  */
-const QUEUE_FILTERS: { value: LeaveQueue; label: string }[] = [
-  { value: "all", label: "Full ledger" },
-  { value: "deputy", label: "Awaiting DP" },
-  { value: "principal", label: "Awaiting Principal" },
-];
-
-/**
- * The queue that matches what this member is responsible for: a Deputy
- * reviews untouched requests, a Principal finalises recommended ones, and
- * anyone else sees the whole ledger. Reachable only once the authority
- * query resolves, so the first paint stays on the full ledger.
- */
-const defaultQueue = (isDeputy: boolean, isPrincipal: boolean): LeaveQueue => {
-  if (isPrincipal) {
-    return "principal";
-  }
-  if (isDeputy) {
-    return "deputy";
-  }
-  return "all";
-};
-
-export const LeaveRequestsContent = () => {
+export const LeaveRequestsContent = ({
+  search,
+}: {
+  search: LeaveRequestsSearch;
+}) => {
   const queryClient = useQueryClient();
   const activeYear = useActiveYear();
   const year = Number(activeYear);
   const hasYear = Boolean(activeYear) && !Number.isNaN(year);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [queueOverride, setQueueOverride] = useState<LeaveQueue | null>(null);
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
-  const [comment, setComment] = useState("");
+  const [reviewing, setReviewing] = useState<LeaveRequest | null>(null);
 
-  // Who is reviewing? The UI shows only the buttons this member can use:
+  const write = useListSearchWriter(
+    validateLeaveRequestsSearch,
+    toLeaveRequestsSearchParams
+  );
+
+  // Who is reviewing? The row shows only the button this member can use:
   // Deputy Principal -> recommend controls, Principal -> finalise controls.
   const authorityQuery = useQuery(
     orpc.staff.leaves.getMyAuthority.queryOptions({
@@ -79,27 +75,29 @@ export const LeaveRequestsContent = () => {
   );
   const isDeputy = authorityQuery.data?.isDeputy ?? false;
   const isPrincipal = authorityQuery.data?.isPrincipal ?? false;
+  /**
+   * One object, memoised, because `LeaveRequestsDataTable` rebuilds its columns
+   * from it — a fresh `{ isDeputy, isPrincipal }` on every render would rebuild
+   * them on every render too.
+   */
+  const authority = useMemo(
+    () => ({ isDeputy, isPrincipal }),
+    [isDeputy, isPrincipal]
+  );
 
-  // Default to the caller's own queue so the first useful render is the
-  // list they must act on. Derived rather than stored, so it corrects
-  // itself the moment authority resolves; an explicit pick wins.
-  const queue = queueOverride ?? defaultQueue(isDeputy, isPrincipal);
+  const ledgerInput = useMemo(() => toLeaveLedgerInput(year), [year]);
 
   const requestsQuery = useQuery(
     orpc.staff.leaves.listLeaveRequests.queryOptions({
-      input: {
-        year,
-        ...(statusFilter === "all" ? {} : { status: statusFilter }),
-        ...(queue === "all" ? {} : { queue }),
-      },
+      input: ledgerInput,
       enabled: hasYear,
     })
   );
 
-  const invalidateLists = async () => {
+  const invalidateLedger = async () => {
     await queryClient.invalidateQueries({
       queryKey: orpc.staff.leaves.listLeaveRequests.queryOptions({
-        input: { year },
+        input: ledgerInput,
       }).queryKey,
     });
   };
@@ -110,9 +108,8 @@ export const LeaveRequestsContent = () => {
     orpc.staff.leaves.recommendLeave.mutationOptions({
       onSuccess: async () => {
         toast.success("Recommendation recorded — waiting for the Principal");
-        setReviewingId(null);
-        setComment("");
-        await invalidateLists();
+        setReviewing(null);
+        await invalidateLedger();
       },
       onError: (error) => {
         toast.error(error.message);
@@ -124,9 +121,8 @@ export const LeaveRequestsContent = () => {
     orpc.staff.leaves.finalizeLeave.mutationOptions({
       onSuccess: async () => {
         toast.success("Decision finalised");
-        setReviewingId(null);
-        setComment("");
-        await invalidateLists();
+        setReviewing(null);
+        await invalidateLedger();
       },
       onError: (error) => {
         toast.error(error.message);
@@ -134,26 +130,49 @@ export const LeaveRequestsContent = () => {
     })
   );
 
-  const requests = requestsQuery.data?.requests ?? [];
-  const pendingCount = requests.filter((r) => r.status === "pending").length;
-  const recommendedCount = requests.filter(
-    (r) => r.status === "recommended"
-  ).length;
+  /**
+   * Send one decision to the procedure that can take it.
+   *
+   * The choice is already made — `LeaveAction.kind` says whether the reviewer
+   * is recommending or finalising — so this forwards rather than re-deciding.
+   * That separation is the whole point: the old version inferred the procedure
+   * from the decision itself and sent a Principal's "Reject (Final)" to
+   * `recommendLeave`, which answered "Only the Deputy Principal can recommend
+   * leave requests".
+   *
+   * An override arrives as `overrideReason` and never as `comment`, because
+   * `finalizeLeave` reads only `overrideReason` when it is checking that a
+   * bypass was justified; `comment` is nulled rather than omitted so the two
+   * fields cannot both end up on the same row.
+   */
+  const act = (action: LeaveAction) => {
+    if (reviewing === null) {
+      return;
+    }
 
-  const act = (id: string, decision: ReviewDecision) => {
-    const mutation =
-      decision === "approved" ? finalizeMutation : recommendMutation;
+    if (action.kind === "recommend") {
+      recommendMutation.mutate({
+        comment: action.comment,
+        decision: action.decision,
+        id: reviewing.id,
+        year,
+      });
+      return;
+    }
 
-    mutation.mutate({
-      id,
+    finalizeMutation.mutate({
+      comment: action.comment ?? null,
+      decision: action.decision,
+      id: reviewing.id,
+      overrideReason: action.overrideReason,
       year,
-      decision,
-      comment: comment.trim() || undefined,
-    } as never);
+    });
   };
 
+  const isDeciding = recommendMutation.isPending || finalizeMutation.isPending;
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-[18px]">
       <PageHeader
         eyebrow="Staff management"
         title="Leave requests"
@@ -167,101 +186,35 @@ export const LeaveRequestsContent = () => {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {QUEUE_FILTERS.map((filter) => (
-          <Button
-            key={filter.value}
-            variant={queue === filter.value ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setQueueOverride(filter.value);
-              setStatusFilter("all");
-            }}
-          >
-            {filter.label}
-          </Button>
-        ))}
-      </div>
+      <LeaveRequestsDataTable
+        authority={authority}
+        isDeciding={isDeciding}
+        isError={requestsQuery.isError}
+        isFetching={requestsQuery.isFetching}
+        isLoading={requestsQuery.isPending}
+        onRetry={() => {
+          void requestsQuery.refetch();
+        }}
+        onReview={setReviewing}
+        onSearchChange={(patch) => {
+          write(patch);
+        }}
+        requests={requestsQuery.data?.requests}
+        search={search}
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {STATUS_FILTERS.map((filter) => (
-          <Button
-            key={filter.value}
-            variant={statusFilter === filter.value ? "default" : "outline"}
-            size="sm"
-            onClick={() => setStatusFilter(filter.value)}
-          >
-            {filter.label}
-            {filter.value === "pending" && pendingCount > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {pendingCount}
-              </Badge>
-            )}
-            {filter.value === "recommended" && recommendedCount > 0 && (
-              <Badge variant="outline" className="ml-2">
-                {recommendedCount}
-              </Badge>
-            )}
-          </Button>
-        ))}
-      </div>
-
-      {requestsQuery.isLoading && (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={`skeleton-${i}`} className="h-28 w-full" />
-          ))}
-        </div>
-      )}
-
-      {!requestsQuery.isLoading && requests.length === 0 && (
-        <Empty className="min-h-[40vh] border-dashed">
-          <EmptyTitle>No leave requests</EmptyTitle>
-          <EmptyDescription>
-            {queue !== "all" || statusFilter !== "all"
-              ? "Nothing matches this queue and filter."
-              : "Teachers have not applied for any leave yet. Requests appear here as soon as they are submitted from the teacher portal."}
-          </EmptyDescription>
-        </Empty>
-      )}
-
-      {!requestsQuery.isLoading && requests.length > 0 && (
-        <div className="space-y-3">
-          {requests.map((request) => (
-            <LeaveRequestCard
-              key={request.id}
-              request={request}
-              staffName={request.staffName}
-              staffBadge={request.staffBadge}
-              isDeputy={isDeputy}
-              isPrincipal={isPrincipal}
-              isReviewing={reviewingId === request.id}
-              comment={comment}
-              isSubmitting={
-                recommendMutation.isPending || finalizeMutation.isPending
-              }
-              onCommentChange={setComment}
-              onStartReview={() => {
-                setReviewingId(request.id);
-                setComment("");
-              }}
-              onCancelReview={() => {
-                setReviewingId(null);
-                setComment("");
-              }}
-              onDecide={(decision) => act(request.id, decision)}
-            />
-          ))}
-        </div>
-      )}
-
-      {requests.some((r) => r.status === "rejected") && (
-        <p className="text-muted-foreground text-sm">
-          <IconCircleX className="mr-1 inline size-3.5" />
-          Rejected requests stay in the history — filter to Pending to hide
-          them.
-        </p>
-      )}
+      <LeaveReviewDialog
+        isDeputy={isDeputy}
+        isPending={isDeciding}
+        isPrincipal={isPrincipal}
+        onDecide={act}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReviewing(null);
+          }
+        }}
+        request={reviewing}
+      />
     </div>
   );
 };
