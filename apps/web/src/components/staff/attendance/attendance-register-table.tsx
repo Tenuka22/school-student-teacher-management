@@ -70,8 +70,12 @@ import { listTableFeatures } from "@/components/ui-patterns/data-table/list-tabl
  * the page is showing. There is no page 2 to fetch and no ninth to refuse, so a
  * page control would be furniture. Sorting, searching, grouping and the filters
  * are therefore client-side, which is the correct tier for a set the client
- * already holds in full. `manualSorting` is still declared, because the header
- * calls `column.getIsSorted()` and that is a feature-gated method.
+ * already holds in full — and "client-side" means *this file* applies them, not
+ * the table. TanStack v9's `manualSorting: true` reads as "the caller sorts":
+ * `getRowModel` returns the rows it was handed whenever `manualSorting` is set
+ * or no `sortedRowModel` is registered, and this app registers none. So
+ * `visibleRows` is the filter and `orderRegisterGroups` is the sort; without the
+ * second one the header flipped its glyph while the roll stayed put.
  */
 interface AttendanceRegisterTableProps {
   page: AttendancePageApi;
@@ -222,6 +226,53 @@ const MarkDialogs = ({
   );
 };
 
+/**
+ * The order the register is handed to the table: grouped by qualification, and
+ * **within each group**, by whichever column the header has sorted.
+ *
+ * Ordering across the whole roll would break the grouping it is displayed with —
+ * a BEd teacher sorted in between two MEd teachers is orphaned from the band the
+ * frame is about to draw a rule above — so the sort is scoped to a group.
+ *
+ * The group boundaries are counted off the *ordered* list rather than off the
+ * original one, which is the whole reason this runs before `rowGroups`: a
+ * boundary computed from one order and rendered against another points a header
+ * at the wrong row.
+ *
+ * `name` is the only sortable column this register has (see
+ * `attendance-register-columns.tsx`), so a sorting state naming anything else —
+ * which can only arrive by hand, since no header offers it — is left alone
+ * rather than applied to a column with no comparator behind it.
+ *
+ * This is also where the sort actually happens. TanStack Table v9's
+ * `manualSorting: true` means *the caller sorts*: `getRowModel` returns the
+ * pre-sorted rows whenever `manualSorting` is set or no `sortedRowModel` is
+ * registered, and this app registers none. Without this function the header
+ * flipped its glyph and `aria-sort` while the roll never moved.
+ */
+const orderRegisterGroups = (
+  groups: ReturnType<typeof qualificationGroups>,
+  sorting: SortingState
+): ReturnType<typeof qualificationGroups> => {
+  const [first] = sorting;
+
+  if (!first || first.id !== "name") {
+    return groups;
+  }
+
+  const direction = first.desc ? -1 : 1;
+  const ordered: ReturnType<typeof qualificationGroups> = [];
+
+  for (const [qualification, groupRows] of groups) {
+    ordered.push([
+      qualification,
+      groupRows.toSorted((a, b) => a.name.localeCompare(b.name) * direction),
+    ]);
+  }
+
+  return ordered;
+};
+
 export const AttendanceRegisterTable = ({
   page,
 }: AttendanceRegisterTableProps) => {
@@ -272,6 +323,18 @@ export const AttendanceRegisterTable = ({
   const groups = useMemo(() => qualificationGroups(visibleRows), [visibleRows]);
 
   /**
+   * The same grouping, in the order the table will be given it.
+   *
+   * Derived rather than folded into `qualificationGroups` so the grouping pass
+   * stays about qualification and the order stays about the header — and so the
+   * boundary pass below cannot read one while rendering the other.
+   */
+  const orderedGroups = useMemo(
+    () => orderRegisterGroups(groups, sorting),
+    [groups, sorting]
+  );
+
+  /**
    * Where each group starts in the flattened body.
    *
    * Counted off the flattened list rather than carried from the grouping pass, so
@@ -279,10 +342,10 @@ export const AttendanceRegisterTable = ({
    * no way for a header to point at the wrong row after a filter changes.
    */
   const rowGroups = useMemo(() => {
-    const flat = groups.flatMap(([, groupRows]) => groupRows);
+    const flat = orderedGroups.flatMap(([, groupRows]) => groupRows);
     const boundaries: { startsAt: number; label: string; count: number }[] = [];
     let offset = 0;
-    for (const [qualification, groupRows] of groups) {
+    for (const [qualification, groupRows] of orderedGroups) {
       boundaries.push({
         startsAt: offset,
         label: qualificationLabel(qualification),
@@ -293,7 +356,7 @@ export const AttendanceRegisterTable = ({
     return flat.length === boundaries.length
       ? boundaries
       : boundaries.filter((boundary) => boundary.startsAt < flat.length);
-  }, [groups]);
+  }, [orderedGroups]);
 
   /**
    * Which row is in a dialog, and which dialog.
@@ -322,9 +385,10 @@ export const AttendanceRegisterTable = ({
   const table = useTable({
     features: listTableFeatures,
     columns,
-    // Grouped order, not alphabetical: the flat list is the groups concatenated,
-    // and the frame renders the group boundaries from `groups`.
-    data: groups.flatMap(([, groupRows]) => groupRows),
+    // Grouped order, and within a group whatever the header asked for: the flat
+    // list is `orderedGroups` concatenated, and the frame renders the group
+    // boundaries counted from that same list.
+    data: orderedGroups.flatMap(([, groupRows]) => groupRows),
     getRowId: (row) => row.staffId,
     rowCount: rows.length,
     manualSorting: true,
