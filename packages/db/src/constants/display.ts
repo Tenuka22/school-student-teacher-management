@@ -194,3 +194,30 @@ export const appointmentTypeLabel = (
 
   return APPOINTMENT_LABELS[appointmentType] ?? humanizeKey(appointmentType);
 };
+
+/** A stored gender as a word. */
+export const genderLabel = (gender: string | null | undefined): string => {
+  if (!gender) {
+    return "Not set";
+  }
+
+  return humanizeKey(gender);
+};
+
+/** How far a qualification's paperwork has got. The screen calls `pending` "Awaiting review", and an export has to say the same thing. */
+const QUALIFICATION_DOCUMENT_STATUS_LABELS: Record<string, string> = {
+  pending: "Awaiting review",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+/** A stored qualification document status as a word. */
+export const qualificationDocumentStatusLabel = (
+  status: string | null | undefined
+): string => {
+  if (!status) {
+    return "Not set";
+  }
+
+  return QUALIFICATION_DOCUMENT_STATUS_LABELS[status] ?? humanizeKey(status);
+};

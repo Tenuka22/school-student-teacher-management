@@ -1,4 +1,10 @@
 import { ORPCError } from "@orpc/server";
+import {
+  appointmentTypeLabel,
+  employmentStatusLabel,
+  genderLabel,
+  qualificationDocumentStatusLabel,
+} from "@school-student-teacher-management/db/constants/display";
 import { teacherQualification } from "@school-student-teacher-management/db/schema/qualifications";
 import {
   staff,
@@ -8,7 +14,11 @@ import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
 import { requireStaffPermission } from "../../../index";
-import { buildPdfExport } from "../../../lib/export";
+import {
+  buildPdfExport,
+  formatGeneratedAt,
+  pdfFooter,
+} from "../../../lib/export";
 
 const profileField = (label: string, value: string | null | undefined) => ({
   columns: [
@@ -18,7 +28,15 @@ const profileField = (label: string, value: string | null | undefined) => ({
   margin: [0, 2, 0, 2] as [number, number, number, number],
 });
 
-/** Exports one teacher's full profile (personal, employment, qualifications) as a PDF. */
+/**
+ * Exports one teacher's full profile (personal, employment, qualifications) as a PDF.
+ *
+ * The stored keys are words here for the same reason the Excel export spells
+ * them out: a printed profile that reads `specifiedPeriod` and `active` tells
+ * the reader what the College stores, not what it means. A blank field reads
+ * "—" so the page shows which questions have no answer rather than dropping
+ * the line.
+ */
 export const exportTeacherProfilePdf = requireStaffPermission("read")
   .input(v.object({ id: staffIdSchema }))
   .handler(async ({ input, context }) => {
@@ -36,38 +54,45 @@ export const exportTeacherProfilePdf = requireStaffPermission("read")
       .from(teacherQualification)
       .where(eq(teacherQualification.staffId, input.id));
 
-    return buildPdfExport(
-      `${record.name.replaceAll(/\s+/gu, "-")}-profile.pdf`,
-      {
-        content: [
-          { text: record.name, style: "header" },
-          { text: "Personal Information", style: "section" },
-          profileField("Email", record.email),
-          profileField("Phone", record.phone),
-          profileField("NIC", record.nic),
-          profileField("Gender", record.gender),
-          profileField("Birth Date", record.birthDate),
-          profileField("District", record.district),
-          { text: "Employment Information", style: "section" },
-          profileField("Appointment Type", record.appointmentType),
-          profileField("Appointment Date", record.appointmentDate),
-          profileField("Employment Status", record.employmentStatus),
-          profileField("Teacher Service No.", record.teacherServiceNo),
-          { text: "Qualifications", style: "section" },
-          qualifications.length > 0
-            ? {
-                ul: qualifications.map(
-                  (qualification) =>
-                    `${qualification.qualification} — ${qualification.institution ?? "N/A"} (${qualification.documentStatus})`
-                ),
-              }
-            : { text: "No qualifications on record.", italics: true },
-        ],
-        styles: {
-          header: { fontSize: 20, bold: true, margin: [0, 0, 0, 12] },
-          section: { fontSize: 13, bold: true, margin: [0, 14, 0, 6] },
-        },
-        defaultStyle: { fontSize: 10 },
-      }
-    );
+    const generatedAt = formatGeneratedAt(new Date());
+
+    return buildPdfExport(`${record.name}-profile.pdf`, {
+      content: [
+        { text: record.name, style: "header" },
+        { text: "Personal Information", style: "section" },
+        profileField("Email", record.email),
+        profileField("Phone", record.phone),
+        profileField("NIC", record.nic),
+        profileField("Gender", record.gender && genderLabel(record.gender)),
+        profileField("Birth Date", record.birthDate),
+        profileField("District", record.district),
+        { text: "Employment Information", style: "section" },
+        profileField(
+          "Appointment Type",
+          record.appointmentType && appointmentTypeLabel(record.appointmentType)
+        ),
+        profileField("Appointment Date", record.appointmentDate),
+        profileField(
+          "Employment Status",
+          record.employmentStatus &&
+            employmentStatusLabel(record.employmentStatus)
+        ),
+        profileField("Teacher Service No.", record.teacherServiceNo),
+        { text: "Qualifications", style: "section" },
+        qualifications.length > 0
+          ? {
+              ul: qualifications.map(
+                (qualification) =>
+                  `${qualification.qualification} — ${qualification.institution ?? "—"} (${qualificationDocumentStatusLabel(qualification.documentStatus)})`
+              ),
+            }
+          : { text: "No qualifications on record.", italics: true },
+      ],
+      footer: pdfFooter(generatedAt),
+      styles: {
+        header: { fontSize: 20, bold: true, margin: [0, 0, 0, 12] },
+        section: { fontSize: 13, bold: true, margin: [0, 14, 0, 6] },
+      },
+      defaultStyle: { fontSize: 10 },
+    });
   });

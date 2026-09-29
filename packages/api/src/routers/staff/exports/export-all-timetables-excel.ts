@@ -57,7 +57,11 @@ export const exportAllTimetablesExcel = adminProcedure
       const subjectKey = `${row.classId}-${row.dayOfWeek}-${row.periodNumber}-${row.subjectKey}`;
       if (row.teacherName) {
         const names = teacherNamesBySubject.get(subjectKey) ?? [];
-        names.push(row.teacherName);
+        // The join is one row per (subject, teacher) row, so a subject listed
+        // twice under the same teacher would print the name twice.
+        if (!names.includes(row.teacherName)) {
+          names.push(row.teacherName);
+        }
         teacherNamesBySubject.set(subjectKey, names);
       }
       const slotKey = `${row.classId}-${row.dayOfWeek}-${row.periodNumber}`;

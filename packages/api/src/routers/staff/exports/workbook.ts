@@ -36,16 +36,6 @@ const sheetSchema = v.object({
   rows: v.array(v.record(v.string(), v.unknown())),
 });
 
-/** A filename that cannot carry a path, and that opens in a spreadsheet. */
-const toWorkbookFilename = (filename: string): string => {
-  const safe = filename
-    .trim()
-    .replaceAll(/[^\w.-]+/gu, "-")
-    .slice(0, 120);
-  const cleaned = safe === "" ? "workbook" : safe;
-  return cleaned.toLowerCase().endsWith(".xlsx") ? cleaned : `${cleaned}.xlsx`;
-};
-
 export const exportWorkbook = adminProcedure
   .input(
     v.object({
@@ -53,6 +43,4 @@ export const exportWorkbook = adminProcedure
       sheets: v.pipe(v.array(sheetSchema), v.maxLength(20, "Too many sheets")),
     })
   )
-  .handler(({ input }) =>
-    buildExcelExport(toWorkbookFilename(input.filename), input.sheets)
-  );
+  .handler(({ input }) => buildExcelExport(input.filename, input.sheets));

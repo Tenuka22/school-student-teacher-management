@@ -1,3 +1,4 @@
+import { qualificationDocumentStatusLabel } from "@school-student-teacher-management/db/constants/display";
 import { QUALIFICATION_LEVELS } from "@school-student-teacher-management/db/constants/teachers";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
@@ -74,10 +75,6 @@ const getStatusVariant = (
   return "secondary";
 };
 
-/** The document status in words, rather than the raw key in lower case. */
-const getStatusLabel = (status: string) =>
-  status === "pending" ? "Awaiting review" : status;
-
 const SectionTitle = ({
   headingLevel,
   children,
@@ -137,7 +134,7 @@ const QualificationRow = ({
         {getQualificationLabel(qualification.qualification)}
       </p>
       <Badge variant={getStatusVariant(qualification.documentStatus)}>
-        {getStatusLabel(qualification.documentStatus)}
+        {qualificationDocumentStatusLabel(qualification.documentStatus)}
       </Badge>
     </div>
     <dl className="grid grid-cols-2 gap-3">

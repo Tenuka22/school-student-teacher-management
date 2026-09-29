@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 
 import ExcelJS from "exceljs";
-import type { TDocumentDefinitions } from "pdfmake/interfaces";
+import type { Content, TDocumentDefinitions } from "pdfmake/interfaces";
 
 /**
  * pdfmake's top-level entry is a browser-oriented singleton; the server-side
@@ -79,6 +79,71 @@ export interface ExcelSheet {
   rows: Record<string, unknown>[];
 }
 
+/** Excel hard-caps a worksheet name here, and counts the suffix in the cap. */
+const MAX_SHEET_NAME_LENGTH = 31;
+
+/** `* ? : \ / [ ]` are rejected outright by Excel, and by exceljs before it. */
+const SHEET_NAME_FORBIDDEN_CHARS = /[*?:/\\[\]]/gu;
+
+/**
+ * Turns any string into a worksheet name exceljs will accept.
+ *
+ * A sheet name comes from two places: a fixed label, and a record a school
+ * typed — "Export every timetable" names a sheet per class, so a class called
+ * `6/A` or `O'Brien` reaches exceljs untouched. exceljs throws on the illegal
+ * characters, on a leading or trailing apostrophe, on the reserved name
+ * `History`, and — case-insensitively — on a name another sheet already holds,
+ * which truncating to 31 characters can create out of two distinct names.
+ * Any of those aborts the whole export, so the name is repaired here, once,
+ * rather than in each caller that happens to build one.
+ */
+const toSheetName = (rawName: string, taken: Set<string>): string => {
+  const trimmed = rawName.trim().replace(/^'+/u, "").replace(/'+$/u, "");
+  const legal = trimmed
+    .replaceAll(SHEET_NAME_FORBIDDEN_CHARS, "-")
+    .slice(0, MAX_SHEET_NAME_LENGTH);
+  const base =
+    legal === "" || legal.toLowerCase() === "history" ? "Sheet" : legal;
+
+  let candidate = base;
+  let copy = 1;
+  while (taken.has(candidate.toLowerCase())) {
+    copy += 1;
+    const suffix = ` ${copy}`;
+    candidate = `${base.slice(0, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
+  }
+  taken.add(candidate.toLowerCase());
+  return candidate;
+};
+
+/** What a workbook says when there is nothing to put in it. Excel opens this; a workbook with no sheets it does not. */
+const EMPTY_SHEET: ExcelSheet = {
+  name: "Empty",
+  columns: [{ header: "Notice", key: "notice", width: 44 }],
+  rows: [{ notice: "There are no records to export." }],
+};
+
+/**
+ * A download name with no path in it, and no character a filesystem rejects.
+ *
+ * Every export is named after something a school typed — a teacher's name, a
+ * class called `11/A` — and the browser writes it verbatim, so a slash would
+ * be read as a directory separator and a quote turned away by the OS. The
+ * extension is owned here so a caller can hand over `record.name` and still
+ * get a file the OS recognises.
+ */
+const toExportFilename = (
+  rawName: string,
+  extension: ".xlsx" | ".pdf"
+): string => {
+  const safe = rawName
+    .trim()
+    .replaceAll(/[^\w.-]+/gu, "-")
+    .slice(0, 120);
+  const base = safe === "" ? "export" : safe;
+  return base.toLowerCase().endsWith(extension) ? base : `${base}${extension}`;
+};
+
 /** Builds a real .xlsx workbook (one worksheet per entry) and returns it base64-encoded. */
 export const buildExcelExport = async (
   filename: string,
@@ -88,8 +153,11 @@ export const buildExcelExport = async (
   workbook.creator = "school-student-teacher-management";
   workbook.created = new Date();
 
-  for (const sheet of sheets) {
-    const worksheet = workbook.addWorksheet(sheet.name.slice(0, 31));
+  const takenNames = new Set<string>();
+  for (const sheet of sheets.length > 0 ? sheets : [EMPTY_SHEET]) {
+    const worksheet = workbook.addWorksheet(
+      toSheetName(sheet.name, takenNames)
+    );
     worksheet.columns = sheet.columns.map((column) => ({
       header: column.header,
       key: column.key,
@@ -103,12 +171,51 @@ export const buildExcelExport = async (
 
   const buffer = await workbook.xlsx.writeBuffer();
   return {
-    filename,
+    filename: toExportFilename(filename, ".xlsx"),
     mimeType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     base64: Buffer.from(buffer).toString("base64"),
   };
 };
+
+/** The words to show for the moment a file was produced. */
+export const formatGeneratedAt = (date: Date): string =>
+  date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+/** Muted enough to read as a printer's mark rather than as content. */
+const PDF_FOOTER_COLOR = "#6b7280";
+
+/**
+ * The footer both print exports share.
+ *
+ * Repeated on every page a document spills onto: the sheet is handed round and
+ * stapled somewhere, and a page with no date on it is a page nobody can date
+ * later.
+ */
+export const pdfFooter =
+  (generatedAt: string) =>
+  (currentPage: number, pageCount: number): Content => ({
+    columns: [
+      {
+        text: `Generated ${generatedAt}`,
+        fontSize: 8,
+        color: PDF_FOOTER_COLOR,
+      },
+      {
+        text: `Page ${currentPage} of ${pageCount}`,
+        fontSize: 8,
+        color: PDF_FOOTER_COLOR,
+        alignment: "right",
+      },
+    ],
+    margin: [40, 0, 40, 0],
+  });
 
 const STANDARD_FONTS = {
   Roboto: {
@@ -131,7 +238,7 @@ export const buildPdfExport = async (
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
   doc.on("end", () => {
     resolve({
-      filename,
+      filename: toExportFilename(filename, ".pdf"),
       mimeType: "application/pdf",
       base64: Buffer.concat(chunks).toString("base64"),
     });

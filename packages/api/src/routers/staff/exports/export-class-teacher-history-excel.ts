@@ -1,3 +1,4 @@
+import { humanizeKey } from "@school-student-teacher-management/db/constants/display";
 import {
   class_,
   classTeacherAssignmentHistory,
@@ -67,7 +68,8 @@ export const exportClassTeacherHistoryExcel = requireStaffPermission("read")
         rows: rows.map((row) => ({
           className: row.className,
           gradeLevel: row.gradeLevel,
-          changeType: CHANGE_TYPE_LABEL[row.changeType] ?? row.changeType,
+          changeType:
+            CHANGE_TYPE_LABEL[row.changeType] ?? humanizeKey(row.changeType),
           previousTeacherName: row.previousTeacherName ?? "",
           newTeacherName: row.newTeacherName ?? "",
           reason: row.reason ?? "",

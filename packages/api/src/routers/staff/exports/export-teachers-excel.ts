@@ -1,6 +1,7 @@
 import {
   appointmentTypeLabel,
   employmentStatusLabel,
+  genderLabel,
 } from "@school-student-teacher-management/db/constants/display";
 import {
   academicYearIdSchema,
@@ -116,7 +117,7 @@ export const exportTeachersExcel = requireStaffPermission("read")
           email: row.email ?? "",
           phone: row.phone ?? "",
           nic: row.nic ?? "",
-          gender: row.gender ?? "",
+          gender: genderLabel(row.gender),
           staffCategory:
             row.staffCategory === "officeStaff" ? "Office staff" : "Teacher",
           appointmentType: appointmentTypeLabel(row.appointmentType),

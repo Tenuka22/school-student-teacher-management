@@ -18,7 +18,11 @@ import type { Content } from "pdfmake/interfaces";
 import * as v from "valibot";
 
 import { adminProcedure } from "../../../index";
-import { buildPdfExport } from "../../../lib/export";
+import {
+  buildPdfExport,
+  formatGeneratedAt,
+  pdfFooter,
+} from "../../../lib/export";
 
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -30,17 +34,6 @@ const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
  * and "Unassigned" set like a teacher's name reads as a name.
  */
 const UNASSIGNED_COLOR = "#9ca3af";
-const FOOTER_COLOR = "#6b7280";
-
-/** A printed document says when it was printed, or nobody can tell later. */
-const formatGeneratedAt = (date: Date): string =>
-  date.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 /** Exports one class's weekly timetable (5 days x 8 periods) as a printable PDF. */
 export const exportClassTimetablePdf = adminProcedure
@@ -89,7 +82,11 @@ export const exportClassTimetablePdf = adminProcedure
       const subjectId = `${row.dayOfWeek}-${row.periodNumber}-${row.subjectKey}`;
       if (row.teacherName) {
         const names = teacherNamesBySubjectKey.get(subjectId) ?? [];
-        names.push(row.teacherName);
+        // The join is one row per (subject, teacher) row, so a subject listed
+        // twice under the same teacher would print the name twice.
+        if (!names.includes(row.teacherName)) {
+          names.push(row.teacherName);
+        }
         teacherNamesBySubjectKey.set(subjectId, names);
       }
       const slotKey = `${row.dayOfWeek}-${row.periodNumber}`;
@@ -136,44 +133,23 @@ export const exportClassTimetablePdf = adminProcedure
 
     const generatedAt = formatGeneratedAt(new Date());
 
-    return buildPdfExport(
-      `${classRecord.name.replaceAll(/\s+/gu, "-")}-timetable.pdf`,
-      {
-        pageOrientation: "landscape",
-        content: [
-          { text: `${classRecord.name} — Weekly Timetable`, style: "header" },
-          {
-            table: {
-              headerRows: 1,
-              widths: ["auto", "*", "*", "*", "*", "*"],
-              body: tableBody,
-            },
-            layout: "lightHorizontalLines",
+    return buildPdfExport(`${classRecord.name}-timetable.pdf`, {
+      pageOrientation: "landscape",
+      content: [
+        { text: `${classRecord.name} — Weekly Timetable`, style: "header" },
+        {
+          table: {
+            headerRows: 1,
+            widths: ["auto", "*", "*", "*", "*", "*"],
+            body: tableBody,
           },
-        ],
-        // Repeated on every page a long table spills onto: the sheet is handed
-        // round and stapled somewhere, and a page with no date on it is a page
-        // nobody can date later.
-        footer: (currentPage: number, pageCount: number) => ({
-          columns: [
-            {
-              text: `Generated ${generatedAt}`,
-              fontSize: 8,
-              color: FOOTER_COLOR,
-            },
-            {
-              text: `Page ${currentPage} of ${pageCount}`,
-              fontSize: 8,
-              color: FOOTER_COLOR,
-              alignment: "right",
-            },
-          ],
-          margin: [40, 0, 40, 0],
-        }),
-        styles: {
-          header: { fontSize: 16, bold: true, margin: [0, 0, 0, 12] },
+          layout: "lightHorizontalLines",
         },
-        defaultStyle: { fontSize: 9 },
-      }
-    );
+      ],
+      footer: pdfFooter(generatedAt),
+      styles: {
+        header: { fontSize: 16, bold: true, margin: [0, 0, 0, 12] },
+      },
+      defaultStyle: { fontSize: 9 },
+    });
   });
