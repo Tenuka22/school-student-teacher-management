@@ -220,27 +220,25 @@ const NoRequestsRow = ({
   hasFilters: boolean;
   onReset: () => void;
 }) => (
-  <div className="p-6">
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>
-          {hasFilters ? "No requests match" : "Nobody is waiting"}
-        </EmptyTitle>
-        <EmptyDescription>
-          {hasFilters
-            ? "Nothing in the queue matches the search and filters above. Clearing them brings the whole queue back."
-            : "No account is asking for staff access. When somebody registers, their request appears here."}
-        </EmptyDescription>
-      </EmptyHeader>
-      {hasFilters && (
-        <EmptyContent>
-          <Button variant="outline" onClick={onReset}>
-            Clear filters
-          </Button>
-        </EmptyContent>
-      )}
-    </Empty>
-  </div>
+  <Empty>
+    <EmptyHeader>
+      <EmptyTitle>
+        {hasFilters ? "No requests match" : "Nobody is waiting"}
+      </EmptyTitle>
+      <EmptyDescription>
+        {hasFilters
+          ? "Nothing in the queue matches the search and filters above. Clearing them brings the whole queue back."
+          : "No account is asking for staff access. When somebody registers, their request appears here."}
+      </EmptyDescription>
+    </EmptyHeader>
+    {hasFilters && (
+      <EmptyContent>
+        <Button variant="outline" onClick={onReset}>
+          Clear filters
+        </Button>
+      </EmptyContent>
+    )}
+  </Empty>
 );
 
 /**

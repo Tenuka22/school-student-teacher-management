@@ -130,7 +130,6 @@ function TableHead({
     <th
       // Header cells describe their column unless a caller says otherwise
       // (e.g. `scope="row"` for a row label in a timetable grid).
-      scope="col"
       data-slot="table-head"
       scope={scope}
       className={cn(
@@ -198,7 +197,10 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      className={cn(
+        visuallyHidden ? "sr-only" : "mt-4 text-sm text-muted-foreground",
+        className
+      )}
       {...props}
     />
   )

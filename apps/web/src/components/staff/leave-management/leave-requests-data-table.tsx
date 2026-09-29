@@ -303,27 +303,25 @@ const NoLeaveRows = ({
   hasFilters: boolean;
   onReset: () => void;
 }) => (
-  <div className="p-6">
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>
-          {hasFilters ? "No requests match" : "No leave requests"}
-        </EmptyTitle>
-        <EmptyDescription>
-          {hasFilters
-            ? "Nothing in this queue matches the search and filters above. Clearing them brings the whole ledger back."
-            : "Teachers have not applied for any leave yet. Requests appear here as soon as they are submitted from the teacher portal."}
-        </EmptyDescription>
-      </EmptyHeader>
-      {hasFilters && (
-        <EmptyContent>
-          <Button variant="outline" onClick={onReset}>
-            Clear filters
-          </Button>
-        </EmptyContent>
-      )}
-    </Empty>
-  </div>
+  <Empty>
+    <EmptyHeader>
+      <EmptyTitle>
+        {hasFilters ? "No requests match" : "No leave requests"}
+      </EmptyTitle>
+      <EmptyDescription>
+        {hasFilters
+          ? "Nothing in this queue matches the search and filters above. Clearing them brings the whole ledger back."
+          : "Teachers have not applied for any leave yet. Requests appear here as soon as they are submitted from the teacher portal."}
+      </EmptyDescription>
+    </EmptyHeader>
+    {hasFilters && (
+      <EmptyContent>
+        <Button variant="outline" onClick={onReset}>
+          Clear filters
+        </Button>
+      </EmptyContent>
+    )}
+  </Empty>
 );
 
 /**

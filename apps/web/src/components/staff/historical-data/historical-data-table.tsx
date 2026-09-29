@@ -225,34 +225,30 @@ const NoHistoryRows = ({
 
   if (hasFilters) {
     return (
-      <div className="p-6">
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>Nothing on this tab matches</EmptyTitle>
-            <EmptyDescription>
-              Nothing in {historyTabLabel(tab).toLowerCase()} matches the search
-              and filters above. Clearing them brings the whole tab back.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button variant="outline" onClick={onClear} type="button">
-              Clear filters
-            </Button>
-          </EmptyContent>
-        </Empty>
-      </div>
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>Nothing on this tab matches</EmptyTitle>
+          <EmptyDescription>
+            Nothing in {historyTabLabel(tab).toLowerCase()} matches the search
+            and filters above. Clearing them brings the whole tab back.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button variant="outline" onClick={onClear} type="button">
+            Clear filters
+          </Button>
+        </EmptyContent>
+      </Empty>
     );
   }
 
   return (
-    <div className="p-6">
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>{words.emptyTitle}</EmptyTitle>
-          <EmptyDescription>{words.emptyDescription}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    </div>
+    <Empty>
+      <EmptyHeader>
+        <EmptyTitle>{words.emptyTitle}</EmptyTitle>
+        <EmptyDescription>{words.emptyDescription}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   );
 };
 

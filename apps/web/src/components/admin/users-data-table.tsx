@@ -145,27 +145,25 @@ const NoAccountsRow = ({
   hasFilters: boolean;
   onReset: () => void;
 }) => (
-  <div className="p-6">
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>
-          {hasFilters ? "No accounts match" : "No accounts yet"}
-        </EmptyTitle>
-        <EmptyDescription>
-          {hasFilters
-            ? "Nothing on record matches the search and filters above. Clearing them brings the whole list back."
-            : "Nobody has been given an account that can sign in. Office staff accounts are issued by an administrator."}
-        </EmptyDescription>
-      </EmptyHeader>
-      {hasFilters && (
-        <EmptyContent>
-          <Button variant="outline" onClick={onReset}>
-            Clear filters
-          </Button>
-        </EmptyContent>
-      )}
-    </Empty>
-  </div>
+  <Empty>
+    <EmptyHeader>
+      <EmptyTitle>
+        {hasFilters ? "No accounts match" : "No accounts yet"}
+      </EmptyTitle>
+      <EmptyDescription>
+        {hasFilters
+          ? "Nothing on record matches the search and filters above. Clearing them brings the whole list back."
+          : "Nobody has been given an account that can sign in. Office staff accounts are issued by an administrator."}
+      </EmptyDescription>
+    </EmptyHeader>
+    {hasFilters && (
+      <EmptyContent>
+        <Button variant="outline" onClick={onReset}>
+          Clear filters
+        </Button>
+      </EmptyContent>
+    )}
+  </Empty>
 );
 
 /**
