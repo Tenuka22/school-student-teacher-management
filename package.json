@@ -42,6 +42,7 @@
     "db:stop": "docker compose stop postgres",
     "db:down": "docker compose down postgres",
     "seed": "bun run scripts/seed.ts",
+    "seed:full": "bun run scripts/seed-comprehensive.ts",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
@@ -57,6 +58,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
     "@school-student-teacher-management/config": "workspace:*",
     "@types/node": "^26.4.1",
     "husky": "^9.1.7",
