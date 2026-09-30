@@ -11,6 +11,7 @@ export type HomeBase =
   | "/admin"
   | "/academic-admin"
   | "/inventory-admin"
+  | "/leave-admin"
   | "/principal"
   | "/deputy-principal"
   | "/teacher";
@@ -24,8 +25,9 @@ export type HomeBase =
  * the right workspace, and `role: "admin"` is the plain admin desk. The two
  * specialist seats have workspaces of their own now: the Academic
  * Administrator runs the year's staff, classes and timetable under
- * `/academic-admin`, and the Inventory Administrator's whole desk is the
- * register under `/inventory-admin`.
+ * `/academic-admin`, the Inventory Administrator's whole desk is the
+ * register under `/inventory-admin`, and the Leave Administrator's whole desk
+ * is the leave queue under `/leave-admin`.
  *
  * Returns null for a role that owns no workspace (`user`,
  * `teacher-requester`): those are not a misplaced teacher, they are simply not
@@ -53,6 +55,9 @@ export const getHomeBase = (input: {
   // register — see `getHomePath`.
   if (input.role === "inventoryAdmin") {
     return "/inventory-admin";
+  }
+  if (input.role === "leaveAdmin") {
+    return "/leave-admin";
   }
   if (input.role === "teacher") {
     return "/teacher";

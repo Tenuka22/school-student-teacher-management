@@ -149,6 +149,7 @@ const resolveHome = (flags: {
   isDeputy: boolean;
   isInventoryAdmin: boolean;
   isAcademicAdmin: boolean;
+  isLeaveAdmin: boolean;
 }): { base: HomeBase; title: string } => {
   if (flags.isPrincipal) {
     return { base: "/principal", title: "Principal's Desk" };
@@ -173,7 +174,40 @@ const resolveHome = (flags: {
   if (flags.isInventoryAdmin) {
     return { base: "/inventory-admin", title: "Inventory Register" };
   }
+  // The Leave Administrator has no dashboard of its own either, for the same
+  // reason as the Inventory Administrator: the queue is this seat's whole job.
+  if (flags.isLeaveAdmin) {
+    return { base: "/leave-admin", title: "Leave Queue" };
+  }
   return { base: "/teacher", title: "My Dashboard" };
+};
+
+/**
+ * The member's one "home" link. Identical to `yearPath(home.base, year)` for
+ * every audience except the two single-purpose seats (Inventory, Leave),
+ * whose home is their one destination directly rather than a dashboard they
+ * do not have.
+ *
+ * Module scope rather than inline in `useSidebarNav`: that function's
+ * complexity is already at the tool's limit, and this branch belongs with
+ * `resolveHome` - the two resolve the same question (where is "home"?) for
+ * two different shapes of answer (a route object, and a URL string).
+ */
+const resolveHomeUrl = (flags: {
+  isInventoryAdmin: boolean;
+  isLeaveAdmin: boolean;
+  home: { base: HomeBase; title: string };
+  year: string | undefined;
+  inventoryDesk: (...rest: string[]) => string;
+  leaveDesk: (...rest: string[]) => string;
+}): string => {
+  if (flags.isInventoryAdmin) {
+    return flags.inventoryDesk("staff", "inventory");
+  }
+  if (flags.isLeaveAdmin) {
+    return flags.leaveDesk("staff", "leaves");
+  }
+  return yearPath(flags.home.base, flags.year);
 };
 
 /**
@@ -197,6 +231,7 @@ const useSidebarRole = (user: AppSidebarProps["user"]) => {
     isLeader: role === "principal" || role === "vicePrincipal",
     isInventoryAdmin: role === "inventoryAdmin",
     isAcademicAdmin: role === "academicAdmin",
+    isLeaveAdmin: role === "leaveAdmin",
     currentYear,
     // Every workspace link below is built from the active year, so until this
     // read lands the links are not yet the ones that will be rendered. The
@@ -255,6 +290,7 @@ interface SidebarGroupsProps {
   isLeader: boolean;
   isInventoryAdmin: boolean;
   isAcademicAdmin: boolean;
+  isLeaveAdmin: boolean;
   usersUrl: string;
   staffRequestsUrl: string;
   staffRequestsCount?: string;
@@ -289,6 +325,7 @@ interface SidebarGroupsProps {
    */
   adminSelfNav: NavItem[];
   academicNav: NavItem[];
+  leaveNav: NavItem[];
 }
 
 /**
@@ -301,6 +338,7 @@ const SidebarGroups = ({
   isLeader,
   isInventoryAdmin,
   isAcademicAdmin,
+  isLeaveAdmin,
   usersUrl,
   staffRequestsUrl,
   staffRequestsCount,
@@ -312,12 +350,25 @@ const SidebarGroups = ({
   adminInventoryNav,
   adminSelfNav,
   academicNav,
+  leaveNav,
 }: SidebarGroupsProps) => {
   if (isInventoryAdmin) {
     return (
       <>
         <NavMain label="Platform" items={platformNav} />
         <NavMain label="Inventory" items={adminInventoryNav} />
+      </>
+    );
+  }
+
+  // Its whole job is the leave queue - no other admin surface reaches
+  // `leaveOverseerProcedure`/`leaveManagerProcedure`, so this seat gets
+  // exactly the two groups it can act on, same shape as `isInventoryAdmin`.
+  if (isLeaveAdmin) {
+    return (
+      <>
+        <NavMain label="Platform" items={platformNav} />
+        <NavMain label="Leave" items={leaveNav} />
       </>
     );
   }
@@ -436,6 +487,7 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     isPrincipal,
     isInventoryAdmin,
     isAcademicAdmin,
+    isLeaveAdmin,
     currentYear,
     yearsPending,
   } = useSidebarRole(user);
@@ -462,13 +514,15 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     }),
     enabled: managesStaff && Boolean(currentYear),
   });
-  // An administrator reads the whole leave ledger rather than one reviewer's
-  // queue, so the badge counts every request still waiting on a decision.
+  // An administrator (and the Leave Administrator) reads the whole leave
+  // ledger rather than one reviewer's queue, so the badge counts every
+  // request still waiting on a decision. `academicAdmin` no longer reaches
+  // this queue \u2014 leave review is the Leave Administrator's desk now.
   const openLeavesQuery = useQuery({
     ...orpc.staff.leaves.listLeaveRequests.queryOptions({
       input: { year: selectedYear ?? 0, queue: "all" },
     }),
-    enabled: managesStaff && selectedYear !== undefined,
+    enabled: (isAdmin || isLeaveAdmin) && selectedYear !== undefined,
   });
   const staffRequestsQuery = useQuery({
     ...orpc.staff.listTeacherRequests.queryOptions(),
@@ -479,6 +533,8 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     workspaceLink("/academic-admin", ...rest);
   const inventoryDesk = (...rest: string[]) =>
     workspaceLink("/inventory-admin", ...rest);
+  const leaveDesk = (...rest: string[]) =>
+    workspaceLink("/leave-admin", ...rest);
   const teacher = (...rest: string[]) => workspaceLink("/teacher", ...rest);
   const principal = (...rest: string[]) => workspaceLink("/principal", ...rest);
   const deputy = (...rest: string[]) =>
@@ -499,15 +555,21 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     isDeputy,
     isInventoryAdmin,
     isAcademicAdmin,
+    isLeaveAdmin,
   });
   // Platform is identical for everyone, so nobody gets a duplicate link to
   // a workspace that a lower group already lists.
   const platformNav: NavItem[] = [
     {
       title: home.title,
-      url: isInventoryAdmin
-        ? inventoryDesk("staff", "inventory")
-        : yearPath(home.base, year),
+      url: resolveHomeUrl({
+        isInventoryAdmin,
+        isLeaveAdmin,
+        home,
+        year,
+        inventoryDesk,
+        leaveDesk,
+      }),
     },
     { title: "Account", url: "/account" },
   ];
@@ -593,14 +655,22 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     },
     { title: "Historical Data", url: management("staff", "historical-data") },
     { title: "Attendance", url: management("staff", "attendance") },
-    {
-      title: "Leave Requests",
-      url: management("staff", "leaves"),
-      count: badgeCount(
-        openLeavesQuery.data?.requests.filter((request) => !request.finalizedAt)
-          .length
-      ),
-    },
+    // Leave review moved off the academic desk onto the seeded `leaveAdmin`
+    // seat, so this entry is the top administrator's alone - `academicAdmin`
+    // no longer reaches `listLeaveRequests` at the API layer.
+    ...(isAdmin
+      ? [
+          {
+            title: "Leave Requests",
+            url: management("staff", "leaves"),
+            count: badgeCount(
+              openLeavesQuery.data?.requests.filter(
+                (request) => !request.finalizedAt
+              ).length
+            ),
+          },
+        ]
+      : []),
   ];
 
   /**
@@ -675,11 +745,29 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     ...SOON_NAV,
   ];
 
+  /**
+   * The Leave Administrator's own group: the school-wide queue, built from
+   * this seat's own workspace. Mirrors `adminInventoryNav`'s shape but for
+   * one destination, since the entitlements/quota switches this seat also
+   * holds (`leaveManagerProcedure`) have no dedicated screen yet.
+   */
+  const leaveNav: NavItem[] = [
+    {
+      title: "Leave Requests",
+      url: leaveDesk("staff", "leaves"),
+      count: badgeCount(
+        openLeavesQuery.data?.requests.filter((request) => !request.finalizedAt)
+          .length
+      ),
+    },
+  ];
+
   return {
     isAdmin,
     isLeader,
     isInventoryAdmin,
     isAcademicAdmin,
+    isLeaveAdmin,
     managesStaff,
     yearsPending,
     usersUrl: management("users"),
@@ -697,6 +785,7 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     inventoryNav,
     adminInventoryNav,
     academicNav,
+    leaveNav,
   };
 };
 
@@ -706,6 +795,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     isLeader,
     isInventoryAdmin,
     isAcademicAdmin,
+    isLeaveAdmin,
     managesStaff,
     yearsPending,
     usersUrl,
@@ -718,6 +808,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     inventoryNav,
     adminInventoryNav,
     academicNav,
+    leaveNav,
   } = useSidebarNav(user);
 
   return (
@@ -768,6 +859,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
             isLeader={isLeader}
             isInventoryAdmin={isInventoryAdmin}
             isAcademicAdmin={isAcademicAdmin}
+            isLeaveAdmin={isLeaveAdmin}
             usersUrl={usersUrl}
             staffRequestsUrl={staffRequestsUrl}
             staffRequestsCount={staffRequestsCount}
@@ -779,6 +871,7 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
             adminInventoryNav={adminInventoryNav}
             adminSelfNav={ADMIN_SELF_NAV}
             academicNav={academicNav}
+            leaveNav={leaveNav}
           />
         </nav>
       </SidebarContent>

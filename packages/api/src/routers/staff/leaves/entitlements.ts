@@ -21,7 +21,7 @@ import type { AcademicYearId } from "@school-student-teacher-management/db/schem
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure, protectedProcedure } from "../../../index";
+import { leaveManagerProcedure, protectedProcedure } from "../../../index";
 
 const entitlementKey = (leaveType: string, paymentStatus: string) =>
   `${leaveType}:${paymentStatus}`;
@@ -30,7 +30,7 @@ const entitlementKey = (leaveType: string, paymentStatus: string) =>
  * The quota table for one academic year — every leave type and payment status
  * the College recognises, maternity tiers included.
  *
- * **`adminOnlyProcedure`, not `protectedProcedure`.** This returns the whole
+ * **`leaveManagerProcedure`, not `protectedProcedure`.** This returns the whole
  * school's leave policy, not the caller's own balance: a teacher's own figures
  * come from `getMyLeaveBalance` below, which is scoped to their `staffId` and
  * net of what they have already taken. On `protectedProcedure` this procedure
@@ -38,13 +38,13 @@ const entitlementKey = (leaveType: string, paymentStatus: string) =>
  * screen ever issues, which handed every quota in the College — including the
  * 84-day maternity tiers — to anyone who asked.
  *
- * It is `adminOnly` rather than `admin` because it is the read half of the same
- * pair as `upsertLeaveEntitlement` and `seedLeaveEntitlements` below, which are
- * already `adminOnly`: a quota an administrator may set but not read back is
+ * It shares `leaveManagerProcedure` (`admin` + the seeded `leaveAdmin` seat)
+ * with `upsertLeaveEntitlement` and `seedLeaveEntitlements` below: a quota
+ * that seat may set but not read back is
  * not a workable surface. Deleting it instead would leave the write half with
  * nothing to verify against.
  */
-export const listLeaveEntitlements = adminOnlyProcedure
+export const listLeaveEntitlements = leaveManagerProcedure
   .input(
     v.object({
       academicYearId: v.optional(academicYearIdSchema),
@@ -82,7 +82,7 @@ export const listLeaveEntitlements = adminOnlyProcedure
     };
   });
 
-export const upsertLeaveEntitlement = adminOnlyProcedure
+export const upsertLeaveEntitlement = leaveManagerProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,
@@ -115,7 +115,7 @@ export const upsertLeaveEntitlement = adminOnlyProcedure
     return { success: true };
   });
 
-export const seedLeaveEntitlements = adminOnlyProcedure
+export const seedLeaveEntitlements = leaveManagerProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

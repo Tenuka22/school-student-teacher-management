@@ -177,6 +177,29 @@ export const inventoryAdmin = ac.newRole({
 });
 
 /**
+ * Leave Administrator — a seeded, leave-only seat (see
+ * `packages/auth/src/admin.ts`). Reviews and reports on the school-wide leave
+ * ledger and sets leave-type entitlements/quotas — everything
+ * `academicAdmin` used to reach through `academicProcedure` for
+ * `listLeaveRequests`, and everything `admin` alone used to reach through
+ * `adminOnlyProcedure` for the three entitlement procedures.
+ *
+ * There is no `leave` resource in `statement` — leave authorization has
+ * always been role-string gated (`leaveOverseerProcedure` /
+ * `leaveManagerProcedure` in `packages/api/src/index.ts`), not
+ * permission-checked, so this role carries no statement grant of its own.
+ * It exists so the seat is a real, nameable role better-auth's admin plugin
+ * can assign and display — not so a `requirePermission` check can consult it.
+ *
+ * Not in `ADMIN_ROLES`, and it does not inherit the leadership
+ * recommend/finalize authority: that chain is resolved from `staffPosition`
+ * rows (or the seeded principal/vicePrincipal role strings) in
+ * `resolveAuthority`, and this seat holds neither. It reviews the queue and
+ * sets quotas; it does not stand in the Deputy → Principal approval chain.
+ */
+export const leaveAdmin = ac.newRole({});
+
+/**
  * Academic Administrator \u2014 the seeded academic desk (see
  * `packages/auth/src/admin.ts`): the teacher register, class and period
  * assignment, attendance, academic years, teacher requests and the accounts
@@ -204,7 +227,11 @@ export const inventoryAdmin = ac.newRole({
  * (`academicProcedure`, `adminOrAcademicProcedure`).
  *
  * Not in `ADMIN_ROLES`: leadership leave review, position appointment and the
- * inventory overseer tiers must not follow from this seat.
+ * inventory overseer tiers must not follow from this seat. Nor is the
+ * leave queue itself: `listLeaveRequests` moved from `academicProcedure` to
+ * `leaveOverseerProcedure` when the Leave Administrator seat was carved out,
+ * so this desk no longer sees the school-wide leave ledger at all — leave
+ * review and entitlements belong to `leaveAdmin` (and `ADMIN_ROLES`) now.
  */
 export const academicAdmin = ac.newRole({
   ...adminAc.statements,

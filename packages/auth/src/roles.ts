@@ -30,6 +30,7 @@ export const ALL_ROLES = [
   "vicePrincipal",
   "inventoryAdmin",
   "academicAdmin",
+  "leaveAdmin",
   "teacher",
   "teacher-requester",
   "user",
@@ -50,6 +51,7 @@ export const ROLE_LABELS: Record<AnyRole, string> = {
   vicePrincipal: "Deputy Principal",
   inventoryAdmin: "Inventory Administrator",
   academicAdmin: "Academic Administrator",
+  leaveAdmin: "Leave Administrator",
   teacher: "Teacher",
   "teacher-requester": "Awaiting staff approval",
   user: "General account",
@@ -75,6 +77,7 @@ export const SEEDED_USERNAMES = [
   "deputy-principal",
   "inventory-admin",
   "academic-admin",
+  "leave-admin",
 ] as const;
 
 /** True for the accounts the server reseeds from env on every start. */

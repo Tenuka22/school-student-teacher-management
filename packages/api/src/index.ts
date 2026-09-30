@@ -112,13 +112,16 @@ export const adminOrAcademicProcedure = publicProcedure.use(
 /**
  * School-wide writes that only the top administrator makes.
  *
- * Setting leave quotas changes what every member of staff is entitled to, and
- * it is the one switch in this family that no other seat shares — opening,
- * switching and removing academic years, and editing the attendance policy,
+ * Opening, switching and removing academic years, and editing the attendance
+ * policy,
  * moved down to `adminOrAcademicProcedure` when the academic desk got its own
  * workspace. The leadership seats can read the ledger and act on their own
  * queues (see `leaves.leadershipReview`), but they do not get to move the
  * goalposts for everyone else, so these still sit above `adminProcedure`.
+ *
+ * Leave quotas moved off this tier onto `leaveManagerProcedure` (`admin` +
+ * the seeded `leaveAdmin` seat) when the Leave Administrator seat was carved
+ * out.
  */
 export const adminOnlyProcedure = publicProcedure.use(requireRole("admin"));
 
@@ -149,6 +152,30 @@ export const inventoryOverseerProcedure = publicProcedure.use(
  */
 export const inventoryManagerProcedure = publicProcedure.use(
   requireRole("admin", "inventoryAdmin")
+);
+
+/**
+ * The leave desk's admin-tier reads: the school-wide leave ledger/queue.
+ * Same audience as `adminProcedure` (admin, principal, vicePrincipal)
+ * **plus** the seeded `leaveAdmin` seat, which has no reason to reach any
+ * other admin surface but is exactly who this queue is for.
+ *
+ * `academicAdmin` is deliberately not on this list: leave review moved off
+ * the academic desk onto its own seat, mirroring `inventoryOverseerProcedure`.
+ */
+export const leaveOverseerProcedure = publicProcedure.use(
+  requireRole(...ADMIN_ROLES, "leaveAdmin")
+);
+
+/**
+ * The leave desk's admin-tier writes: setting leave-type entitlements and
+ * quotas. Narrower than `leaveOverseerProcedure` the same way
+ * `inventoryManagerProcedure` is narrower than `inventoryOverseerProcedure`
+ * - "admin" or the seeded `leaveAdmin` seat, not the leadership roles -
+ * because setting quotas for the whole school is this seat's whole job.
+ */
+export const leaveManagerProcedure = publicProcedure.use(
+  requireRole("admin", "leaveAdmin")
 );
 
 // ─── Permission-based middleware ─────────────────────────────────────────────

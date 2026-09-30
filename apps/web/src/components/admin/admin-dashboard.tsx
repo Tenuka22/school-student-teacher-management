@@ -50,9 +50,13 @@ type AdminPath =
   | `${AdminDashboardBase}/$year/staff/periods`
   | `${AdminDashboardBase}/$year/staff/teacher-timetable`
   | `${AdminDashboardBase}/$year/staff/attendance`
-  | `${AdminDashboardBase}/$year/staff/leaves`
   | `${AdminDashboardBase}/$year/users`
-  | `${AdminDashboardBase}/$year/academic-years`;
+  | `${AdminDashboardBase}/$year/academic-years`
+  // Leave review moved off the academic desk onto the seeded `leaveAdmin`
+  // seat, so this is deliberately the top admin's literal address rather
+  // than a generic `${AdminDashboardBase}` member: `/academic-admin/.../
+  // staff/leaves` is no longer a route at all.
+  | "/admin/$year/staff/leaves";
 
 const quickActions = (
   base: AdminDashboardBase
@@ -62,9 +66,12 @@ const quickActions = (
   { label: "Period assignment", to: `${base}/$year/staff/periods` },
   { label: "Teacher timetable", to: `${base}/$year/staff/teacher-timetable` },
   { label: "Attendance", to: `${base}/$year/staff/attendance` },
-  { label: "Leave requests", to: `${base}/$year/staff/leaves` },
   { label: "Users", to: `${base}/$year/users` },
   { label: "Academic years", to: `${base}/$year/academic-years` },
+  // Only the top admin's own workspace still carries the leave queue.
+  ...(base === "/admin"
+    ? [{ label: "Leave requests", to: "/admin/$year/staff/leaves" as const }]
+    : []),
 ];
 
 const RING_RADIUS = 52;
@@ -76,7 +83,11 @@ interface ClassRow {
   homeroomTeacherId: string | null;
 }
 
-const useDashboardData = (academicYearId: string | undefined, year: string) => {
+const useDashboardData = (
+  academicYearId: string | undefined,
+  year: string,
+  base: AdminDashboardBase
+) => {
   const yearNumber = Number(year);
   const staffQuery = useQuery(orpc.staff.listStaff.queryOptions());
   const classesQuery = useQuery({
@@ -85,16 +96,23 @@ const useDashboardData = (academicYearId: string | undefined, year: string) => {
     }),
     enabled: Boolean(academicYearId),
   });
-  const deputyQueue = useQuery(
-    orpc.staff.leaves.listLeaveRequests.queryOptions({
+  // `listLeaveRequests` no longer admits `academicAdmin` - leave review
+  // moved to the seeded `leaveAdmin` seat - so this workspace's copy of
+  // the dashboard must not issue the read at all, not merely hide the tile:
+  // the call would 403 rather than return zero.
+  const canReadLeaves = base === "/admin";
+  const deputyQueue = useQuery({
+    ...orpc.staff.leaves.listLeaveRequests.queryOptions({
       input: { year: yearNumber, queue: "deputy" },
-    })
-  );
-  const principalQueue = useQuery(
-    orpc.staff.leaves.listLeaveRequests.queryOptions({
+    }),
+    enabled: canReadLeaves,
+  });
+  const principalQueue = useQuery({
+    ...orpc.staff.leaves.listLeaveRequests.queryOptions({
       input: { year: yearNumber, queue: "principal" },
-    })
-  );
+    }),
+    enabled: canReadLeaves,
+  });
 
   const classes = classesQuery.data as ClassRow[] | undefined;
   const withoutHomeroom = classes?.filter((c) => !c.homeroomTeacherId) ?? [];
@@ -170,11 +188,15 @@ const buildAttention = (
     });
   }
   if (pendingRecommendation > 0) {
+    // Same admin-only literal as `quickActions`: `academicAdmin` no longer
+    // reads this queue, so `pendingRecommendation` is always 0 for it and
+    // this branch never fires there - but the type still has to admit
+    // only the real route.
     entries.push({
       title: `${pendingRecommendation} leave ${plural(pendingRecommendation, "request awaits", "requests await")} a recommendation`,
       detail: "Waiting for the Deputy Principal to review.",
       action: "View requests",
-      to: `${base}/$year/staff/leaves`,
+      to: "/admin/$year/staff/leaves",
     });
   }
 
@@ -399,7 +421,7 @@ export const AdminDashboard = ({
   session,
   base,
 }: AdminDashboardProps) => {
-  const data = useDashboardData(academicYear?.id, year);
+  const data = useDashboardData(academicYear?.id, year, base);
   const classDetail =
     data.classes.value === undefined
       ? `Created for ${year}`
@@ -453,16 +475,24 @@ export const AdminDashboard = ({
                 figure={data.classes}
                 detail={classDetail}
               />
-              <StatTile
-                label="Awaiting recommendation"
-                figure={data.deputyQueue}
-                detail="Leave requests with the Deputy Principal"
-              />
-              <StatTile
-                label="Awaiting decision"
-                figure={data.principalQueue}
-                detail="Leave requests with the Principal"
-              />
+              {/* `academicAdmin` no longer reads `listLeaveRequests`, so
+                  these two tiles are the top admin's alone - rendering
+                  them for the academic desk would show a permanently
+                  "loading" figure for a read that will never run. */}
+              {base === "/admin" ? (
+                <>
+                  <StatTile
+                    label="Awaiting recommendation"
+                    figure={data.deputyQueue}
+                    detail="Leave requests with the Deputy Principal"
+                  />
+                  <StatTile
+                    label="Awaiting decision"
+                    figure={data.principalQueue}
+                    detail="Leave requests with the Principal"
+                  />
+                </>
+              ) : null}
             </div>
           </section>
 

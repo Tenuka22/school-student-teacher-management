@@ -20,6 +20,7 @@ import {
   ac,
   admin,
   inventoryAdmin,
+  leaveAdmin,
   isSeededAccount,
   principal,
   teacher,
@@ -33,6 +34,7 @@ export {
   ac,
   admin,
   inventoryAdmin,
+  leaveAdmin,
   isAdminRole,
   isLeadershipRole,
   isSeededAccount,
@@ -74,6 +76,8 @@ export {
   INVENTORY_ADMIN_USERNAME,
   ACADEMIC_ADMIN_EMAIL,
   ACADEMIC_ADMIN_USERNAME,
+  LEAVE_ADMIN_EMAIL,
+  LEAVE_ADMIN_USERNAME,
 } from "./admin";
 export type { SeededLeadershipRole } from "./admin";
 export {
@@ -108,6 +112,8 @@ export interface AuthConfig {
   INVENTORY_ADMIN_NAME?: string;
   ACADEMIC_ADMIN_PASSWORD: string;
   ACADEMIC_ADMIN_NAME?: string;
+  LEAVE_ADMIN_PASSWORD: string;
+  LEAVE_ADMIN_NAME?: string;
 }
 
 export const AUTH_COOKIE_PREFIX = "school-student-teacher-management";
@@ -235,6 +241,7 @@ const buildAuthOptions = (
         vicePrincipal,
         inventoryAdmin,
         academicAdmin,
+        leaveAdmin,
         teacher,
         teacherRequester,
         user,

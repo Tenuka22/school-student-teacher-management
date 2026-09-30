@@ -67,6 +67,14 @@ export const INVENTORY_ADMIN_USERNAME = "inventory-admin";
 export const ACADEMIC_ADMIN_USERNAME = "academic-admin";
 
 /**
+ * The Leave Administrator's seat. Reviews the school-wide leave ledger and
+ * sets leave-type entitlements/quotas, the leave-only carve-out of what
+ * `academicAdmin` and `admin` used to cover alone. See
+ * `packages/auth/src/permissions.ts` for what the role reaches.
+ */
+export const LEAVE_ADMIN_USERNAME = "leave-admin";
+
+/**
  * Real, deliverable addresses for the seeded accounts. Unlike ordinary staff
  * — whose accounts carry the email they typed at sign-up — these are fixed
  * institutional addresses, so one-time codes for elevated actions have
@@ -79,6 +87,7 @@ export const PRINCIPAL_EMAIL = "principal@aloysiuscollege.lk";
 export const DEPUTY_PRINCIPAL_EMAIL = "deputy-principal@aloysiuscollege.lk";
 export const INVENTORY_ADMIN_EMAIL = "inventory-admin@aloysiuscollege.lk";
 export const ACADEMIC_ADMIN_EMAIL = "academic-admin@aloysiuscollege.lk";
+export const LEAVE_ADMIN_EMAIL = "leave-admin@aloysiuscollege.lk";
 
 /** Synthetic internal email backing a username login (never shown). */
 export const internalEmailForUsername = (accountUsername: string) =>
@@ -118,6 +127,7 @@ export const SEEDED_PLACEHOLDER_NIC = {
   [DEPUTY_PRINCIPAL_USERNAME]: "000000000003",
   [INVENTORY_ADMIN_USERNAME]: "000000000004",
   [ACADEMIC_ADMIN_USERNAME]: "000000000005",
+  [LEAVE_ADMIN_USERNAME]: "000000000006",
 } as const satisfies Record<string, string>;
 
 /**
@@ -646,6 +656,14 @@ export const ensureBootstrapUsers = async (
       name: env.ACADEMIC_ADMIN_NAME || "Academic Administrator",
       role: "academicAdmin",
       placeholderNic: SEEDED_PLACEHOLDER_NIC[ACADEMIC_ADMIN_USERNAME],
+    }),
+    ensureBootstrapAccount(database, {
+      username: LEAVE_ADMIN_USERNAME,
+      email: LEAVE_ADMIN_EMAIL,
+      password: env.LEAVE_ADMIN_PASSWORD,
+      name: env.LEAVE_ADMIN_NAME || "Leave Administrator",
+      role: "leaveAdmin",
+      placeholderNic: SEEDED_PLACEHOLDER_NIC[LEAVE_ADMIN_USERNAME],
     }),
   ]);
 

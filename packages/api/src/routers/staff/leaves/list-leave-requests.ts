@@ -15,7 +15,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import * as v from "valibot";
 
-import { academicProcedure } from "../../../index";
+import { leaveOverseerProcedure } from "../../../index";
 import { leaveYearSchema, requireLeaveAcademicYear } from "./leadership-review";
 
 export const leaveStatusFilterSchema = v.optional(leaveStatusSchema);
@@ -38,8 +38,12 @@ export type LeaveQueue = (typeof LEAVE_QUEUE_FILTERS)[number];
  * All leave requests across the school, newest first — the admin
  * review queue. Filterable by status or by review-chain queue; includes the
  * requesting teacher's name and badge number for one-shot rendering.
+ *
+ * Guarded by `leaveOverseerProcedure`: `ADMIN_ROLES` plus the seeded
+ * `leaveAdmin` seat. `academicAdmin` no longer reaches this queue - leave
+ * review is the Leave Administrator's desk now.
  */
-export const listLeaveRequests = academicProcedure
+export const listLeaveRequests = leaveOverseerProcedure
   .input(
     v.object({
       year: leaveYearSchema,

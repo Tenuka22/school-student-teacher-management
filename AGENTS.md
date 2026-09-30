@@ -183,12 +183,17 @@ apps/web/src/routes/_auth/
 ├── academic-admin/$year/teacher-requests.tsx
 ├── academic-admin/$year/academic-years.tsx
 ├── academic-admin/$year/staff/        # teachers, classes, periods, attendance, leaves,
-│                                      #   teacher-timetable, historical-data (allowAnyYear)
+│                                      #   teacher-timetable, historical-data (allowAnyYear);
+│                                      #   no leaves.tsx here — moved to leave-admin
 ├── inventory-admin/route.tsx          # role guard: inventoryAdmin | admin
 ├── inventory-admin/$year/route.tsx    # same year guard as the admin tree
 ├── inventory-admin/$year/index.tsx    # the store dashboard (InventoryDashboard)
 ├── inventory-admin/$year/staff/inventory/   # register + loans, issues, write-offs,
 │                                            #   asset-register, ledger
+├── leave-admin/route.tsx               # role guard: leaveAdmin | admin
+├── leave-admin/$year/route.tsx         # same year guard as the admin tree
+├── leave-admin/$year/index.tsx         # redirects straight to staff/leaves
+├── leave-admin/$year/staff/leaves.tsx  # the school-wide leave queue
 ├── principal/route.tsx                # role guard: principal
 ├── principal/$year/index.tsx          # /principal/2026
 ├── principal/$year/leaves.tsx         # /principal/2026/leaves
@@ -212,9 +217,9 @@ apps/web/src/routes/_auth/
 
 The school-wide inventory register exists in two trees: `admin/$year/staff/inventory.tsx` (the top administrator's) and `inventory-admin/$year/staff/inventory.tsx` (the Inventory Administrator's). Both render the same `InventoryPage`, which takes a `base` prop so its pane switches stay inside the workspace they were opened from. The register is deliberately **not** mounted under the Principal and Deputy workspaces, whose `equipment.tsx` pages show each seat its own holdings. `leadershipNav` in `app-sidebar.tsx` carries "My Equipment" and no register entry, so widening that is a product decision, not a missing file.
 
-Workspace roots (`/admin`, `/academic-admin`, `/inventory-admin`, `/teacher`, `/principal`, `/deputy-principal`) only carry the role guard and forward to the active year; the pages themselves live under `$year`. The `admin` workspace is the top administrator's alone — `inventoryAdmin` and `academicAdmin` were once admitted to it and each arrived at a workspace whose links outside its one job failed at the API layer, which is why both seats now have trees of their own (`academic-admin/route.tsx` and `inventory-admin/route.tsx` document the reasoning).
+Workspace roots (`/admin`, `/academic-admin`, `/inventory-admin`, `/leave-admin`, `/teacher`, `/principal`, `/deputy-principal`) only carry the role guard and forward to the active year; the pages themselves live under `$year`. The `admin` workspace is the top administrator's alone — `inventoryAdmin`, `academicAdmin` and `leaveAdmin` were each admitted to it in turn and arrived at a workspace whose links outside their one job failed at the API layer, which is why all three seats now have trees of their own (`academic-admin/route.tsx`, `inventory-admin/route.tsx` and `leave-admin/route.tsx` document the reasoning). `leaveAdmin` also has no `staffNav`/`academicNav` entries at all — its whole job is one group of routes under `staff/leaves`, mirroring how `inventoryAdmin`'s whole job is one group under `staff/inventory`.
 
-Each of the three administrator seats lands on its own `$year` index, and `getHomePath` sends all three there — the Academic and Inventory Administrators included, with no special case. The two specialist dashboards are the same page dressed for different work rather than two implementations: `components/admin/admin-dashboard.tsx` (with `base` deciding which workspace's addresses it builds) and `components/staff/inventory/inventory-dashboard.tsx`, sharing `StatTile` and `components/admin/dashboard-figure.ts` (`FOCUS_RING`, `OUTLINE_LINK`, `plural`, `Figure`, `showFigure`). **The values live in their own module on purpose:** a module exporting both components and plain values cannot preserve Fast Refresh state, so the fix for that lint rule is a file, not a disable comment.
+Each of the four specialist administrator seats lands on its own `$year` index, and `getHomePath` sends all four there — the Academic, Inventory and Leave Administrators included, with no special case. The two specialist dashboards are the same page dressed for different work rather than two implementations: `components/admin/admin-dashboard.tsx` (with `base` deciding which workspace's addresses it builds) and `components/staff/inventory/inventory-dashboard.tsx`, sharing `StatTile` and `components/admin/dashboard-figure.ts` (`FOCUS_RING`, `OUTLINE_LINK`, `plural`, `Figure`, `showFigure`). **The values live in their own module on purpose:** a module exporting both components and plain values cannot preserve Fast Refresh state, so the fix for that lint rule is a file, not a disable comment.
 
 The parent layout is in `apps/web/src/routes/_auth/route.tsx` (wraps all `/dashboard/*` routes with the sidebar-08 shell). **Do not** edit `routeTree.gen.ts` directly; it's auto-generated by the TanStack Router Vite plugin.
 
@@ -333,18 +338,19 @@ All six exports are real, working oRPC procedures (not stubs), in `packages/api/
 
 ### Permissions & Access Control
 
-Five tiers, and the difference between them is a decision, not an accident (September 2026).
+Six tiers, and the difference between them is a decision, not an accident (September 2026).
 
 - **`adminProcedure`** — `admin`, `principal`, `vicePrincipal`. Reading the ledger and acting inside your own queue: leave review, staff requests, attendance for the whole staff, and school-wide timetable reads.
 - **`academicProcedure`** — `admin`, `principal`, `vicePrincipal`, `academicAdmin`. The Academic Administrator's desk: the teachers register, classes, period assignment, the accounts list, staffing requests, historical reads. It is `ADMIN_ROLES` **plus** one seat, so widening a procedure onto it grants exactly one new audience and nothing else.
 - **`adminOrAcademicProcedure`** — `admin`, `academicAdmin`. School-wide switches the two seats share: opening, switching, restoring and deleting an academic year, and editing the attendance policy. Leadership is deliberately not on this list — it can read every ledger but does not move the goalposts for everyone else.
-- **`adminOnlyProcedure`** — `admin` alone. One switch: setting leave quotas (`staff.leaves.entitlements`).
+- **`adminOnlyProcedure`** — `admin` alone. School-wide switches: opening, switching and removing academic years, and editing the attendance policy. Setting leave quotas moved off this tier onto `leaveManagerProcedure` when the Leave Administrator seat was carved out.
 - **`inventoryOverseerProcedure` / `inventoryManagerProcedure`** — the register's reads (`ADMIN_ROLES` + `inventoryAdmin`) and writes (`admin` + `inventoryAdmin`). `academicAdmin` holds neither, which is why no inventory link appears in its workspace.
+- **`leaveOverseerProcedure` / `leaveManagerProcedure`** — the leave desk's reads (`ADMIN_ROLES` + `leaveAdmin`, guarding `staff.leaves.listLeaveRequests`) and writes (`admin` + `leaveAdmin`, guarding `staff.leaves.entitlements`). `academicAdmin` held the read half through `academicProcedure` until this seat was carved out and now holds neither; the Deputy → Principal recommend/finalize chain is unrelated to this pair — it is resolved from `staffPosition` rows in `resolveAuthority`, not from a role tier, and `leaveAdmin` does not join that chain.
 - **Permission resources** (`packages/auth/src/permissions.ts`) — per-role grants on `file`, `staff`, `assignment`, `qualification`, `student`, `mark`, `exam` and `inventory`. A teacher's `assignment: ["read"]` deliberately does **not** reach school-wide timetable reads, attendance reads or timetable exports: those are `adminProcedure`. A teacher reads their own timetable through `periods.getMyTeacherTimetable`, and enters marks only for the class they are the homeroom teacher of (`assertCanEnterMarkForAssignment`). A teacher's `inventory` grant is **`["read", "acknowledge"]`** — reads of their own holdings plus the handover notices they acknowledge or dispute, and **no custody write at all**: `take`, `manageOwn` and `update` are absent, because custody in this school is set from the seeded Inventory Administrator's seat. The three self-service/owner verbs (`takeItem`, `releaseCustody`, `transferOwnership`, `reclaimCustody`) are therefore reachable only by the three leadership seats, which hold `take`/`manageOwn`. A grant says which procedures may run and never which rows they may touch, so the scoping that does exist lives in the handlers.
 
-The route guards are the mirror of these tiers: `/admin` admits `admin`, `/academic-admin` admits `academicAdmin` + `admin`, `/inventory-admin` admits `inventoryAdmin` + `admin`. Each workspace only offers links its seat's procedures accept, so nobody is invited to click something the server will refuse.
+The route guards are the mirror of these tiers: `/admin` admits `admin`, `/academic-admin` admits `academicAdmin` + `admin`, `/inventory-admin` admits `inventoryAdmin` + `admin`, `/leave-admin` admits `leaveAdmin` + `admin`. Each workspace only offers links its seat's procedures accept, so nobody is invited to click something the server will refuse.
 
-The seeded accounts are `admin`, `principal`, `deputy-principal`, `inventory-admin` and `academic-admin`; their passwords come from `ACADEMIC_ADMIN_PASSWORD` and friends in `.env.schema`, and `packages/auth/src/admin.ts` re-syncs them on boot.
+The seeded accounts are `admin`, `principal`, `deputy-principal`, `inventory-admin`, `academic-admin` and `leave-admin`; their passwords come from `ACADEMIC_ADMIN_PASSWORD` and friends in `.env.schema`, and `packages/auth/src/admin.ts` re-syncs them on boot.
 
 Office staff have no self-service sign-up: their accounts are issued by an administrator, who creates the staff record and hands over the login.
 
