@@ -290,7 +290,6 @@ Every label is read from `packages/db/src/constants/inventory.ts`. A component t
 | Unit status | `UNIT_STATUSES`, `unitStatusLabel` | `available`, `borrowed`, `issued`, `disposed`, `removed`. No `reserved` — see the banner. |
 | Transfer reason | `INVENTORY_TRANSFER_REASON_KEYS`, `inventoryTransferReasonLabel` | Eight values. `other` is a real member of the set, not a hole in it. |
 | Custody / manager change type | `CUSTODY_CHANGE_TYPE_LABELS`, `custodyChangeTypeLabel` | Six values, custody and manager kept apart. |
-| Borrow status | `BORROW_STATUS_LABELS`, `borrowStatusLabel` |  |
 | Disposal method & status | `DISPOSAL_METHODS`, `disposalStatusLabel`, `DISPOSAL_FINAL_STATUSES` | The six final statuses each pair with a method via a CHECK. |
 | Ledger action | `INVENTORY_ACTION_LABELS`, `inventoryActionLabel` |  |
 | Seeded categories | `DEFAULT_INVENTORY_CATEGORIES` | Read by `categories.seed`, which **skips** rather than overwrites, so a school that has renamed or recoloured one of them keeps its choice. |

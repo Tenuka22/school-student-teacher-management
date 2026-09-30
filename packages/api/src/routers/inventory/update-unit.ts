@@ -194,7 +194,6 @@ const toUpdateResult = (unit: InventoryUnitRow, item: InventoryItemRow) => {
       name: item.name,
       sku: item.sku,
       qty: item.qty,
-      borrowedQty: item.borrowedQty,
       availableQty: calculateAvailableQuantity(counters),
       status: calculateItemStatus(counters, item.condition),
     },

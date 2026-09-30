@@ -20,11 +20,9 @@
  * **Three ordering facts this file depends on, each of which is a constraint
  * violation if got wrong:**
  *
- * 1. `qty` is decremented and `borrowedQty` is not. A unit on loan cannot be
- *    written off, and it does not need a special case to be excluded — the
- *    availability check in the handler works out `qty - borrowedQty`, so a
- *    borrowed unit is already outside the quantity being written off. Touching
- *    `borrowedQty` here would corrupt the count of what is still out.
+ * 1. `qty` is decremented to reflect the written-off units. The item's total
+ *    quantity (in units) tracks only actual inventory; the availability check
+ *    in the handler enforces that only available items can be written off.
  * 2. All four actor/timestamp columns that this step sets are set together, and
  *    `cancelled_*` is never touched. `inventory_disposal_approval_state`,
  *    `inventory_disposal_finalization_state` and
@@ -332,11 +330,9 @@ export const finalizeDisposal = inventoryManagerProcedure
       }
 
       /**
-       * The counter write. `borrowedQty` is untouched on purpose: the
-       * availability check above has already excluded everything that is out on
-       * loan, so decrementing `qty` alone leaves `borrowedQty <= qty` intact —
-       * which is what `inventory_item_counters_within_qty` requires, and what it
-       * would reject if the borrowed units had been counted into the write-off.
+       * The counter write. qty is the single source of truth for inventory
+       * count; decrementing it records the write-off of actual inventory units.
+       * The availability check above ensures only available items are written off.
        */
       const [updatedItem] = await tx
         .update(inventoryItem)
@@ -456,7 +452,6 @@ export const finalizeDisposal = inventoryManagerProcedure
         // the item behind the user's back.
         item: {
           qty: updatedItem.qty,
-          borrowedQty: updatedItem.borrowedQty,
           availableQty: calculateAvailableQuantity(countersOf(updatedItem)),
           // Derived by the same function every item badge in the app uses, so a
           // finalised write-off cannot show a different status here than on the

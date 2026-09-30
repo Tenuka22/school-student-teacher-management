@@ -5,8 +5,9 @@ import { custodyChangeTypeLabel } from "@school-student-teacher-management/db/co
  * procedure existed.
  *
  * `takeItem`/`transferCustody`/`releaseCustody`/`reclaimCustody`/
- * `decideCustodyRequest`/`transferOwnership` all write one
+ * `transferOwnership` all write one
  * `inventoryCustodyHistory` row per change, and — since that row was written —
+
  * one `inventoryCustodyNoticeRecipient` row per person it concerns:
  * `previous_custodian` (whoever just lost the item), `manager` (the item's
  * current manager, who stays accountable regardless of who holds it) and

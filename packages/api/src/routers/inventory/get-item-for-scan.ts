@@ -25,8 +25,8 @@
  * teacher standing in front of the projector to a search box to find the same
  * item by name instead. `canRequest` on the response is what a widened scan
  * offers instead of `canTake`, and `custodianName` travels with it for the
- * same reason `list-requestable-items.ts` selects it: the caller is about to
- * send a named person a request, not browse a roster.
+ * reason: the caller is about to
+ * decide, not browse a roster.
  */
 import { ORPCError } from "@orpc/server";
 import {
@@ -86,7 +86,7 @@ export const getItemForScan = requireInventoryPermission("read")
 
     // Requestable: somebody else already holds it, it is one the school lends
     // out, and it is not marked Damaged — the same admission
-    // `create-custody-request.ts` itself checks under a row lock before
+    // the custody system itself checks under a row lock before
     // writing anything, restated here only to decide what the scan may offer.
     const isRequestable =
       row.borrowable &&

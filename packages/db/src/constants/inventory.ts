@@ -51,16 +51,15 @@ export const itemConditionSchema = v.picklist(ITEM_CONDITIONS);
 /**
  * State of one tagged physical unit (one laptop, one projector, one microscope).
  *
- * `available` and `borrowed` are the two a unit spends its life in; `issued`
- * means it left the school permanently (see `inventoryIssue`), `disposed` and
- * `removed` are the two ways a unit stops existing without its `inventory_item`
- * row going away. The source app also had `reserved`; it is deliberately not
- * ported, because a school has no reservation workflow that outlives the
- * request that created it.
+ * `available` is the resting state; `issued` means it left the school
+ * permanently (see `inventoryIssue`), `disposed` and `removed` are the two
+ * ways a unit stops existing without its `inventory_item` row going away.
+ * The source app also had `reserved` and `borrowed`; neither is ported -
+ * this school's register has no reservation workflow and no dated-loan
+ * workflow, so neither state can ever be reached.
  */
 export const UNIT_STATUSES = [
   "available",
-  "borrowed",
   "issued",
   "disposed",
   "removed",
@@ -69,7 +68,6 @@ export type UnitStatus = (typeof UNIT_STATUSES)[number];
 
 export const UNIT_STATUS_LABELS: Record<string, string> = {
   available: "Available",
-  borrowed: "Borrowed",
   issued: "Issued",
   disposed: "Disposed",
   removed: "Removed",
@@ -189,52 +187,7 @@ export const custodyNoticeRecipientRoleSchema = v.picklist(
   CUSTODY_NOTICE_RECIPIENT_ROLES
 );
 
-// ─── Custody requests (peer-to-peer borrow approval) ────────────────────────
-
-/**
- * The lifecycle of a request to borrow an item **someone else is already
- * holding**. This is a different door from `custody.take` (which claims an
- * item nobody holds, instantly) and from `custody.transfer` (an administrator
- * moving an item by hand): here the current holder is the one who decides,
- * because the item is in their custody, and the change only happens if they
- * say yes.
- *
- * `pending` is the only open state; `approved` and `denied` are the
- * custodian's two answers; `cancelled` is the requester withdrawing before
- * either. An `approved` request always produces exactly one
- * `custody_transferred` row in `inventoryCustodyHistory` — approving *is*
- * the transfer, not a separate step after it.
- */
-export const CUSTODY_REQUEST_STATUSES = [
-  "pending",
-  "approved",
-  "denied",
-  "cancelled",
-] as const;
-export type CustodyRequestStatus = (typeof CUSTODY_REQUEST_STATUSES)[number];
-
-export const CUSTODY_REQUEST_STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
-  approved: "Approved",
-  denied: "Denied",
-  cancelled: "Cancelled",
-};
-
-export const custodyRequestStatusSchema = v.picklist(CUSTODY_REQUEST_STATUSES);
-
-// ─── Borrow status ──────────────────────────────────────────────────────────
-
-export const BORROW_STATUSES = ["borrowed", "returned"] as const;
-export type InventoryBorrowStatus = (typeof BORROW_STATUSES)[number];
-
-export const BORROW_STATUS_LABELS: Record<string, string> = {
-  borrowed: "Borrowed",
-  returned: "Returned",
-};
-
-export const inventoryBorrowStatusSchema = v.picklist(BORROW_STATUSES);
-
-// ─── Disposal ───────────────────────────────────────────────────────────────
+// --- Disposal ---
 
 /**
  * How a disposed quantity left the school's books. These are display strings,
@@ -341,8 +294,6 @@ export const INVENTORY_TRANSACTION_ACTIONS = [
   "stock_in",
   "stock_out",
   "issued",
-  "borrowed",
-  "returned",
   "custody_taken",
   "custody_transferred",
   "custody_released",
@@ -362,8 +313,6 @@ export const INVENTORY_ACTION_LABELS: Record<string, string> = {
   stock_in: "Stock in",
   stock_out: "Stock out",
   issued: "Issued",
-  borrowed: "Borrowed",
-  returned: "Returned",
   custody_taken: "Custody taken",
   custody_transferred: "Custody transferred",
   custody_released: "Custody released",
@@ -517,9 +466,6 @@ export const itemConditionLabel = (value: string | null | undefined): string =>
 export const unitStatusLabel = (value: string | null | undefined): string =>
   storedKeyLabel(value, UNIT_STATUS_LABELS);
 
-export const borrowStatusLabel = (value: string | null | undefined): string =>
-  storedKeyLabel(value, BORROW_STATUS_LABELS);
-
 export const custodyChangeTypeLabel = (
   value: string | null | undefined
 ): string => storedKeyLabel(value, CUSTODY_CHANGE_TYPE_LABELS);
@@ -541,7 +487,3 @@ export const inventoryActionLabel = (
 export const inventoryTransferReasonLabel = (
   value: string | null | undefined
 ): string => storedKeyLabel(value, INVENTORY_TRANSFER_REASON_LABELS);
-
-export const custodyRequestStatusLabel = (
-  value: string | null | undefined
-): string => storedKeyLabel(value, CUSTODY_REQUEST_STATUS_LABELS);

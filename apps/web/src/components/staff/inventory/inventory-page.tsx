@@ -84,7 +84,6 @@ const REGISTER_PAGE_SIZE = 200;
  * will ever add up. The ceiling is stated on the card's own comment below rather
  * than pretended away.
  */
-const MAX_OPEN_BORROWS = 500;
 
 /**
  * The mutation inputs, projected from the router.
@@ -414,11 +413,6 @@ export const useInventoryPage = () => {
    * only reads. Three cached queries on a desktop-first admin screen is a fair price
    * for not creating a second place that decides what "low stock" means.
    */
-  const borrowsQuery = useQuery(
-    orpc.inventory.borrows.list.queryOptions({
-      input: { status: "borrowed", limit: MAX_OPEN_BORROWS },
-    })
-  );
 
   const items = itemsQuery.data?.items;
   const totalCount = itemsQuery.data?.total;
@@ -471,9 +465,6 @@ export const useInventoryPage = () => {
      * worse read than one that lists both.
      */
     const missing: string[] = [];
-    if (borrowsQuery.isError) {
-      missing.push("Borrowed");
-    }
     if (lowStockQuery.isError) {
       missing.push("Low stock");
     }
@@ -486,10 +477,6 @@ export const useInventoryPage = () => {
         totalItems: totalCount ?? rows.length,
         totalUnits: rows.reduce((sum, row) => sum + row.qty, 0),
         availableUnits: rows.reduce((sum, row) => sum + row.availableQty, 0),
-        borrowedUnits: (borrowsQuery.data?.borrows ?? []).reduce(
-          (sum, borrow) => sum + borrow.qty,
-          0
-        ),
         outOfStockItems: rows.filter((row) => row.status === "out_of_stock")
           .length,
         lowStockItems: lowStockQuery.data?.total ?? 0,
@@ -501,17 +488,11 @@ export const useInventoryPage = () => {
        * below is what actually decides whether a `0` is a fact or a hole.
        */
       isStatsLoading:
-        itemsQuery.isLoading ||
-        borrowsQuery.isLoading ||
-        lowStockQuery.isLoading ||
-        missing.length > 0,
+        itemsQuery.isLoading || lowStockQuery.isLoading || missing.length > 0,
       /** The figures the cards must not print a number for, or `null`. */
       statsProblem: missing.length > 0 ? missing.join(" and ") : null,
     };
   }, [
-    borrowsQuery.data,
-    borrowsQuery.isError,
-    borrowsQuery.isLoading,
     items,
     itemsQuery.isError,
     itemsQuery.isLoading,
@@ -528,12 +509,8 @@ export const useInventoryPage = () => {
    * still cannot see.
    */
   const statsError = useMemo(() => {
-    const failures = [
-      borrowsQuery.error,
-      lowStockQuery.error,
-      itemsQuery.error,
-    ].filter((failure): failure is NonNullable<typeof failure> =>
-      Boolean(failure)
+    const failures = [lowStockQuery.error, itemsQuery.error].filter(
+      (failure): failure is NonNullable<typeof failure> => Boolean(failure)
     );
 
     return failures.length > 0
@@ -542,13 +519,12 @@ export const useInventoryPage = () => {
           "The register's summary figures could not be read"
         )
       : null;
-  }, [borrowsQuery.error, itemsQuery.error, lowStockQuery.error]);
+  }, [itemsQuery.error, lowStockQuery.error]);
 
   const handleRetryStats = useCallback(() => {
-    void borrowsQuery.refetch();
     void lowStockQuery.refetch();
     void itemsQuery.refetch();
-  }, [borrowsQuery, itemsQuery, lowStockQuery]);
+  }, [itemsQuery, lowStockQuery]);
 
   // ─── Invalidation ────────────────────────────────────────────────────────
 
@@ -1418,7 +1394,6 @@ export const useInventoryPage = () => {
  */
 export type InventorySection =
   | "register"
-  | "loans"
   | "issues"
   | "write-offs"
   | "asset-register"
@@ -1427,19 +1402,17 @@ export type InventorySection =
 /** Which of `InventoryLifecycleTabs`' four `Tabs` values a section maps to. */
 const LIFECYCLE_SUBTAB_OF: Record<
   Exclude<InventorySection, "register">,
-  "loans" | "issues" | "write-offs" | "register"
+  "issues" | "write-offs" | "register"
 > = {
-  loans: "loans",
   issues: "issues",
   "write-offs": "write-offs",
   "asset-register": "register",
   // The ledger section sits at the foot of the Records pane regardless of
   // which lifecycle tab is active above it, so `/ledger` lands on Records
-  // with Loans (the pane's own default) underneath and scrolls to the
+  // with Issues (the pane's default for records) underneath and scrolls to the
   // ledger heading — see `scrollToLedger` on `InventoryLifecycleTabs`.
-  ledger: "loans",
+  ledger: "issues",
 };
-
 /**
  * The administrator's inventory page: two panes over one URL.
  *
@@ -1898,7 +1871,7 @@ export const InventoryPage = ({
         to:
           next === "register"
             ? yearPath(base, year, "staff", "inventory")
-            : yearPath(base, year, "staff", "inventory", "loans"),
+            : yearPath(base, year, "staff", "inventory", "issues"),
       });
     },
     [navigate, tab, year, base]
@@ -1915,7 +1888,7 @@ export const InventoryPage = ({
         <h1 className="font-heading text-4xl font-semibold">Inventory</h1>
         <p className="text-muted-foreground max-w-3xl">
           Every item the school owns, who is responsible for it, and who is
-          holding it — with the movements, issues, write-offs and change log
+          holding it — with the movements, transfers, disposals and change log
           behind it
         </p>
       </header>
@@ -1982,7 +1955,7 @@ export const InventoryPage = ({
         <section aria-labelledby={LIFECYCLE_HEADING_ID}>
           <InventoryLifecycleTabs
             activeSubtab={
-              section === "register" ? "loans" : LIFECYCLE_SUBTAB_OF[section]
+              section === "register" ? "issues" : LIFECYCLE_SUBTAB_OF[section]
             }
             onSubtabChange={(next) => {
               // `InventoryLifecycleTabs`' own "register" tab value (its asset

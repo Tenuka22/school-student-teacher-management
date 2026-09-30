@@ -75,20 +75,19 @@ const CategoryDot: React.FC<{ color: string }> = ({ color }) => (
 );
 
 /**
- * The three counters, in the order a clerk reads them.
+ * The two counters, in the order a clerk reads them.
  *
  * **Available is the emphasised one and the other two are muted, deliberately.**
  * The question this table exists to answer is "what can I hand out right now",
- * and `availableQty` is the server's own derivation of it (`qty - borrowedQty`,
- * floored at zero) rather than something recomputed here — a third
+ * and `availableQty` is the server's own derivation of it (`qty`,
+ * floored at zero) rather than something recomputed here - a third
  * implementation of that subtraction is exactly the drift
- * `inventory-calculations.ts` was written to prevent. `qty` and `borrowedQty`
- * stay on the row because the *reason* available is smaller than on hand is the
- * second thing a clerk asks, and a muted pair answers it without competing.
+ * `inventory-calculations.ts` was written to prevent. `qty` stays on the row
+ * beside it as the on-hand figure a clerk reads second.
  *
- * The separators are `aria-hidden` and each figure carries its own `sr-only`
- * label, so a screen reader hears "3 on hand, 2 available to hand out, 1 out on
- * loan" rather than "3 slash 2 slash 1".
+ * The separator is `aria-hidden` and each figure carries its own `sr-only`
+ * label, so a screen reader hears "3 on hand, 2 available to hand out" rather
+ * than "3 slash 2".
  */
 const StockFigures: React.FC<{ item: InventoryItemView }> = ({ item }) => {
   /*
@@ -127,13 +126,6 @@ const StockFigures: React.FC<{ item: InventoryItemView }> = ({ item }) => {
         <span className="text-foreground text-sm font-semibold">
           {item.availableQty}
           <span className="sr-only"> available to hand out</span>
-        </span>
-        <span aria-hidden="true" className="text-muted-foreground/50">
-          /
-        </span>
-        <span className="text-muted-foreground">
-          {item.borrowedQty}
-          <span className="sr-only"> out on loan</span>
         </span>
       </span>
       {isLow ? (

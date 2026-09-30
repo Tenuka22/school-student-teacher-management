@@ -64,7 +64,6 @@ const RETIRED_RECORD_ROLES = new Set([
  */
 const itemStatusSchema = v.picklist([
   "out_of_stock",
-  "borrowed",
   "damaged",
   "available",
 ] as const satisfies readonly InventoryItemStatus[]);

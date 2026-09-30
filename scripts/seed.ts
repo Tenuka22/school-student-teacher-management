@@ -17,9 +17,9 @@ import {
 } from "@school-student-teacher-management/db/schema/staff";
 /**
  * One-off dev seed: enough real data to exercise the features that need more
- * than one person to test — most pressingly, custody requests
- * (`inventory.custody.requests`), which need two *different* teachers, one
- * holding an item the other can ask for.
+ * than one person to test — most pressingly, a custody transfer
+ * (`inventory.custody.transfer`), which needs two *different* teachers, one
+ * holding an item and one to hand it to.
  *
  * Idempotent by design, not by accident: every insert either checks for an
  * existing row first or uses `onConflictDoNothing`, so running this twice
@@ -27,7 +27,7 @@ import {
  * after a fresh `db:migrate`.
  *
  * Run with `bun run seed` from the repo root. Loads `apps/web/.env` directly
- * \u2014 the same file `apps/web`'s own dev server and drizzle scripts read \u2014
+ * — the same file `apps/web`'s own dev server and drizzle scripts read —
  * because `varlock/auto-load`'s cwd-relative discovery only finds a package's
  * own `.env`, and this script's package is the repo root, which has none.
  */
@@ -106,7 +106,7 @@ interface DemoTeacher {
 
 /**
  * Two real, separately-logged-in-able teachers — the minimum needed to test
- * a peer-to-peer custody request end to end. The password is one every seeded
+ * a custody transfer end to end. The password is one every seeded
  * demo account shares, same convention as the leadership seats in
  * `packages/auth/src/admin.ts`.
  *
@@ -185,10 +185,10 @@ const seedTeacher = async (demo: DemoTeacher): Promise<string> => {
 
 /**
  * One bulk-counted line (20 office chairs, one QR code, no per-unit tags)
- * and one individually-held line (a camera in Priya's hands, requestable by
- * Kasun) — deliberately the two cases `AssetTagFields`' new description
- * explains, and the second is what makes `custody.requests.create` testable
- * without registering an item by hand first.
+ * and one individually-held line (a camera in Priya's hands) — deliberately
+ * the two cases `AssetTagFields`' new description explains, and the second is
+ * what makes `custody.transfer`/`custody.take` testable without registering an
+ * item by hand first.
  */
 const seedEquipment = async (
   cameraCategoryId: string,
@@ -213,9 +213,9 @@ const seedEquipment = async (
       description: "DSLR camera, kept in the AV cupboard",
       unit: "unit",
       qty: 1,
-      borrowedQty: 0,
       borrowable: true,
       condition: "Good",
+      managerStaffId: custodianStaffId,
       custodianStaffId,
     });
     await db.insert(inventoryCustodyHistory).values({
@@ -248,15 +248,21 @@ const seedEquipment = async (
       description: "Standard staff-room chair",
       unit: "unit",
       qty: 20,
-      borrowedQty: 0,
       borrowable: false,
       condition: "Good",
+      managerStaffId: custodianStaffId,
+      custodianStaffId,
     });
     log("Created Office Chair (INV-90002), a bulk-counted line of 20");
   }
 };
 
 const run = async () => {
+  const [demoTeacherOne, demoTeacherTwo] = DEMO_TEACHERS;
+  if (!(demoTeacherOne && demoTeacherTwo)) {
+    throw new Error("DEMO_TEACHERS must have exactly two entries");
+  }
+
   await seedAcademicYear();
   await seedCategories();
 
@@ -279,8 +285,8 @@ const run = async () => {
     .limit(1);
 
   const [teacherOneId, teacherTwoId] = await Promise.all([
-    seedTeacher(DEMO_TEACHERS[0]),
-    seedTeacher(DEMO_TEACHERS[1]),
+    seedTeacher(demoTeacherOne),
+    seedTeacher(demoTeacherTwo),
   ]);
 
   if (audioVisual && furniture) {
@@ -291,7 +297,7 @@ const run = async () => {
 
   log("Done.");
   log(
-    `Sign in as either demo teacher (${DEMO_TEACHERS.map((t) => t.nic).join(", ")}) / "teacher-2026-demo" to test peer-to-peer custody requests — the second teacher's own account (staff id ${teacherTwoId}) has nothing held yet, so it is the one to raise the request from.`
+    `Sign in as either demo teacher (${DEMO_TEACHERS.map((t) => t.nic).join(", ")}) / "teacher-2026-demo" to test a custody transfer — the second teacher's own account (staff id ${teacherTwoId}) has nothing held yet, so it is the one to receive the item.`
   );
 };
 

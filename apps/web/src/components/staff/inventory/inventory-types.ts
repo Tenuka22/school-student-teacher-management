@@ -17,7 +17,7 @@
  *   side only where the wire has no output to read it from — a picklist the UI
  *   must offer but that no list returns (`ItemCondition`, `UnitStatus`,
  *   `TransferReason`).
- * - `InventoryCounters` is `Pick<InventoryItemView, "qty" | "borrowedQty">`
+ * - `InventoryCounters` is `Pick<InventoryItemView, "qty">`
  *   rather than a copy of the interface in
  *   `packages/api/src/routers/inventory/inventory-calculations.ts`. The server
  *   is the authority for that shape, but it is not re-exported through the
@@ -59,7 +59,7 @@ export type InventoryItemStatus = InventoryItemView["status"];
  * is derived on the server from these two, and a client that recomputed it
  * would be a third implementation of the same subtraction.
  */
-export type InventoryCounters = Pick<InventoryItemView, "qty" | "borrowedQty">;
+export type InventoryCounters = Pick<InventoryItemView, "qty">;
 
 /** `packages/db/src/constants/inventory.ts` `ITEM_CONDITIONS`. */
 export type ItemCondition = NonNullable<
@@ -104,11 +104,6 @@ export type CustodyHistoryEntry = ElementOf<
   InventoryOutput["custody"]["history"]
 >;
 
-/** One row of `orpc.inventory.custody.myItems`' sibling, `orpc.inventory.borrows.list`. */
-export type BorrowRecord = ElementOf<
-  InventoryOutput["borrows"]["list"]["borrows"]
->;
-
 /** One row of `orpc.inventory.issues.list`. */
 export type IssueRecord = ElementOf<
   InventoryOutput["issues"]["list"]["issues"]
@@ -130,15 +125,6 @@ export type AuditLogRecord = ElementOf<
 >;
 
 /** One row of `orpc.inventory.custody.requests.listIncoming` / `.listOutgoing`. */
-export type CustodyRequestView = ElementOf<
-  InventoryOutput["custody"]["requests"]["listIncoming"]["requests"]
->;
-
-/** One row of `orpc.inventory.custody.requests.listRequestable`. */
-export type RequestableItemView = ElementOf<
-  InventoryOutput["custody"]["requests"]["listRequestable"]["items"]
->;
-
 /**
  * The filter state the register and the asset-tag register share.
  *

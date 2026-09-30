@@ -101,7 +101,6 @@ export const inventoryQueryKeys = {
     input: {},
   }).queryKey,
   /** Open and closed loans, filtered by borrower, item, status and overdue. */
-  borrows: orpc.inventory.borrows.list.queryOptions({ input: {} }).queryKey,
   /** Permanent issues out. */
   issues: orpc.inventory.issues.list.queryOptions({ input: {} }).queryKey,
   /** Write-offs, including the certificates on a pending one. */
@@ -142,8 +141,6 @@ export type InventoryMutationScope =
   | "category"
   | "custody"
   | "issue"
-  | "borrow"
-  | "return"
   | "disposal"
   | "disposalDecision";
 
@@ -261,20 +258,6 @@ const SCOPE_KEYS: Record<
    * list, which is the only place a new issue row is visible.
    */
   issue: ["items", "item", "units", "issues", "transactions", "auditLogs"],
-
-  /**
-   * `borrow` — `borrows.create`. Same shape as `issue` with `borrows` in place of
-   * `issues`: `qty` is untouched, so the register's *availability* changes but the
-   * line count does not, and the loan itself is only visible on `borrows.list`.
-   */
-  borrow: ["items", "item", "units", "borrows", "transactions", "auditLogs"],
-
-  /**
-   * `return` — `borrows.return`. Identical key set to `borrow` on purpose: a return is
-   * the same fact arriving from the other direction, and an asymmetric table here
-   * would be a bug waiting to be written.
-   */
-  return: ["items", "item", "units", "borrows", "transactions", "auditLogs"],
 
   /**
    * `disposal` — raise a write-off. The register (it is on its way out), the detail

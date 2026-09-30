@@ -240,27 +240,6 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
         });
       }
 
-      // **Load-bearing guard.** An item with units out on a dated loan is not in
-      // the owner's hands to give away: the units are with a borrower under an
-      // `inventoryBorrow` row with a due date, and the person who made this
-      // request is not the person the register currently holds responsible for
-      // them. Moving the owner would create a record the register cannot honour —
-      // a new owner who has never seen the equipment and is answerable for a loan
-      // they did not take out, while the borrow still names somebody else
-      // returning it. The return flow is the route that closes the loan and
-      // records the condition it came back in, and it has to happen first.
-      //
-      // `transferCustody` deliberately does **not** guard this (a person does hand
-      // a borrowed item to a colleague, and it is recorded), and the reason the
-      // two differ is the column each one writes: custody does not change who is
-      // answerable, ownership is nothing but who is answerable.
-      if (existing.borrowedQty > 0) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "This item is out on loan, so the loan has to be closed through the borrow return flow before the ownership of it can change hands",
-        });
-      }
-
       // **The holder becomes the new owner, not cleared.** See the file comment
       // for the full argument: `custodian_staff_id` is `NOT NULL` so there is
       // no empty state to clear into, and of the two available stories — "the

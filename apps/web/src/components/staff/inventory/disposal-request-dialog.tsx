@@ -174,7 +174,7 @@ const DisposalRequestIdentityFields: React.FC<{
       value={itemId}
       onChange={onItemChange}
       label="Item *"
-      description="Only items with units on the shelf are offered. Anything currently out on loan is excluded."
+      description="Only items with units on the shelf are offered."
       error={errors.itemId}
       disabled={disabled}
       onlyAvailable

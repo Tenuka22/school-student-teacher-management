@@ -195,39 +195,28 @@ const TakeModeNotices = () => (
 );
 
 /**
- * Everything a hand-back adds over a claim: two warnings about refusals the
+ * Everything a hand-back adds over a claim: one warning about a refusal the
  * server decides, and the one field that names the successor.
  *
- * Both warnings state a condition and neither blocks the button. `isOnLoan` is
- * visible on the row and the server's message says why (the return date and the
- * signature have to be kept), so a disabled control would hide the one thing the
- * user needs to know; `isUnchanged` is a no-op the server refuses outright. The
- * notices turn a guaranteed failure into a stated rule, which is the difference
- * between a form that argues with you and one that lies about the outcome.
+ * The warning states a condition and does not block the button: `isUnchanged`
+ * is a no-op the server refuses outright, so this notice turns a guaranteed
+ * failure into a stated rule, which is the difference between a form that
+ * argues with you and one that lies about the outcome.
  */
 const ReleaseModeFields = ({
   busy,
   error,
-  isOnLoan,
   isUnchanged,
   onPick,
   receiverId,
 }: {
   busy: boolean;
   error?: string;
-  isOnLoan: boolean;
   isUnchanged: boolean;
   onPick: (staffId: string | null) => void;
   receiverId: string | null;
 }) => (
   <>
-    {isOnLoan ? (
-      <InventoryInlineNotice
-        tone="warning"
-        title="This item may be out on loan"
-        description="A hand-back is refused while units are away: the loan has to be returned through its own record first, so the return date and the signature are kept. Go ahead — if that is the case, the server will say so."
-      />
-    ) : null}
     {isUnchanged ? (
       <InventoryInlineNotice
         tone="warning"
@@ -418,7 +407,6 @@ export const TakeOrReleaseDialog = ({
     ? null
     : holdReceiverId(hasPicked, picked, item?.managerStaffId);
   const receiverName = usePartyName(receiverId);
-  const isOnLoan = (item?.borrowedQty ?? 0) > 0;
   const isUnchanged =
     receiverId !== null && receiverId === item?.custodianStaffId;
   const busy = isPending || isSubmitting;
@@ -525,7 +513,6 @@ export const TakeOrReleaseDialog = ({
           <ReleaseModeFields
             busy={busy}
             error={errors.newCustodianStaffId}
-            isOnLoan={isOnLoan}
             isUnchanged={isUnchanged}
             onPick={(next) => {
               setPicked(next);

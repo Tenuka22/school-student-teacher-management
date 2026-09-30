@@ -22,10 +22,8 @@ import {
 import * as v from "valibot";
 
 import {
-  BORROW_STATUSES,
   CUSTODY_CHANGE_TYPES,
   CUSTODY_NOTICE_RECIPIENT_ROLES,
-  CUSTODY_REQUEST_STATUSES,
   DISPOSAL_FINAL_STATUSES,
   DISPOSAL_METHODS,
   DISPOSAL_STATUSES,
@@ -36,11 +34,9 @@ import {
   UNIT_STATUSES,
   custodyChangeTypeSchema,
   custodyNoticeRecipientRoleSchema,
-  custodyRequestStatusSchema,
   disposalMethodSchema,
   disposalStatusSchema,
   inventoryActionSchema,
-  inventoryBorrowStatusSchema,
   inventoryCategoryIconSchema,
   inventoryTransferReasonSchema,
   itemConditionSchema,
@@ -49,7 +45,6 @@ import {
 import { brand } from "./brand";
 import type { Brand } from "./brand";
 import { fileIdSchema, files } from "./files";
-import { student, studentIdSchema } from "./marking";
 import { isoDateSchema, optionalNullable, slPhoneSchema } from "./primitives";
 import { staff } from "./staff";
 
@@ -125,12 +120,6 @@ export const inventoryItemReplacementIdSchema = v.pipe(
   brand<string, "InventoryItemReplacementId">()
 );
 
-export type InventoryBorrowId = Brand<string, "InventoryBorrowId">;
-export const inventoryBorrowIdSchema = v.pipe(
-  v.string(),
-  brand<string, "InventoryBorrowId">()
-);
-
 export type InventoryDisposalId = Brand<string, "InventoryDisposalId">;
 export const inventoryDisposalIdSchema = v.pipe(
   v.string(),
@@ -162,15 +151,6 @@ export type InventoryCustodyNoticeRecipientId = Brand<
 export const inventoryCustodyNoticeRecipientIdSchema = v.pipe(
   v.string(),
   brand<string, "InventoryCustodyNoticeRecipientId">()
-);
-
-export type InventoryCustodyRequestId = Brand<
-  string,
-  "InventoryCustodyRequestId"
->;
-export const inventoryCustodyRequestIdSchema = v.pipe(
-  v.string(),
-  brand<string, "InventoryCustodyRequestId">()
 );
 
 export type InventoryTransactionId = Brand<string, "InventoryTransactionId">;
@@ -332,12 +312,12 @@ export const inventoryCategory = pgTable(
  * `inventoryTransaction` is the before/after ledger that keeps the denormalized
  * numbers honest.
  *
- * There are exactly two counters, `qty` and `borrowedQty`. The source app also
- * carried a `reservedQty` and this port does not: nothing in a school writes it,
- * so it described a state the store could never reach. What a reservation was
- * for — holding stock back pending a decision — is what `inventoryBorrow`
- * plus `inventory_borrow_status` and the pending statuses on
- * `inventoryDisposal` already say, and saying it twice was the defect.
+ * There is exactly one counter, `qty`. The source app also carried a
+ * `reservedQty` and a `borrowedQty`, and this port drops both: this school's
+ * register has no dated-loan workflow, so neither counter ever described a
+ * state the store could reach — every unit an item holds is either on hand
+ * (`qty`) or permanently gone (issued or disposed), never "out and expected
+ * back".
  */
 export const inventoryItem = pgTable(
   "inventory_item",
@@ -353,7 +333,6 @@ export const inventoryItem = pgTable(
     /** Reorder threshold — the number below which the store must be warned. */
     minQty: integer("min_qty").notNull().default(0),
     qty: integer("qty").notNull().default(0),
-    borrowedQty: integer("borrowed_qty").notNull().default(0),
     borrowable: boolean("borrowable").notNull().default(false),
     condition: text("condition").notNull().default("Good"),
     location: text("location").notNull().default(""),
@@ -478,14 +457,7 @@ export const inventoryItem = pgTable(
       "inventory_item_condition_check",
       sqlIn(table.condition, ITEM_CONDITIONS)
     ),
-    check(
-      "inventory_item_counters_nonneg",
-      sql`${table.qty} >= 0 AND ${table.borrowedQty} >= 0`
-    ),
-    check(
-      "inventory_item_counters_within_qty",
-      sql`${table.borrowedQty} <= ${table.qty}`
-    ),
+    check("inventory_item_counters_nonneg", sql`${table.qty} >= 0`),
     // `minQty` is a reorder threshold, not a stock floor. A DB-level
     // `min_qty <= qty` would make every write-off, issue and disposal fail the
     // moment on-hand reached the reorder line — which is precisely when those
@@ -612,8 +584,8 @@ export const inventoryUnit = pgTable(
     index("inventory_unit_item_id_idx").on(table.itemId),
     // A single-column index on a low-cardinality status forces a sort for every
     // "newest first, filtered by status" feed, and those feeds are the whole UI
-    // — the store's unit list, the disposal queue, the overdue-borrow report and
-    // the transaction history are all "order by created_at, where status = X".
+    // - the store's unit list, the disposal queue and the transaction history
+    // are all "order by created_at, where status = X".
     // The composite index answers each of them from the index alone.
     index("inventory_unit_status_created_at_idx").on(
       table.status,
@@ -647,14 +619,12 @@ export const inventoryUnit = pgTable(
  * a contractor repairing a window, to another school, to the Provincial
  * Education Office. Forcing an FK here would mean inventing a staff record for
  * a body that is not staff, which is exactly the kind of fake row that makes a
- * staff list untrustworthy two years later. A borrow is the opposite case, and
- * uses real foreign keys: `inventoryBorrow.borrowerStaffId` **or**
- * `inventoryBorrow.borrowerStudentId`, with a CHECK that exactly one of the two
- * is set. A loan is always owed back by somebody in the school's own register —
- * a member of staff, or a student with an admission number — so unlike an
- * issue's receiver it is never free text, and unlike a fabricated staff row it
- * never invents a person. See the note on `inventoryBorrow` for why that is two
- * columns rather than one polymorphic pair.
+ * staff list untrustworthy two years later. Custody (`inventoryItem.custodianStaffId`,
+ * moved by `transferCustody`/`takeItem`/`releaseCustody`) is the opposite case:
+ * it always names a real `staff` row, because custody is accountability inside
+ * the school, never a hand-over to somebody outside it. This school's register
+ * has no dated-loan workflow, so unlike custody an issue's receiver is never
+ * forced to be a real row - it is genuinely a one-way departure.
  *
  * `issuedAt` is the moment of hand-over and is set once; there is no
  * `updatedAt` because an issue is a finished fact, not a record under
@@ -736,225 +706,6 @@ export const inventoryIssueUnit = pgTable(
       columns: [table.issueId, table.unitId],
     }),
     unique("inventory_issue_unit_unit_unique").on(table.unitId),
-  ]
-);
-
-// ─── Borrows (check-out / check-in of an item to a named person) ────────────
-
-/**
- * A check-out of stock to a **named person**, expected back.
- *
- * **Why the borrower can be a student.** The column this table used to carry,
- * `borrowerStaffId`, was `notNull` and typed `staff`, which said out loud that a
- * student could not be recorded as holding a school asset. That is not how a
- * school works: a Grade 9 class is lent calculators, a sports set is lent to a
- * house, an examination kit is lent to an invigilator's student, and a laptop
- * goes home with a pupil at the end of every term. A register that cannot
- * record the person a student is actually responsible for is not an asset
- * register — it is a record of a subset of assets whose holders happen to be on
- * the payroll, and the missing subset is exactly the one a parent queries, an
- * auditor counts and a lost-property list needs.
- *
- * The pointer is kept in a `student` foreign key, with a name and an admission
- * number, for the same reason `inventoryIssue` refuses one (see the note on
- * that table): stock is not always handed to an employee. A loan to a student
- * is still a loan to **somebody in this database** — a real `student` row with
- * a real admission number and a class you can find them in — so unlike a free-text
- * receiver name, it is an FK. The student's name is not invented, and a loan
- * cannot name a borrower who does not exist.
- *
- * **Why two columns and a CHECK, and not `{ partyType, partyId }`.** Postgres
- * cannot express a polymorphic foreign key: a single `party_id` column would
- * have to point at `staff.id` on some rows and `student.id` on others, and
- * there is no constraint that can mean "the referenced value must exist in the
- * table named by the other column". The usual workaround — a `party_type` text
- * column plus a bare `party_id` — silently throws away referential integrity on
- * *both* tables, which is the one thing a loan record exists to guarantee. A
- * `student` row that a school deletes would leave a borrow pointing at nothing,
- * and nothing in the schema would notice. So this is modelled the honest way:
- * two nullable columns, each with a real foreign key to the table it names, and
- * `inventory_borrow_borrower_exclusive` refusing both-or-neither. Two nullable
- * pointers are the price; the integrity on both is the payoff.
- *
- * **Both foreign keys are `restrict`, deliberately, and the student one is not
- * `set null` the way the custody trail's are.** `inventoryCustodyHistory` is
- * `set null` because it is *evidence of a transition*: its job is to say "the
- * custodian was X, and is now Y", and a person who has left the school being
- * replaced by a null retires a name from a trail without destroying it. A
- * borrow is not a transition, it is an **open obligation** — somebody is
- * responsible for bringing the thing back — so nulling the borrower would make
- * the row say "nobody owes us this" while `inventoryItem.borrowedQty` still
- * counts the unit as out, and the register would stop agreeing with itself in
- * the one place where an auditor checks it. The operational way a school
- * resolves a departing student with a laptop is therefore the obvious one:
- * return the kit, close the loan, and only then may the student's record be
- * deleted. That order is now a database fact rather than a convention a
- * careful clerk remembers.
- *
- * (There is a second, less obvious reason `set null` was not even available:
- * the exclusivity CHECK below fires *during* the `UPDATE` a `set null` FK
- * action performs, so "delete this student" would have come back as an opaque
- * `inventory_borrow_borrower_exclusive` violation on a row nobody was looking
- * at. `restrict` refuses the delete up front, naming the loan, which is the
- * error a clerk can act on.)
- *
- * The `inventory_borrow_return_state` CHECK is the one that stops a half-written
- * return: `status` cannot say `returned` without a `returnedAt` **and** a
- * `returnCondition`, and cannot still say `borrowed` once a return has been
- * recorded. A returned item whose condition was left blank is worse than an
- * unreturned one, because the loss is discovered at the next audit instead of
- * at the counter.
- */
-export const inventoryBorrow = pgTable(
-  "inventory_borrow",
-  {
-    id: text("id").primaryKey(),
-    itemId: text("item_id")
-      .notNull()
-      .references(() => inventoryItem.id, { onDelete: "restrict" }),
-    qty: integer("qty").notNull(),
-    /**
-     * Exactly one of these two is set — see the table comment and
-     * `inventory_borrow_borrower_exclusive`. Both are `restrict` because both
-     * name the person accountable for bringing the item back; neither is
-     * `notNull` because "which table the borrower lives in" is what the
-     * exclusivity CHECK is for, and a `notNull` here would have pinned the
-     * borrower to staff for good.
-     */
-    borrowerStaffId: text("borrower_staff_id").references(() => staff.id, {
-      onDelete: "restrict",
-    }),
-    borrowerStudentId: text("borrower_student_id").references(
-      () => student.id,
-      {
-        onDelete: "restrict",
-      }
-    ),
-    purpose: text("purpose").notNull(),
-    /** ISO date string — the date the borrower committed to. */
-    expectedReturnDate: text("expected_return_date").notNull(),
-    approvedBy: text("approved_by"),
-    note: text("note"),
-    status: text("status").notNull().default("borrowed"),
-    borrowedByStaffId: text("borrowed_by_staff_id").references(() => staff.id, {
-      onDelete: "set null",
-    }),
-    borrowedAt: timestamp("borrowed_at").defaultNow().notNull(),
-    returnedAt: timestamp("returned_at"),
-    returnedByStaffId: text("returned_by_staff_id").references(() => staff.id, {
-      onDelete: "set null",
-    }),
-    returnCondition: text("return_condition"),
-    returnNote: text("return_note"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    // "Every loan this person has ever had" is the question both columns are
-    // indexed for, and the student one is indexed for the same reason the staff
-    // one already is: it is a column that half the rows in this table will not
-    // use, and a report that asks a student what they have out has nothing to
-    // scan without it.
-    index("inventory_borrow_borrower_staff_id_idx").on(table.borrowerStaffId),
-    index("inventory_borrow_borrower_student_id_idx").on(
-      table.borrowerStudentId
-    ),
-    index("inventory_borrow_item_id_idx").on(table.itemId),
-    // Overdue-borrow reporting is this table's reason to exist, and it is
-    // always the same question: open borrows, soonest due first. Same composite
-    // reasoning as `inventory_unit_status_created_at_idx` — the single-column
-    // `status` index can only answer the filter, and the feed then sorts.
-    index("inventory_borrow_status_expected_return_idx").on(
-      table.status,
-      table.expectedReturnDate
-    ),
-    check("inventory_borrow_qty_positive", sql`${table.qty} > 0`),
-    // The exclusivity rule, as a database fact: a borrow names exactly one
-    // borrower of exactly one type. `<>` is the xor — true when one side is set
-    // and the other is not — so both-set and neither-set are both refused, and
-    // neither can be reached by a write path that forgot to fill a column in.
-    // The `(is not null)` wrappers matter: written as a plain
-    // `a <> b` on the ids themselves the expression would be `null` for a
-    // null-bearing row, and a CHECK that evaluates to null **passes** (the same
-    // trap `sqlInOrNull` exists to avoid), so a borrow with no borrower at all
-    // would slip through.
-    check(
-      "inventory_borrow_borrower_exclusive",
-      sql`(${table.borrowerStaffId} is not null) <> (${table.borrowerStudentId} is not null)`
-    ),
-
-    check(
-      "inventory_borrow_status_check",
-      sqlIn(table.status, BORROW_STATUSES)
-    ),
-    check(
-      "inventory_borrow_return_condition_check",
-      sqlInOrNull(table.returnCondition, ITEM_CONDITIONS)
-    ),
-    // `text`, so the ISO shape is part of the contract — see the same check on
-    // `inventoryIssue.expectedReturnDate`. This one is `notNull`, so there is
-    // no `is null` arm: a borrow with no date to be late against is refused.
-    check(
-      "inventory_borrow_expected_return_date_iso",
-      sql`${table.expectedReturnDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'`
-    ),
-    check(
-      "inventory_borrow_return_state",
-      sql`(
-        ${table.status} = 'borrowed'
-        and ${table.returnedAt} is null
-        and ${table.returnedByStaffId} is null
-        and ${table.returnCondition} is null
-        and ${table.returnNote} is null
-      ) or (
-        ${table.status} = 'returned'
-        and ${table.returnedAt} is not null
-        and ${table.returnCondition} is not null
-      )`
-    ),
-  ]
-);
-
-/**
- * Which tagged units are out on which borrow.
- *
- * `releasedAt` is stamped at check-in, which is what makes the partial unique
- * index below possible: a unit may sit in at most one *unreleased* borrow at a
- * time, but may be borrowed again as many times as the school likes, so the
- * constraint has to be scoped to the open rows. Without the `where`, the second
- * borrow of the same projector would be refused by a plain unique index and the
- * history of that projector would stop at its first loan.
- *
- * `borrowId` is `restrict` and the reason is the one thing about this table
- * that is easy to get backwards. Nothing in the system deletes a borrow: a
- * borrow is **closed** by returning the unit and stamping `releasedAt`, which
- * leaves the row in place as the record that the projector was out and came
- * back. A cascade here would have been a convenience for a deletion that never
- * happens, and it would have cost the ability to refuse one that does.
- */
-export const inventoryBorrowUnit = pgTable(
-  "inventory_borrow_unit",
-  {
-    borrowId: text("borrow_id")
-      .notNull()
-      .references(() => inventoryBorrow.id, { onDelete: "restrict" }),
-    unitId: text("unit_id")
-      .notNull()
-      .references(() => inventoryUnit.id, { onDelete: "restrict" }),
-    releasedAt: timestamp("released_at"),
-  },
-  (table) => [
-    primaryKey({
-      name: "inventory_borrow_unit_pk",
-      columns: [table.borrowId, table.unitId],
-    }),
-    index("inventory_borrow_unit_unit_id_idx").on(table.unitId),
-    uniqueIndex("inventory_borrow_unit_active_unique")
-      .on(table.unitId)
-      .where(sql`${table.releasedAt} is null`),
   ]
 );
 
@@ -1129,7 +880,7 @@ export const inventoryDisposal = pgTable(
  * never moved a device, so `inventoryUnit.status` is still `available` and the
  * pin row stays on file as the record of which certificate once claimed it.
  *
- * `disposalId` is `restrict` for the same reason `inventoryBorrowUnit.borrowId`
+ * `disposalId` is `restrict` for the same reason `inventoryIssueUnit.issueId`
  * is: a disposal is never deleted, it is finalized or cancelled, and both of
  * those leave the row standing. A cascade would have let a mistaken `DELETE`
  * free a unit that a certificate still names, and would have taken the
@@ -1372,112 +1123,11 @@ export const inventoryCustodyNoticeRecipient = pgTable(
   ]
 );
 
-// --- Custody requests (peer-to-peer borrow approval) ---
-
-/**
- * A request from one teacher to borrow an item another teacher already
- * holds. See constants/inventory.ts's CUSTODY_REQUEST_STATUSES doc for
- * the lifecycle; this table is its storage.
- *
- * custodianStaffId is captured at request time rather than read live off
- * inventoryItem.custodianStaffId at decision time, for the same reason
- * inventoryBorrow denormalises its borrower: the item can change hands
- * between the request and the decision (the holder could hand it back to the
- * store, or an administrator could transfer it away), and a request answered
- * by whoever happens to hold the item now would let somebody who was never
- * asked approve a hand-over on the original holder's behalf. decideCustodyRequest
- * re-checks this column against the live item under a row lock before writing
- * anything, so a request that has gone stale this way is refused rather than
- * silently honoured.
- *
- * requesterStaffId and custodianStaffId are restrict, not set null:
- * unlike the audit trail in inventoryCustodyHistory, a request is live
- * paperwork with an outstanding decision, and a departing member of staff
- * must be resolved (denied or cancelled) before their staff row can be
- * removed, the same guard delete-staff already applies to other open
- * inventory work.
- */
-export const inventoryCustodyRequest = pgTable(
-  "inventory_custody_request",
-  {
-    id: text("id").primaryKey(),
-    itemId: text("item_id")
-      .notNull()
-      .references(() => inventoryItem.id, { onDelete: "restrict" }),
-    requesterStaffId: text("requester_staff_id")
-      .notNull()
-      .references(() => staff.id, { onDelete: "restrict" }),
-    /** The item's custodian at the moment the request was raised - see the
-     *  doc comment above for why this is captured rather than read live. */
-    custodianStaffId: text("custodian_staff_id")
-      .notNull()
-      .references(() => staff.id, { onDelete: "restrict" }),
-    status: text("status").notNull().default("pending"),
-    note: text("note"),
-    requestedAt: timestamp("requested_at").defaultNow().notNull(),
-    decidedByStaffId: text("decided_by_staff_id").references(() => staff.id, {
-      onDelete: "set null",
-    }),
-    decidedAt: timestamp("decided_at"),
-    decisionNote: text("decision_note"),
-  },
-  (table) => [
-    index("inventory_custody_request_item_idx").on(table.itemId),
-    index("inventory_custody_request_requester_idx").on(table.requesterStaffId),
-    // The one read the custodian's own dashboard runs on every visit: which
-    // requests are waiting on my decision. Composite because that read
-    // always filters both columns together, the same reasoning as
-    // inventory_custody_history_unacknowledged_idx.
-    index("inventory_custody_request_custodian_pending_idx")
-      .on(table.custodianStaffId, table.requestedAt)
-      .where(sql`${table.status} = 'pending'`),
-    // At most one open request per (item, requester) pair - a teacher who has
-    // already asked for a projector cannot ask again until the first request
-    // is decided or withdrawn. Partial, not plain: once a request leaves
-    // pending it must never block a fresh one, the same reasoning as
-    // inventory_disposal_unit_active_unique.
-    uniqueIndex("inventory_custody_request_open_unique")
-      .on(table.itemId, table.requesterStaffId)
-      .where(sql`${table.status} = 'pending'`),
-    check(
-      "inventory_custody_request_status_check",
-      sqlIn(table.status, CUSTODY_REQUEST_STATUSES)
-    ),
-    check(
-      "inventory_custody_request_requester_not_custodian",
-      sql`${table.requesterStaffId} <> ${table.custodianStaffId}`
-    ),
-    // The pairing check: a decision names both who made it and when, or
-    // neither - the same shape as the three pairing checks on
-    // inventoryDisposal.
-    check(
-      "inventory_custody_request_decision_state",
-      sql`(${table.decidedByStaffId} is null) = (${table.decidedAt} is null)`
-    ),
-    // pending names nobody yet; every other status is a decision (a
-    // custodian's approval/denial) or a withdrawal (cancelled, which the
-    // requester themselves records - decidedByStaffId there is the
-    // requester's own id, not the custodian's).
-    check(
-      "inventory_custody_request_status_state",
-      sql`(
-        ${table.status} = 'pending'
-        and ${table.decidedByStaffId} is null
-        and ${table.decidedAt} is null
-      ) or (
-        ${table.status} in ('approved', 'denied', 'cancelled')
-        and ${table.decidedByStaffId} is not null
-        and ${table.decidedAt} is not null
-      )`
-    ),
-  ]
-);
-
 // ─── Counter ledger ─────────────────────────────────────────────────────────
 
 /**
  * The before/after counter ledger: one row per action, holding the item's
- * `qty` / `borrowedQty` as they were and as they became.
+ * `qty` as it was and as it became.
  *
  * This is what makes the denormalized counters on `inventoryItem` defensible.
  * `inventoryItem` answers "how many are there"; this answers "how did it get
@@ -1518,8 +1168,6 @@ export const inventoryTransaction = pgTable(
       .references(() => inventoryItem.id, { onDelete: "restrict" }),
     qtyBefore: integer("qty_before").notNull(),
     qtyAfter: integer("qty_after").notNull(),
-    borrowedQtyBefore: integer("borrowed_qty_before").notNull(),
-    borrowedQtyAfter: integer("borrowed_qty_after").notNull(),
     note: text("note"),
     meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1541,9 +1189,7 @@ export const inventoryTransaction = pgTable(
     check(
       "inventory_transaction_counters_nonneg",
       sql`${table.qtyBefore} >= 0
-        and ${table.qtyAfter} >= 0
-        and ${table.borrowedQtyBefore} >= 0
-        and ${table.borrowedQtyAfter} >= 0`
+        and ${table.qtyAfter} >= 0`
     ),
   ]
 );
@@ -1669,7 +1315,6 @@ const inventoryItemColumnRefinements = {
   imageFileId: () => fileIdSchema,
   minQty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   qty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
-  borrowedQty: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   purchaseValue: () => moneyStringSchema(),
   currentValue: () => moneyStringSchema(),
   // Percent, not a fraction: "10.00" means 10%/year, matching how a
@@ -1782,57 +1427,6 @@ export const inventoryIssueUnitInsertSchema = createInsertSchema(
 export const inventoryIssueUnitUpdateSchema = createUpdateSchema(
   inventoryIssueUnit,
   inventoryIssueUnitColumnRefinements
-);
-
-const inventoryBorrowColumnRefinements = {
-  id: () => inventoryBorrowIdSchema,
-  itemId: () => inventoryItemIdSchema,
-  qty: () => v.pipe(v.number(), v.integer(), v.minValue(1)),
-  // Both borrower pointers are `optionalNullable` for the same reason they are
-  // nullable in the database: the pair is discriminated by which one is set, and
-  // `inventory_borrow_borrower_exclusive` — not this schema — is the thing that
-  // insists exactly one of them is. Wrapping these in `staffRefSchema` alone
-  // would make a generated *select* schema claim the column is never null, which
-  // is a lie the type layer tells to every reader of a borrow.
-  borrowerStaffId: () => optionalNullable(staffRefSchema),
-  borrowerStudentId: () => optionalNullable(studentIdSchema),
-  purpose: () => v.pipe(v.string(), v.minLength(1)),
-  expectedReturnDate: () => isoDateSchema,
-  status: () => inventoryBorrowStatusSchema,
-  borrowedByStaffId: () => staffRefSchema,
-  returnedByStaffId: () => staffRefSchema,
-  returnCondition: () => itemConditionSchema,
-};
-
-export const inventoryBorrowSelectSchema = createSelectSchema(
-  inventoryBorrow,
-  inventoryBorrowColumnRefinements
-);
-export const inventoryBorrowInsertSchema = createInsertSchema(
-  inventoryBorrow,
-  inventoryBorrowColumnRefinements
-);
-export const inventoryBorrowUpdateSchema = createUpdateSchema(
-  inventoryBorrow,
-  inventoryBorrowColumnRefinements
-);
-
-const inventoryBorrowUnitColumnRefinements = {
-  borrowId: () => inventoryBorrowIdSchema,
-  unitId: () => inventoryUnitIdSchema,
-};
-
-export const inventoryBorrowUnitSelectSchema = createSelectSchema(
-  inventoryBorrowUnit,
-  inventoryBorrowUnitColumnRefinements
-);
-export const inventoryBorrowUnitInsertSchema = createInsertSchema(
-  inventoryBorrowUnit,
-  inventoryBorrowUnitColumnRefinements
-);
-export const inventoryBorrowUnitUpdateSchema = createUpdateSchema(
-  inventoryBorrowUnit,
-  inventoryBorrowUnitColumnRefinements
 );
 
 const inventoryDisposalColumnRefinements = {
@@ -1948,28 +1542,6 @@ export const inventoryCustodyNoticeRecipientUpdateSchema = createUpdateSchema(
   inventoryCustodyNoticeRecipientColumnRefinements
 );
 
-const inventoryCustodyRequestColumnRefinements = {
-  id: () => inventoryCustodyRequestIdSchema,
-  itemId: () => inventoryItemIdSchema,
-  requesterStaffId: () => staffRefSchema,
-  custodianStaffId: () => staffRefSchema,
-  status: () => custodyRequestStatusSchema,
-  decidedByStaffId: () => staffRefSchema,
-};
-
-export const inventoryCustodyRequestSelectSchema = createSelectSchema(
-  inventoryCustodyRequest,
-  inventoryCustodyRequestColumnRefinements
-);
-export const inventoryCustodyRequestInsertSchema = createInsertSchema(
-  inventoryCustodyRequest,
-  inventoryCustodyRequestColumnRefinements
-);
-export const inventoryCustodyRequestUpdateSchema = createUpdateSchema(
-  inventoryCustodyRequest,
-  inventoryCustodyRequestColumnRefinements
-);
-
 const inventoryTransactionColumnRefinements = {
   id: () => inventoryTransactionIdSchema,
   actorStaffId: () => staffRefSchema,
@@ -1977,8 +1549,6 @@ const inventoryTransactionColumnRefinements = {
   itemId: () => inventoryItemIdSchema,
   qtyBefore: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
   qtyAfter: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
-  borrowedQtyBefore: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
-  borrowedQtyAfter: () => v.pipe(v.number(), v.integer(), v.minValue(0)),
 };
 
 export const inventoryTransactionSelectSchema = createSelectSchema(

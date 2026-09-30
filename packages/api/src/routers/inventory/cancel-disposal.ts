@@ -158,9 +158,7 @@ export const cancelDisposal = inventoryManagerProcedure
        * `inventory_disposal_unit_active_unique` (`where released_at is null`).
        * The rows stay — they are the record of which certificate once claimed the
        * device, and the certificate is never deleted — but they no longer hold a
-       * claim on it, so a later disposal may pin the same unit again. The mirror
-       * image is `inventoryBorrowUnit.releasedAt`, stamped at check-in for the
-       * same reason against `inventory_borrow_unit_active_unique`.
+       * claim on it, so a later disposal may pin the same unit again.
        *
        * The item comes back in the same `Promise.all`: it is read for the ledger
        * row's name and counters, it does not depend on the pins, and it is
@@ -188,7 +186,6 @@ export const cancelDisposal = inventoryManagerProcedure
             name: inventoryItem.name,
             sku: inventoryItem.sku,
             qty: inventoryItem.qty,
-            borrowedQty: inventoryItem.borrowedQty,
           })
           .from(inventoryItem)
           .where(eq(inventoryItem.id, existing.itemId))

@@ -51,7 +51,7 @@ const toAuditSnapshot = (row: InventoryItemRow): Record<string, unknown> => ({
  * stopped existing as a physical thing, so it blocks nothing. The source repo
  * also listed `reserved`, which this port has no counter and no unit status for.
  */
-const IN_FLIGHT_UNIT_STATUSES = ["borrowed", "issued", "disposed"] as const;
+const IN_FLIGHT_UNIT_STATUSES = ["issued", "disposed"] as const;
 
 /**
  * Retire an item, provided nothing about it is still in flight.

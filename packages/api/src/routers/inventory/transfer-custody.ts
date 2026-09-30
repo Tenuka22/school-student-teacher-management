@@ -169,10 +169,8 @@ export const transferCustody = inventoryManagerProcedure
       // out of the store. The counters only change through the borrow and
       // stock flows, and writing identical values on both sides of a changed
       // row is what tells a reader of the ledger that nothing was counted here.
-      // `borrowedQty` is in the meta unconditionally for the same reason: a
-      // transfer of an item that is currently out on loan is legal (a person
-      // does hand a borrowed item to a colleague) and the ledger has to be able
-      // to explain it, which it cannot from a `before === after` pair alone.
+      // The metadata captures the custodian names and transfer reason as
+      // contextual information about who transferred the item and why.
       await insertInventoryTransaction(tx, {
         actor,
         action: changeType,
@@ -184,7 +182,6 @@ export const transferCustody = inventoryManagerProcedure
           previousCustodianName,
           newCustodianName: newCustodian.name,
           reason: input.reason,
-          borrowedQty: existing.borrowedQty,
         },
       });
 

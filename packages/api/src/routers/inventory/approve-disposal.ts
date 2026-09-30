@@ -213,7 +213,6 @@ export const approveDisposal = inventoryManagerProcedure
           name: inventoryItem.name,
           sku: inventoryItem.sku,
           qty: inventoryItem.qty,
-          borrowedQty: inventoryItem.borrowedQty,
         })
         .from(inventoryItem)
         .where(eq(inventoryItem.id, existing.itemId))

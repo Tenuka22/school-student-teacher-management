@@ -38,12 +38,9 @@ import {
 import { user as userTable } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryAuditLog,
-  inventoryBorrow,
-  inventoryBorrowUnit,
   inventoryCategory,
   inventoryCustodyHistory,
   inventoryCustodyNoticeRecipient,
-  inventoryCustodyRequest,
   inventoryDisposal,
   inventoryDisposalStatusHistory,
   inventoryIssue,
@@ -153,14 +150,11 @@ const newId = () => crypto.randomUUID();
 const TABLES_TO_WIPE = [
   "inventory_audit_log",
   "inventory_transaction",
-  "inventory_custody_request",
   "inventory_custody_notice_recipient",
   "inventory_custody_history",
   "inventory_disposal_status_history",
   "inventory_disposal_unit",
   "inventory_disposal",
-  "inventory_borrow_unit",
-  "inventory_borrow",
   "inventory_issue_unit",
   "inventory_issue",
   "inventory_item_replacement",
@@ -1619,7 +1613,6 @@ const run = async () => {
       description: faker.commerce.productDescription(),
       unit: "unit",
       qty: def.qty,
-      borrowedQty: 0,
       borrowable: def.borrowable,
       condition: def.condition,
       minQty: Math.max(1, Math.floor(def.qty / 10)),
@@ -1645,8 +1638,6 @@ const run = async () => {
       itemId: id,
       qtyBefore: 0,
       qtyAfter: def.qty,
-      borrowedQtyBefore: 0,
-      borrowedQtyAfter: 0,
       meta: { actorName: manager.name },
     });
     await db.insert(inventoryAuditLog).values({
@@ -1694,7 +1685,6 @@ const run = async () => {
   >();
   const unitStatusCycle = [
     "available",
-    "borrowed",
     "issued",
     "disposed",
     "removed",
@@ -1722,78 +1712,6 @@ const run = async () => {
     unitsByItem.set(item.id, units);
   }
   log(`Seeded tagged units for ${trackedItems.length} items`);
-
-  // Borrows: one open, one returned, staff borrowers only (see module doc
-  // comment for why student borrowers are out of scope here).
-  const borrowSubjects = faker.helpers.shuffle(activeTeachers).slice(0, 4);
-  const borrowableUnitItems = [...unitsByItem.entries()];
-  if (
-    borrowableUnitItems.length > 0 &&
-    borrowSubjects[0] &&
-    borrowSubjects[1]
-  ) {
-    const [openEntry] = borrowableUnitItems;
-    const availableUnit = openEntry?.[1].find((u) => u.status === "available");
-    if (openEntry && availableUnit) {
-      const [itemIdOpen] = openEntry;
-      const borrowId = newId();
-      await db.insert(inventoryBorrow).values({
-        id: borrowId,
-        itemId: itemIdOpen,
-        qty: 1,
-        borrowerStaffId: borrowSubjects[0].id,
-        purpose: "Grade 9 project week",
-        expectedReturnDate: "2026-10-15",
-        status: "borrowed",
-        borrowedByStaffId: borrowSubjects[0].id,
-      });
-      await db.insert(inventoryBorrowUnit).values({
-        borrowId,
-        unitId: availableUnit.id,
-      });
-      await db.insert(inventoryTransaction).values({
-        id: newId(),
-        actorStaffId: borrowSubjects[0].id,
-        action: "borrowed",
-        itemId: itemIdOpen,
-        qtyBefore: 0,
-        qtyAfter: 0,
-        borrowedQtyBefore: 0,
-        borrowedQtyAfter: 1,
-        meta: { actorName: borrowSubjects[0].name },
-      });
-    }
-
-    const returnedEntry =
-      borrowableUnitItems[Math.min(1, borrowableUnitItems.length - 1)];
-    const returnedUnit = returnedEntry
-      ? (returnedEntry[1][1] ?? returnedEntry[1][0])
-      : undefined;
-    if (returnedEntry && returnedUnit) {
-      const [itemIdReturned] = returnedEntry;
-      const borrowId = newId();
-      await db.insert(inventoryBorrow).values({
-        id: borrowId,
-        itemId: itemIdReturned,
-        qty: 1,
-        borrowerStaffId: borrowSubjects[1].id,
-        purpose: "Staff development day recording",
-        expectedReturnDate: "2026-08-20",
-        status: "returned",
-        borrowedByStaffId: borrowSubjects[1].id,
-        returnedAt: new Date("2026-08-19T15:00:00Z"),
-        returnedByStaffId: borrowSubjects[1].id,
-        returnCondition: "Good",
-        returnNote: "Returned on time, no damage",
-      });
-      await db.insert(inventoryBorrowUnit).values({
-        borrowId,
-        unitId: returnedUnit.id,
-        releasedAt: new Date("2026-08-19T15:00:00Z"),
-      });
-    }
-  }
-  log("Seeded two inventory borrows (one open, one returned)");
 
   // Issues: a permanent hand-over out of the store, free-text receiver.
   const issuableItem = items.find((i) => !i.borrowable) ?? items[0];
@@ -1924,8 +1842,6 @@ const run = async () => {
           itemId: item.id,
           qtyBefore: 1,
           qtyAfter: 0,
-          borrowedQtyBefore: 0,
-          borrowedQtyAfter: 0,
           meta: { actorName: disposalStaff.name, disposalId },
         });
       }
@@ -1937,7 +1853,7 @@ const run = async () => {
   }
 
   // Custody transfer + notice recipients (manager/previous_custodian/sub_manager, one acknowledged, one disputed).
-  const [transferItem, requestItem] = items;
+  const [transferItem] = items;
   if (transferItem && custodianPool[1] && custodianPool[2]) {
     const historyId = newId();
     await db.insert(inventoryCustodyHistory).values({
@@ -1980,50 +1896,6 @@ const run = async () => {
     log(
       "Seeded one custody transfer with three notice recipients (one disputed, one unacknowledged)"
     );
-  }
-
-  // Custody requests: pending, approved, denied, cancelled.
-  if (
-    requestItem &&
-    custodianPool[3] &&
-    custodianPool[4] &&
-    custodianPool[5] &&
-    custodianPool[6]
-  ) {
-    const requestDefs: {
-      requester: SeededStaff | undefined;
-      status: string;
-    }[] = [
-      { requester: officeStaff[0] ?? teachers[10], status: "pending" },
-      { requester: teachers[11], status: "approved" },
-      { requester: teachers[12], status: "denied" },
-      { requester: teachers[13], status: "cancelled" },
-    ];
-    for (const def of requestDefs) {
-      if (!def.requester) {
-        continue;
-      }
-      const decided = def.status !== "pending";
-      let decidedByStaffId: string | null = null;
-      if (decided) {
-        decidedByStaffId =
-          def.status === "cancelled"
-            ? def.requester.id
-            : requestItem.custodianStaffId;
-      }
-      await db.insert(inventoryCustodyRequest).values({
-        id: newId(),
-        itemId: requestItem.id,
-        requesterStaffId: def.requester.id,
-        custodianStaffId: requestItem.custodianStaffId,
-        status: def.status,
-        note: "Requested for a class activity",
-        decidedByStaffId,
-        decidedAt: decided ? new Date() : null,
-        decisionNote: decided ? faker.lorem.sentence() : null,
-      });
-    }
-    log("Seeded four custody requests (pending, approved, denied, cancelled)");
   }
 
   log("Done.");

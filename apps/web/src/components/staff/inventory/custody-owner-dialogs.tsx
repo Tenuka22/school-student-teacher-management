@@ -244,7 +244,6 @@ export const TransferOwnershipDialog = ({
 
   const currentOwnerId = item?.managerStaffId ?? null;
   const isNoop = successorId !== null && successorId === currentOwnerId;
-  const isOnLoan = (item?.borrowedQty ?? 0) > 0;
   const preview = buildOwnershipPreview(successorId, successorName, item);
 
   const isDirty =
@@ -449,14 +448,6 @@ export const TransferOwnershipDialog = ({
               />
             ) : null}
 
-            {isOnLoan ? (
-              <InventoryInlineNotice
-                tone="warning"
-                title="This may be refused while units are out on loan"
-                description="An item with units away on a dated loan is not the owner's to hand on: the return has to be recorded first, because the return flow is what notes the condition the units came back in. Go ahead — if that is the case, the server will say so: “This item is out on loan, so the loan has to be closed through the borrow return flow before the ownership of it can change hands”."
-              />
-            ) : null}
-
             <InventoryInlineNotice
               tone="info"
               title="Who can do this"
@@ -653,7 +644,6 @@ export const ReclaimCustodyDialog = ({
 
   const holder = item?.custodianName ?? null;
   const owner = item?.managerName ?? null;
-  const isOnLoan = (item?.borrowedQty ?? 0) > 0;
   const isDirty = reason !== "" || note.trim().length > 0;
 
   const reset = () => {
@@ -824,14 +814,6 @@ export const ReclaimCustodyDialog = ({
           <FieldLegend>Who has it</FieldLegend>
           <FieldGroup>
             <CurrentHolderBadge item={item} />
-
-            {isOnLoan ? (
-              <InventoryInlineNotice
-                tone="warning"
-                title="This may be refused while units are out on loan"
-                description="Units away on a dated loan are with a borrower, not with the holder this record names, and clearing the holder would claim somebody is looking after equipment that is actually with a student. The return flow has to record the condition the units came back in first. Go ahead — if that is the case, the server will say so: “This item is out on loan, so it has to come back through the borrow return flow (`borrows.return`), which records the condition it came back in, before its custody can be called in”."
-              />
-            ) : null}
 
             <InventoryInlineNotice
               tone="info"

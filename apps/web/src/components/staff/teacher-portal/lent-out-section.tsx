@@ -49,13 +49,6 @@ const Counters = ({ item }: { item: InventoryItemView }) => (
       <span className="sr-only">Free in the store: </span>
       {item.availableQty}
     </span>
-    <span aria-hidden="true" className="text-muted-foreground/50">
-      /
-    </span>
-    <span className="text-muted-foreground">
-      <span className="sr-only">Out on loan: </span>
-      {item.borrowedQty}
-    </span>
   </span>
 );
 

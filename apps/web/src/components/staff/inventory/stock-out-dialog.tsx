@@ -340,7 +340,7 @@ const StockOutIdentityFields: React.FC<{
       label="Quantity being removed"
       unit={unit}
       error={qtyError}
-      note={`Whole numbers only. The school stops holding these, and anything currently out on loan is excluded and cannot be removed from here.${
+      note={`Whole numbers only. The school stops holding these.${
         unit ? ` This item is counted in “${unit}” on its register line.` : ""
       }`}
       controlRef={qtyControlRef}

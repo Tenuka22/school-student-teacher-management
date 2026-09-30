@@ -120,7 +120,6 @@ const TAKEABLE_SELECTION = {
   categoryColor: inventoryCategory.color,
   categoryName: inventoryCategory.name,
   qty: inventoryItem.qty,
-  borrowedQty: inventoryItem.borrowedQty,
   condition: inventoryItem.condition,
   location: inventoryItem.location,
 } as const;

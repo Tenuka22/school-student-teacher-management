@@ -265,20 +265,9 @@ const metaText = (meta: Record<string, unknown> | null, key: string) => {
 const BeforeAfterPanel: React.FC<{
   qtyBefore: number;
   qtyAfter: number;
-  borrowedQtyBefore: number;
-  borrowedQtyAfter: number;
   qtyDelta: number;
-  borrowedQtyDelta: number;
   reason: string | null;
-}> = ({
-  qtyBefore,
-  qtyAfter,
-  borrowedQtyBefore,
-  borrowedQtyAfter,
-  qtyDelta,
-  borrowedQtyDelta,
-  reason,
-}) => (
+}> = ({ qtyBefore, qtyAfter, qtyDelta, reason }) => (
   <Collapsible>
     <CollapsibleTrigger
       render={<Button variant="ghost" size="sm" />}
@@ -298,24 +287,6 @@ const BeforeAfterPanel: React.FC<{
             ({signedQuantity(qtyDelta).text})
           </span>
         </p>
-        <p>
-          <span className="text-muted-foreground">Out on loan:</span>{" "}
-          <span className="tabular-nums">{borrowedQtyBefore}</span>
-          {" → "}
-          <span className="font-medium tabular-nums">
-            {borrowedQtyAfter}
-          </span>{" "}
-          <span className="text-muted-foreground">
-            ({signedQuantity(borrowedQtyDelta).text})
-          </span>
-        </p>
-        {/**
-         * The two counters move independently, and the second line is where that
-         * becomes visible. A borrow raises `borrowedQty` and leaves `qty` alone; an
-         * issue lowers `qty` and leaves `borrowedQty` alone. A row where only one
-         * of them moved is not a rendering artefact — it is the definition of which
-         * kind of movement it was.
-         */}
         <p className="text-muted-foreground">
           Rows that change no counter (a request raised, a signature, a
           withdrawn certificate) show 0 on both lines. That is what
@@ -345,7 +316,7 @@ const BeforeAfterPanel: React.FC<{
  * One changed field, as `field: old → new`.
  *
  * `auditValue` is the reason this is a component and not a template string. A raw
- * `jsonb` blob in a table is not a UI: `{qty: 7, borrowedQty: 1}` tells a reader
+ * `jsonb` blob in a table is not a UI: `{qty: 7}` tells a reader
  * nothing, and a nested object or array has to be broken into pairs before any of
  * it can be compared. So a value is rendered by shape — a string as itself, `null`
  * as an explicit "was not set", a number or boolean as itself, an array of scalars
@@ -611,7 +582,7 @@ const RowLimitField: React.FC<{
 );
 
 /**
- * The counter ledger: every movement of `qty` and `borrowedQty`, newest first.
+ * The counter ledger: every movement of `qty`, newest first.
  */
 const MovementsTable = () => {
   const [itemId, setItemId] = useState("");
@@ -752,7 +723,6 @@ const MovementsTable = () => {
                 <TableHead>Who</TableHead>
                 <TableHead>When</TableHead>
                 <TableHead className="text-right">On hand</TableHead>
-                <TableHead className="text-right">Out on loan</TableHead>
                 <TableHead>Asset tags</TableHead>
                 <TableHead>Note</TableHead>
                 {/**
@@ -804,9 +774,6 @@ const MovementsTable = () => {
                     <TableCell className="text-right">
                       <DeltaCell delta={row.qtyDelta} />
                     </TableCell>
-                    <TableCell className="text-right">
-                      <DeltaCell delta={row.borrowedQtyDelta} />
-                    </TableCell>
                     {/**
                      * Every tag, wrapping, never truncated. A movement of twenty
                      * labelled devices is one row here, and a list that stops at
@@ -834,10 +801,7 @@ const MovementsTable = () => {
                       <BeforeAfterPanel
                         qtyBefore={row.qtyBefore}
                         qtyAfter={row.qtyAfter}
-                        borrowedQtyBefore={row.borrowedQtyBefore}
-                        borrowedQtyAfter={row.borrowedQtyAfter}
                         qtyDelta={row.qtyDelta}
-                        borrowedQtyDelta={row.borrowedQtyDelta}
                         reason={reason}
                       />
                     </TableCell>
@@ -846,12 +810,10 @@ const MovementsTable = () => {
               })}
             </TableBody>
             <TableCaption>
-              On hand and out on loan are the changes to the item&rsquo;s two
-              counters. The two move independently: a borrow raises only the
-              second, an issue lowers only the first. Open a row&rsquo;s{" "}
-              <span className="font-medium">Before → after</span> column for the
-              absolute pair either side of the movement, which is what the
-              ledger stores instead of a difference.
+              On hand shows the changes to the item&rsquo;s quantity. Open a
+              row&rsquo;s <span className="font-medium">Before \\ after</span>{" "}
+              column for the absolute pair either side of the movement, which is
+              what the ledger stores instead of a difference.
             </TableCaption>
           </Table>
 

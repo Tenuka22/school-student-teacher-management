@@ -23,9 +23,9 @@
  * not transferring ownership, and a procedure that quietly moved the manager
  * column would move accountability by accident — the caller would be demanding
  * the item back and simultaneously declaring themselves still answerable for it,
- * which is a different and much larger claim than the one they made. `qty`,
- * `borrowedQty`, the unit rows and the loan records are all untouched, because
- * **the item never physically moved.**
+ which is a different and much larger claim than the one they made. `qty`,
+ the unit rows are all untouched, because
+ **the item never physically moved.**
  *
  * That last point is what distinguishes this from every other mutation in this
  * folder, and it is worth stating for the reader of the ledger: a
@@ -164,9 +164,8 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
         });
       }
 
-      // Nothing to reclaim. Said before the loan guard so a caller who has
-      // misread an item sitting unheld in the store is told the truth about that
-      // rather than about a loan they may not know exists.
+      // Nothing to reclaim. Checked early so a caller who has
+      // misread an item sitting unheld in the store gets a clear error message.
       if (!existing.custodianStaffId) {
         throw new ORPCError("CONFLICT", {
           message:
@@ -195,25 +194,6 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
         });
       }
 
-      // **Load-bearing guard, and a different refusal from the one in
-      // `release-custody.ts` even though it tests the same column.** Units out on
-      // a dated loan are with a borrower under an `inventoryBorrow` row, not with
-      // the custodian pointer: the physical object the custodian pointer describes
-      // is somewhere else, and clearing the pointer here would assert that
-      // somebody is looking after equipment that is in fact out with a student on
-      // a due date. It has to come back through the **return flow**
-      // (`orpc.inventory.borrows.return`), which is the process that records the
-      // date it came back, who returned it and **the condition it came back in** —
-      // and that last field is the whole reason this is refused rather than
-      // allowed. A reclaim that quietly pre-empted a return would file the
-      // condition assessment that only someone actually holding the object can give.
-      if (existing.borrowedQty > 0) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "This item is out on loan, so it has to come back through the borrow return flow (`borrows.return`), which records the condition it came back in, before its custody can be called in",
-        });
-      }
-
       const previousCustodianName = await resolveStaffName(
         tx,
         existing.custodianStaffId
@@ -225,7 +205,7 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
       // answers for it, which is exactly why the holder becomes them, and
       // writing the manager column here would still move accountability by
       // accident. See the file comment. Nothing else is touched either — no
-      // counters, no units, no loan record.
+      // counters, no units.
       await tx
         .update(inventoryItem)
         .set({ custodianStaffId: existing.managerStaffId })

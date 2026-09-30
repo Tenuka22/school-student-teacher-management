@@ -95,13 +95,6 @@ const Counters = ({ item }: { item: InventoryItemView }) => (
       <span className="sr-only">Free in the store: </span>
       {item.availableQty}
     </span>
-    <span aria-hidden="true" className="text-muted-foreground/50">
-      /
-    </span>
-    <span className="text-muted-foreground">
-      <span className="sr-only">Out on loan: </span>
-      {item.borrowedQty}
-    </span>
   </span>
 );
 
@@ -127,19 +120,17 @@ const Category = ({ item }: { item: InventoryItemView }) => (
 /**
  * The column that replaced the item status, and the two questions in it.
  *
- * `ItemStatusBadge` said "Available" beside a laptop the teacher was holding, and
- * "Borrowed" beside a line of twenty they were answerable for because one of
- * them was out with a colleague. `calculateItemStatus` derives that from `qty`,
- * `borrowedQty` and `condition` — `custodianStaffId` is not one of its inputs —
+ * `ItemStatusBadge` said "Available" beside a laptop the teacher was holding,
+ * even though it was a machine they were personally answerable for.
+ * `calculateItemStatus` derives that from `qty` and `condition` —
+ * `custodianStaffId` is not one of its inputs —
  * so the badge is a fact about a register *line*, printed on a page whose whole
  * subject is one person's property. A teacher can do nothing about it, and
  * "Available" beside the machine under their arm tells them the school counts it
  * as free, which is the belief a laptop walks out of the building on.
  *
  * What replaces it is the state the teacher can act on, and it is per-item and
- * true: **is this out on loan** (`borrowedQty > 0` — the number of units away
- * from the store, and the one fact that decides whether a hand-back is even
- * possible) and **where it is** (the recorded `location`, the second question a
+ * true: **where it is** (the recorded `location`, the second question a
  * teacher asks about an item they are answerable for).
  *
  * The possession line is a fourth state the sections cannot express, and it is
@@ -158,9 +149,7 @@ const WhereItIs = ({
 }) => {
   let where: string;
 
-  if (item.borrowedQty > 0) {
-    where = "Out on loan";
-  } else if (isHeldByViewer) {
+  if (isHeldByViewer) {
     where = "With you";
   } else if (item.custodianStaffId === null) {
     where = "In the store";

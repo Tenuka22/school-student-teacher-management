@@ -239,7 +239,7 @@ export const RegisterTableHeader = ({
         Responsible
       </TableHead>
       <SortableHead
-        label="On hand / available / loan"
+        label="On hand / available"
         sort={sort}
         activeKey="availableQty"
         onToggle={onToggleSort}

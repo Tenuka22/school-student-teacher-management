@@ -4,10 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 
-import {
-  HandBackPanel,
-  RequestPanel,
-} from "@/components/staff/inventory/scan-item-panels";
+import { HandBackPanel } from "@/components/staff/inventory/scan-item-panels";
 import {
   ConditionBadge,
   CustodyBadge,
@@ -78,22 +75,6 @@ const RouteComponent = () => {
         toast.error(
           formatApiErrorMessage(error, "Could not hand this item back")
         );
-      },
-    })
-  );
-
-  const requestMutation = useMutation(
-    orpc.inventory.custody.requests.create.mutationOptions({
-      onSuccess: async () => {
-        toast.success("Request sent — you'll be notified when it's decided");
-        await queryClient.invalidateQueries({
-          queryKey: orpc.inventory.items.getForScan.queryOptions({
-            input: { itemId },
-          }).queryKey,
-        });
-      },
-      onError: (error) => {
-        toast.error(formatApiErrorMessage(error, "Could not send the request"));
       },
     })
   );
@@ -193,18 +174,7 @@ const RouteComponent = () => {
         />
       ) : null}
 
-      {item.canRequest ? (
-        <RequestPanel
-          custodianName={item.custodianName}
-          isPending={requestMutation.isPending}
-          itemId={item.id}
-          onConfirm={(input) => {
-            requestMutation.mutate(input);
-          }}
-        />
-      ) : null}
-
-      {!item.canTake && !item.canHandBack && !item.canRequest ? (
+      {!item.canTake && !item.canHandBack ? (
         <p className="text-muted-foreground text-sm">
           You are in charge of this item, but it is currently held by{" "}
           {item.custodianName ?? "nobody"}.

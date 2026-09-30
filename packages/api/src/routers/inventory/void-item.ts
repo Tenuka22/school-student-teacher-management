@@ -48,7 +48,7 @@ const toAuditSnapshot = (row: InventoryItemRow): Record<string, unknown> => ({
 
 /** Same guard as `deleteItem` — a mistaken entry cannot have any of its units
  *  genuinely out in the world, or "this was never real stock" would be a lie. */
-const IN_FLIGHT_UNIT_STATUSES = ["borrowed", "issued", "disposed"] as const;
+const IN_FLIGHT_UNIT_STATUSES = ["issued", "disposed"] as const;
 
 export const voidItem = inventoryManagerProcedure
   .input(

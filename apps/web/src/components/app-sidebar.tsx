@@ -691,14 +691,16 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
       title: "Inventory Management",
       url: inventoryRegister("staff", "inventory"),
     },
-    { title: "Loans", url: inventoryRegister("staff", "inventory", "loans") },
-    { title: "Issues", url: inventoryRegister("staff", "inventory", "issues") },
     {
-      title: "Write-offs",
+      title: "Transfers",
+      url: inventoryRegister("staff", "inventory", "issues"),
+    },
+    {
+      title: "Disposals",
       url: inventoryRegister("staff", "inventory", "write-offs"),
     },
     {
-      title: "Asset Register",
+      title: "History",
       url: inventoryRegister("staff", "inventory", "asset-register"),
     },
     {

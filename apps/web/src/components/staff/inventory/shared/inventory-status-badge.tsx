@@ -115,11 +115,6 @@ const ITEM_STATUS_TREATMENTS: Record<
     variant: "destructive",
     Icon: IconPackageOff,
   },
-  borrowed: {
-    label: "Borrowed",
-    variant: "warning",
-    Icon: IconUserCheck,
-  },
   damaged: {
     label: "Damaged",
     variant: "outline",
@@ -217,7 +212,6 @@ const UNIT_STATUS_TREATMENTS: Record<
   { variant: BadgeVariant; className?: string }
 > = {
   available: { variant: "success" },
-  borrowed: { variant: "warning" },
   issued: { variant: "outline", className: DESTRUCTIVE_SOFT },
   disposed: { variant: "destructive" },
 };

@@ -6,7 +6,6 @@ import { Skeleton } from "@school-student-teacher-management/ui/components/skele
 import {
   IconAlertTriangle,
   IconBuildingWarehouse,
-  IconCoins,
   IconInbox,
   IconPackage,
   IconStack2,
@@ -29,10 +28,8 @@ export interface InventoryStats {
   totalItems: number;
   /** Every physical unit the school owns, tagged or counted in bulk. */
   totalUnits: number;
-  /** Units on hand and not out on loan. */
+  /** Units on hand. */
   availableUnits: number;
-  /** Units currently out with a borrower. */
-  borrowedUnits: number;
   /** Items whose `qty` is zero. */
   outOfStockItems: number;
   /** Items at or below their `minQty` reorder threshold. */
@@ -152,16 +149,9 @@ const STAT_DEFINITIONS: StatDefinition[] = [
   {
     key: "availableUnits",
     label: "Available",
-    hint: "On hand and not out on loan",
+    hint: "On hand and not written off",
     tone: "default",
     Icon: IconInbox,
-  },
-  {
-    key: "borrowedUnits",
-    label: "Borrowed",
-    hint: "Out with a borrower right now",
-    tone: "warning",
-    Icon: IconCoins,
   },
   {
     key: "lowStockItems",

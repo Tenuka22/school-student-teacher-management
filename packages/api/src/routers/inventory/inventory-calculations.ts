@@ -25,31 +25,26 @@ import type { SQL } from "drizzle-orm";
 const SKU_COLLISION_RETRIES = 10;
 
 /**
- * The two counters `inventoryItem` carries, and nothing else.
+ * The one counter `inventoryItem` carries.
  *
- * `qty` is on hand, `borrowedQty` is out. Whether the out figure may exceed
- * `qty` is a database fact — the `inventory_item_counters_within_qty` CHECK says
- * no — which is why `calculateAvailableQuantity` still floors at zero: a counter
- * pair that arrives from a request body rather than from a row has not been
- * through that constraint, and a negative "3 available" is a worse failure than
- * an undercount.
+ * `qty` is on hand. `calculateAvailableQuantity` still floors at zero: a value
+ * that arrives from a request body rather than from a row has not been through
+ * the `inventory_item_counters_nonneg` CHECK, and a negative "available" figure
+ * is a worse failure than an undercount.
  *
- * There is no `reservedQty`. The source app had one and this port has no
- * reservation workflow that outlives the request that created it, so it survived
- * as a column, a CHECK, two ledger columns, a status branch and a SQL branch —
- * all of it describing a state nothing could reach. See the note on
- * `calculateItemStatus`.
+ * There is no `reservedQty` and no `borrowedQty`. The source app had a
+ * reservation counter and this port has no reservation workflow that outlives
+ * the request that created it; this school's register also has no dated-loan
+ * workflow, so a counter for what is "out and expected back" describes a state
+ * nothing here can reach either. Both survived in the source app as a column, a
+ * CHECK, ledger columns, a status branch and a SQL branch - all of it
+ * describing a state nothing could reach. See the note on `calculateItemStatus`.
  */
 export interface InventoryCounters {
   qty: number;
-  borrowedQty: number;
 }
 
-export type InventoryItemStatus =
-  | "out_of_stock"
-  | "borrowed"
-  | "damaged"
-  | "available";
+export type InventoryItemStatus = "out_of_stock" | "damaged" | "available";
 
 /**
  * Leading and trailing whitespace is dropped without collapsing the interior,
@@ -72,29 +67,21 @@ export const normalizeText = (value: string): string => value.trim();
 export const normalizeLabel = (value: string): string =>
   value.trim().replaceAll(/\s+/gu, " ");
 
-/** The free-and-clear count: on hand, less everything already out on loan. */
+/** The free-and-clear count: what is on hand right now. */
 export const calculateAvailableQuantity = (
   counters: InventoryCounters
-): number => Math.max(0, counters.qty - counters.borrowedQty);
+): number => Math.max(0, counters.qty);
 
 /**
  * Derive the display status. Order is meaningful and deliberate:
- * qty 0 wins over everything (nothing on hand is a different fact from
- * "some are away"); then borrowed; then a damaged condition on what remains;
- * otherwise available.
+ * qty 0 wins over everything ("we have none" is the answer to every question
+ * a user has about this row, whatever else is true of it); then a damaged
+ * condition on what remains; otherwise available.
  *
- * The subtlety the order encodes is that the damaged check comes **last**,
- * after the counters. An item that is both damaged *and* borrowed reads as
- * borrowed: the store already knows something is wrong with it, and a second
- * badge on top tells the user nothing they can act on. The `qty === 0` test
- * comes first for the same reason one notch stronger — "we have none" is the
- * answer to every question a user has about this row, whatever else is true
- * of it.
- *
- * `borrowedQty` occupies the slot `reservedQty` used to hold, and the source
- * app's `reserved` badge is gone with the counter: a school with no reservation
- * workflow cannot show it, and a badge nothing can ever display is a state
- * nobody should be asked to reason about.
+ * There is no "borrowed"/"reserved" arm. Both existed in the source app for a
+ * counter this school's register does not carry - no dated loans, no
+ * reservations - and a badge nothing can ever display is a state nobody
+ * should be asked to reason about.
  */
 export const calculateItemStatus = (
   counters: InventoryCounters,
@@ -102,10 +89,6 @@ export const calculateItemStatus = (
 ): InventoryItemStatus => {
   if (counters.qty === 0) {
     return "out_of_stock";
-  }
-
-  if (counters.borrowedQty > 0) {
-    return "borrowed";
   }
 
   if (condition === "Damaged") {
@@ -137,7 +120,6 @@ export const calculateItemStatus = (
 export const itemStatusExpression = (): SQL =>
   sql`case
     when ${inventoryItem.qty} = 0 then 'out_of_stock'
-    when ${inventoryItem.borrowedQty} > 0 then 'borrowed'
     when ${inventoryItem.condition} = 'Damaged' then 'damaged'
     else 'available'
   end`;

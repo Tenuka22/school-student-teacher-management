@@ -114,8 +114,6 @@ const ledgerSelection = {
   itemId: inventoryTransaction.itemId,
   qtyBefore: inventoryTransaction.qtyBefore,
   qtyAfter: inventoryTransaction.qtyAfter,
-  borrowedQtyBefore: inventoryTransaction.borrowedQtyBefore,
-  borrowedQtyAfter: inventoryTransaction.borrowedQtyAfter,
   note: inventoryTransaction.note,
   meta: inventoryTransaction.meta,
   createdAt: inventoryTransaction.createdAt,
@@ -178,9 +176,6 @@ const toTransactionRow = (row: LedgerRow) => {
      * reason a school's numbers stop adding up.
      */
     qtyDelta: row.qtyAfter - row.qtyBefore,
-    borrowedQtyBefore: row.borrowedQtyBefore,
-    borrowedQtyAfter: row.borrowedQtyAfter,
-    borrowedQtyDelta: row.borrowedQtyAfter - row.borrowedQtyBefore,
     note: row.note,
     meta,
     createdAt: iso(row.createdAt),

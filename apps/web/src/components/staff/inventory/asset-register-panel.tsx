@@ -101,7 +101,6 @@ const isUnitStatus = (value: string | null): value is UnitStatus =>
 const MANUAL_STATUS_NOTE: Record<UnitStatus, string | null> = {
   available: null,
   removed: null,
-  borrowed: "Out on loan — changes when the device comes back",
   issued: "Issued out of the school — terminal, there is no return path",
   disposed: "Disposed on a signed certificate — changes at finalisation",
 };
@@ -115,7 +114,6 @@ const countUnits = (units: { status: string }[]): UnitCounters => {
   const counters: UnitCounters = {
     total: units.length,
     available: 0,
-    borrowed: 0,
     issued: 0,
     disposed: 0,
     removed: 0,
@@ -144,7 +142,6 @@ const countUnits = (units: { status: string }[]): UnitCounters => {
 const REGISTER_COUNTERS: { key: keyof UnitCounters; label: string }[] = [
   { key: "total", label: "On this page" },
   { key: "available", label: "Available" },
-  { key: "borrowed", label: "On loan" },
   { key: "issued", label: "Issued" },
   { key: "disposed", label: "Disposed" },
   { key: "removed", label: "Removed" },

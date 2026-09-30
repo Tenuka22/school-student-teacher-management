@@ -17,12 +17,10 @@
 import { ORPCError } from "@orpc/server";
 import type { InventoryAction } from "@school-student-teacher-management/db/constants/inventory";
 import { normalizeInventoryKey } from "@school-student-teacher-management/db/constants/inventory";
-import { class_ } from "@school-student-teacher-management/db/schema/academics";
 import { user } from "@school-student-teacher-management/db/schema/auth";
 import { files } from "@school-student-teacher-management/db/schema/files";
 import {
   inventoryAuditLog,
-  inventoryBorrowUnit,
   inventoryCategory,
   inventoryCustodyHistory,
   inventoryCustodyNoticeRecipient,
@@ -33,14 +31,7 @@ import {
   inventoryTransaction,
   inventoryUnit,
 } from "@school-student-teacher-management/db/schema/inventory";
-import {
-  student,
-  studentClassAssignment,
-} from "@school-student-teacher-management/db/schema/marking";
-import {
-  academicYear,
-  staff,
-} from "@school-student-teacher-management/db/schema/staff";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import {
   and,
   asc,
@@ -82,10 +73,7 @@ export type InventoryItemRow = typeof inventoryItem.$inferSelect;
 export type InventoryUnitRow = typeof inventoryUnit.$inferSelect;
 
 /** The two counters `inventoryItem` carries, and nothing else. */
-export type InventoryCountersRow = Pick<
-  InventoryItemRow,
-  "qty" | "borrowedQty"
->;
+export type InventoryCountersRow = Pick<InventoryItemRow, "qty">;
 
 /**
  * The counter pair of any row that has the two columns on it, so a caller can
@@ -96,7 +84,6 @@ export type InventoryCountersRow = Pick<
  */
 export const countersOf = (row: InventoryCountersRow): InventoryCounters => ({
   qty: row.qty,
-  borrowedQty: row.borrowedQty,
 });
 
 /**
@@ -139,7 +126,6 @@ export const itemViewSelection = {
   unit: inventoryItem.unit,
   minQty: inventoryItem.minQty,
   qty: inventoryItem.qty,
-  borrowedQty: inventoryItem.borrowedQty,
   borrowable: inventoryItem.borrowable,
   condition: inventoryItem.condition,
   location: inventoryItem.location,
@@ -342,282 +328,6 @@ export const getInventoryActor = async (
     name: record.name || sessionDisplayName(sessionUser),
   };
 };
-
-// ─── Borrower resolution ────────────────────────────────────────────────────
-
-export type InventoryBorrowerType = "staff" | "student";
-
-/**
- * Whoever a loan is owed back to, in the one shape both kinds of borrower
- * arrive in.
- *
- * **A borrow has exactly one borrower of exactly one type.** `inventoryBorrow`
- * carries two nullable pointer columns and
- * `inventory_borrow_borrower_exclusive` refuses both-set and neither-set, so
- * "a teacher *or* a student" is a fact the database holds rather than a union
- * each caller assembles for itself. **Every read goes through `getBorrower`**
- * for the same reason: if one procedure joins `staff` and its neighbour joins
- * `student`, the two agree everywhere except the edges — the same loan renders
- * as "R. Perera" on one screen and as an empty cell on the other, and the
- * difference is invisible until a user's screen is wrong. One resolver, one
- * shape, and a caller that wants a borrower asks for it rather than
- * reimplementing the two-case read.
- *
- * `reference` and `className` are nullable and each is nullable for its own
- * reason, not because a borrower is "sometimes incomplete": a staff member
- * whose record carries no badge number is still a staff member, and a student
- * with no class assignment **this** year is still the person the loan is owed
- * to. Both fields are UI decoration for the label beside a name; neither is
- * allowed to become a reason to fail a resolution.
- */
-export interface InventoryBorrower {
-  type: InventoryBorrowerType;
-  id: string;
-  /** "R. Perera" for staff; "Nimali Fernando" for a student. Always populated. */
-  name: string;
-  /** Secondary line for the UI: the badge number for staff, the admission number for a student. */
-  reference: string | null;
-  /** "Grade 9B" when the student is in a class this academic year, otherwise null. Staff have no class. */
-  className: string | null;
-}
-
-/**
- * `notNull` on both name columns is a database fact and not a promise that they
- * hold anything: a legacy import can carry a student whose names are a space
- * each, and an empty label on a loan ledger row is the one thing a storekeeper
- * cannot work around. The admission number is the fallback because it is the
- * one field on the row that is `notNull` **and** `unique`, so it is always
- * present and always identifies the person to a human.
- */
-const studentDisplayName = (row: {
-  firstName: string;
-  lastName: string;
-  admissionNumber: string;
-}): string => `${row.firstName} ${row.lastName}`.trim() || row.admissionNumber;
-
-/**
- * Many staff borrowers in one query, keyed by staff id.
- *
- * The batch form exists because a list view wants this for the whole page at
- * once, and the single-row form below is implemented on top of it rather than
- * beside it — see the note on `getBorrower` about the two cases being unable to
- * diverge. A caller with one id still gets one query; a caller with fifty gets
- * one query.
- *
- * A missing id is simply absent from the map rather than an error: this is the
- * batched path, one bad pointer among fifty must not fail the list, and the
- * single-row resolvers are where "that person does not exist" becomes a
- * `NOT_FOUND` a user can act on.
- */
-export const resolveBorrowerStaffBatch = async (
-  db: Executor,
-  staffIds: readonly string[]
-): Promise<Map<string, InventoryBorrower>> => {
-  const borrowers = new Map<string, InventoryBorrower>();
-  if (staffIds.length === 0) {
-    return borrowers;
-  }
-
-  const rows = await db
-    .select({
-      id: staff.id,
-      name: staff.name,
-      // The badge / service number, and the one staff identifier a person can
-      // be given across a counter. `teacher_service_no` is unique and nullable,
-      // so an office record that was never issued one yields a null reference
-      // rather than a missing row.
-      reference: staff.teacherServiceNo,
-    })
-    .from(staff)
-    .where(inArray(staff.id, [...staffIds]));
-
-  for (const row of rows) {
-    borrowers.set(row.id, {
-      type: "staff",
-      id: row.id,
-      name: row.name,
-      reference: row.reference,
-      // Staff are not on the class roll in this system: `class_` is keyed to
-      // `student` through `studentClassAssignment`, and a teacher who also
-      // teaches 9B has no row of their own in it. This is a structural null
-      // rather than a missing lookup, and it is the reason `className` is not
-      // a field every procedure has to defend.
-      className: null,
-    });
-  }
-
-  return borrowers;
-};
-
-/**
- * Many student borrowers in one query, keyed by student id, with each one's
- * class for the **current** academic year.
- *
- * **The current year is the whole point of the join.** `studentClassAssignment`
- * is unique on `(studentId, academicYearId)` and gets a *new* row every year,
- * so a student who was in 9B last year and is in 10A now has two assignment
- * rows, and an unfiltered join would return them two classes or pick one
- * arbitrarily. Neither is acceptable here: a loan made in 2026 must not
- * silently re-label itself when the class roll moves, so the historical row is
- * never read. The register of what a student was lent is a record of an
- * obligation, and an obligation that changes its own subject every January is
- * not a record. `className` is therefore "which class are they in **now**", or
- * null for a student with no assignment in the current year — a real answer,
- * and not a missing one.
- *
- * The unique index is also what makes this join safe to return rows from: one
- * student can be in at most one class in the current year, so the join cannot
- * multiply a student row and the map cannot be overwritten by a second class.
- */
-export const resolveBorrowerStudentBatch = async (
-  db: Executor,
-  studentIds: readonly string[]
-): Promise<Map<string, InventoryBorrower>> => {
-  const borrowers = new Map<string, InventoryBorrower>();
-  if (studentIds.length === 0) {
-    return borrowers;
-  }
-
-  const rows = await db
-    .select({
-      id: student.id,
-      firstName: student.firstName,
-      lastName: student.lastName,
-      admissionNumber: student.admissionNumber,
-      className: class_.name,
-    })
-    .from(student)
-    .leftJoin(
-      studentClassAssignment,
-      eq(studentClassAssignment.studentId, student.id)
-    )
-    // The `isCurrent` test lives in the join rather than in a `where`, because
-    // a `where` on the outer table's null-joined columns would turn the
-    // left join into an inner one and drop every student who is not currently
-    // in a class — the exact rows whose `className` is supposed to be null.
-    .leftJoin(
-      academicYear,
-      and(
-        eq(academicYear.id, studentClassAssignment.academicYearId),
-        eq(academicYear.isCurrent, true)
-      )
-    )
-    .leftJoin(class_, eq(class_.id, studentClassAssignment.classId))
-    .where(inArray(student.id, [...studentIds]));
-
-  for (const row of rows) {
-    borrowers.set(row.id, {
-      type: "student",
-      id: row.id,
-      name: studentDisplayName(row),
-      reference: row.admissionNumber,
-      className: row.className,
-    });
-  }
-
-  return borrowers;
-};
-
-export const resolveBorrowerStaff = async (
-  db: Executor,
-  staffId: string
-): Promise<InventoryBorrower> => {
-  const borrowers = await resolveBorrowerStaffBatch(db, [staffId]);
-  const borrower = borrowers.get(staffId);
-  if (!borrower) {
-    throw new ORPCError("NOT_FOUND", { message: "Staff member not found" });
-  }
-
-  // A loan cannot be owed back by an administrator account — same rule as
-  // `assertStaffIsAssignable`, reached through the staff row's own login.
-  const [staffRecord] = await db
-    .select({ role: user.role })
-    .from(staff)
-    .leftJoin(user, eq(staff.userId, user.id))
-    .where(eq(staff.id, staffId))
-    .limit(1);
-
-  if (staffRecord?.role === "admin") {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Cannot lend items to an admin account",
-    });
-  }
-
-  return borrower;
-};
-
-/**
- * A student loan is refused rather than papered over: the caller picked this
- * person out of a picker, so "no such student" is a `NOT_FOUND` they can act
- * on, and it is the same failure a staff borrower gets. A missing student row
- * under a `restrict` foreign key means a deleted record the loan still names.
- */
-export const resolveBorrowerStudent = async (
-  db: Executor,
-  studentId: string
-): Promise<InventoryBorrower> => {
-  const borrowers = await resolveBorrowerStudentBatch(db, [studentId]);
-  const borrower = borrowers.get(studentId);
-  if (!borrower) {
-    throw new ORPCError("NOT_FOUND", { message: "Student not found" });
-  }
-
-  return borrower;
-};
-
-/**
- * The one read of "who is this loan about". Callers pass the row's two pointer
- * columns and get back the resolved person, whichever table they name.
- *
- * The order of the two arms is not a preference between staff and students: the
- * exclusivity CHECK refuses a row with both set, so only one arm can ever
- * match, and "staff first" is written out rather than left implicit so the
- * impossible case is visibly a decision rather than an accident.
- *
- * Neither-set is a `500` and not a `404`, and the distinction is the point: a
- * borrow row that names nobody is a corrupt register, not a missing person, and
- * answering it as "not found" would send a clerk looking for a student who
- * exists.
- *
- * Not `async`: it awaits nothing of its own, it chooses which resolver to hand
- * the row to. The `Promise` return type is what callers program against and is
- * the same either way.
- */
-export const getBorrower = (
-  db: Executor,
-  row: { borrowerStaffId: string | null; borrowerStudentId: string | null }
-): Promise<InventoryBorrower> => {
-  if (row.borrowerStaffId) {
-    return resolveBorrowerStaff(db, row.borrowerStaffId);
-  }
-
-  if (row.borrowerStudentId) {
-    return resolveBorrowerStudent(db, row.borrowerStudentId);
-  }
-
-  throw new ORPCError("INTERNAL_SERVER_ERROR", {
-    message: "This loan record names no borrower",
-  });
-};
-
-/**
- * How a borrower is named in a message, a ledger note or a toast.
- *
- * The reference is appended when there is one, and that is not decoration: "Nimali
- * Fernando" is one of nine hundred names in a school, while "Nimali Fernando
- * (STU/2025/001)" is a person the storekeeper can find on the roll, and the
- * whole point of a store naming somebody is that somebody can act on it. Staff
- * get the same treatment from their badge number, and a staff member with no
- * badge simply renders as their name, which is what `reference: null` means.
- *
- * One function, so the two messages that name a borrower — the ledger note on
- * check-out and the drift refusal on check-in — cannot spell a student one way
- * and a teacher another.
- */
-export const describeBorrower = (borrower: InventoryBorrower): string =>
-  borrower.reference
-    ? `${borrower.name} (${borrower.reference})`
-    : borrower.name;
 
 // ─── Item locking and existence guards ──────────────────────────────────────
 
@@ -1089,21 +799,11 @@ export const assertNoActiveLifecycleUnit = async (
   db: Executor,
   unitId: string
 ): Promise<void> => {
-  const [unitRows, borrowRows, issueRows, disposalRows] = await Promise.all([
+  const [unitRows, issueRows, disposalRows] = await Promise.all([
     db
       .select({ uniqueNo: inventoryUnit.uniqueNo })
       .from(inventoryUnit)
       .where(eq(inventoryUnit.id, unitId))
-      .limit(1),
-    db
-      .select({ borrowId: inventoryBorrowUnit.borrowId })
-      .from(inventoryBorrowUnit)
-      .where(
-        and(
-          eq(inventoryBorrowUnit.unitId, unitId),
-          isNull(inventoryBorrowUnit.releasedAt)
-        )
-      )
       .limit(1),
     db
       .select({ issueId: inventoryIssueUnit.issueId })
@@ -1129,13 +829,6 @@ export const assertNoActiveLifecycleUnit = async (
   const [unit] = unitRows;
   if (!unit) {
     throw new ORPCError("NOT_FOUND", { message: "Unit not found" });
-  }
-
-  const [borrowed] = borrowRows;
-  if (borrowed) {
-    throw new ORPCError("CONFLICT", {
-      message: `Asset ${unit.uniqueNo} is currently borrowed`,
-    });
   }
 
   const [issued] = issueRows;
@@ -1228,8 +921,6 @@ export const insertInventoryTransaction = async (
     itemId: input.item.id,
     qtyBefore: input.before.qty,
     qtyAfter: input.after.qty,
-    borrowedQtyBefore: input.before.borrowedQty,
-    borrowedQtyAfter: input.after.borrowedQty,
     note: input.note ?? null,
     meta: {
       ...input.meta,
@@ -1450,7 +1141,6 @@ export interface InventoryItemView {
   unit: string;
   minQty: number;
   qty: number;
-  borrowedQty: number;
   availableQty: number;
   status: InventoryItemStatus;
   borrowable: boolean;
@@ -1536,7 +1226,6 @@ export const toItemView = (row: InventoryItemJoinedRow): InventoryItemView => {
     unit: row.unit,
     minQty: row.minQty,
     qty: row.qty,
-    borrowedQty: row.borrowedQty,
     availableQty,
     status: calculateItemStatus(counters, row.condition),
     borrowable: row.borrowable,

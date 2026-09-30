@@ -219,12 +219,8 @@ export const stockIn = inventoryManagerProcedure
       }
 
       /**
-       * `borrowedQty` is deliberately absent from the `set`. Receiving stock and
-       * lending stock are two different facts about two different subjects —
-       * what is on the shelf, and what is out on loan — and they are counted
-       * separately on purpose so a storekeeper can answer "what have we got?"
-       * and "what has Mr Perera got?" without subtracting one from the other.
-       * Touching `borrowedQty` here would quietly forgive a loan.
+       * Stock-in only affects available quantity; loans have been removed from
+       * the inventory model, so we only track qty (the actual inventory count).
        */
       await insertInventoryTransaction(tx, {
         actor,
@@ -247,8 +243,8 @@ export const stockIn = inventoryManagerProcedure
         action: "item.stock_in",
         entityType: "inventory_item",
         entityId: existing.id,
-        before: { qty: existing.qty, borrowedQty: existing.borrowedQty },
-        after: { qty: updated.qty, borrowedQty: updated.borrowedQty },
+        before: { qty: existing.qty },
+        after: { qty: updated.qty },
       });
 
       return {

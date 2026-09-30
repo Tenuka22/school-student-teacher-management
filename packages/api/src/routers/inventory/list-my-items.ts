@@ -44,7 +44,6 @@ import {
  */
 const itemStatusSchema = picklist([
   "out_of_stock",
-  "borrowed",
   "damaged",
   "available",
 ] as const satisfies readonly InventoryItemStatus[]);

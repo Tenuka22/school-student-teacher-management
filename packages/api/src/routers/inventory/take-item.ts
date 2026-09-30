@@ -57,8 +57,6 @@ import {
  */
 const STATUS_REFUSAL_MESSAGES = {
   out_of_stock: "There is no stock of this item left to take",
-  borrowed:
-    "This item is already out on loan, so it cannot be taken from the store",
   damaged: "This item is marked Damaged and is not available to be taken",
   available: "This item cannot be taken from the store right now",
 } as const satisfies Record<InventoryItemStatus, string>;

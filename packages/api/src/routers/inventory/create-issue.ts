@@ -3,13 +3,10 @@
  *
  * Three things look alike at a school counter and only one of them is this:
  *
- * 1. **A borrow** (`create-borrow.ts`) — a teacher takes a device and brings it
- *    back. `qty` is untouched and `borrowedQty` rises, so the store still owns
- *    the thing.
- * 2. **A disposal** (`finalize-disposal.ts`) — the school writes the thing off
+ * 1. **A disposal** (`finalize-disposal.ts`) — the school writes the thing off
  *    because it is broken, lost or obsolete. It never comes back either, but
  *    nobody receives it and it usually needs a signature before it is final.
- * 3. **An issue** (this file) — the school gives the thing away *to somebody*:
+ * 2. **An issue** (this file) — the school gives the thing away *to somebody*:
  *    a student who is graduating, a contractor, a feeder school, the Provincial
  *    Education Office. It is not coming back, and the point of recording it is
  *    that the school no longer has it.

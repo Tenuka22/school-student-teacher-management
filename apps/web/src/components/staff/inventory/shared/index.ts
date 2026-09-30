@@ -10,7 +10,6 @@
 // know. The tree-shaking cost is one folder of leaf components in a
 // route-level code-split bundle.
 // oxlint-disable-next-line no-barrel-file
-export * from "./borrower-picker";
 export * from "./inventory-filter-bar";
 export * from "./inventory-query-keys";
 export * from "./inventory-stats";

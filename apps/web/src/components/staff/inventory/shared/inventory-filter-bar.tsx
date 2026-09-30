@@ -95,7 +95,6 @@ type AssertNever<T extends never> = T;
  */
 const STATUS_ORDER = [
   "out_of_stock",
-  "borrowed",
   "damaged",
   "available",
 ] as const satisfies readonly InventoryItemStatus[];

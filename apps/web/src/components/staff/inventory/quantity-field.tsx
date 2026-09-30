@@ -61,7 +61,6 @@ export interface StockSnapshot {
   unit: string;
   qty: number;
   availableQty: number;
-  borrowedQty: number;
   minQty: number;
 }
 
@@ -146,7 +145,6 @@ export const useStockSnapshot = (itemId: string | null): StockReadState => {
         unit: data.unit,
         qty: data.qty,
         availableQty: data.availableQty,
-        borrowedQty: data.borrowedQty,
         minQty: data.minQty,
       },
     };
@@ -340,7 +338,7 @@ export const ProjectedQuantity: React.FC<{
     );
   }
 
-  const { unit, qty, availableQty, borrowedQty, itemName } = read.item;
+  const { unit, qty, availableQty, itemName } = read.item;
   const after = qty + delta;
   /**
    * A movement that would take the count below zero is refused *here*, with the real
@@ -389,9 +387,6 @@ export const ProjectedQuantity: React.FC<{
                 {availableQty === 0
                   ? "nothing — there is none on the shelf"
                   : counted(availableQty, unit)}
-                {borrowedQty > 0
-                  ? `, or wait for the ${borrowedQty} currently out on loan to come back`
-                  : ""}
                 .
               </span>
             ) : null}

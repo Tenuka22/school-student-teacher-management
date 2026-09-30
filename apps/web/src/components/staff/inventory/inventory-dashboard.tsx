@@ -22,7 +22,7 @@ import { orpc } from "@/utils/orpc";
  * this seat does not hold. This one answers the questions this seat is the only
  * person who can answer: what is out, what is late, what is waiting for a
  * decision, and what has been handed to somebody who has not yet acknowledged
- * it. So the figures are the store's own (items, units, loans, low stock,
+ * it. So the figures are the store's own (items, units, low stock,
  * write-offs, issues, notices) and the links point at the register's panes.
  *
  * **Every count is a server total, and each is asked for with the smallest
@@ -36,7 +36,7 @@ import { orpc } from "@/utils/orpc";
  * ## The six reads, and why there is no seventh
  *
  * `items.list` twice over (the register, and the low-stock slice of it),
- * `borrows.list` twice (open, and the overdue subset of it), `disposals.list`
+ * `disposals.list`
  * for the write-off queue, `issues.list` for what went out to staff and
  * students, and `custody.notices.list` for the acknowledgements. There is no
  * seventh read for `ledger.transactions` even though this seat may read it: the
@@ -51,23 +51,21 @@ import { orpc } from "@/utils/orpc";
  */
 type InventoryPath =
   | "/inventory-admin/$year/staff/inventory"
-  | "/inventory-admin/$year/staff/inventory/loans"
   | "/inventory-admin/$year/staff/inventory/issues"
   | "/inventory-admin/$year/staff/inventory/write-offs"
   | "/inventory-admin/$year/staff/inventory/asset-register"
   | "/inventory-admin/$year/staff/inventory/ledger";
 
-/** The store's six panes, in the order a storekeeper works through them. */
+/** The store's five panes, in the order a storekeeper works through them. */
 const quickActions: { label: string; to: InventoryPath }[] = [
   { label: "Item register", to: "/inventory-admin/$year/staff/inventory" },
-  { label: "Loans", to: "/inventory-admin/$year/staff/inventory/loans" },
-  { label: "Issues", to: "/inventory-admin/$year/staff/inventory/issues" },
+  { label: "Transfers", to: "/inventory-admin/$year/staff/inventory/issues" },
   {
-    label: "Write-offs",
+    label: "Disposals",
     to: "/inventory-admin/$year/staff/inventory/write-offs",
   },
   {
-    label: "Asset register",
+    label: "History",
     to: "/inventory-admin/$year/staff/inventory/asset-register",
   },
   { label: "Ledger", to: "/inventory-admin/$year/staff/inventory/ledger" },
@@ -109,16 +107,6 @@ const useInventoryDashboardData = () => {
       input: { limit: 1, lowStockOnly: true },
     })
   );
-  const openBorrowsQuery = useQuery(
-    orpc.inventory.borrows.list.queryOptions({
-      input: { limit: 1, status: "borrowed" },
-    })
-  );
-  const overdueQuery = useQuery(
-    orpc.inventory.borrows.list.queryOptions({
-      input: { limit: 1, overdueOnly: true },
-    })
-  );
   const disposalsQuery = useQuery(
     orpc.inventory.disposals.list.queryOptions({ input: { limit: 1 } })
   );
@@ -151,14 +139,6 @@ const useInventoryDashboardData = () => {
       value: lowStockQuery.data?.total,
       isError: lowStockQuery.isError,
     } satisfies Figure,
-    outOnLoan: {
-      value: openBorrowsQuery.data?.total,
-      isError: openBorrowsQuery.isError,
-    } satisfies Figure,
-    overdue: {
-      value: overdueQuery.data?.total,
-      isError: overdueQuery.isError,
-    } satisfies Figure,
     pendingApprovals: {
       value: pendingApprovals,
       isError: disposalsQuery.isError,
@@ -180,8 +160,6 @@ const useInventoryDashboardData = () => {
     allLoaded:
       itemsQuery.isSuccess &&
       lowStockQuery.isSuccess &&
-      openBorrowsQuery.isSuccess &&
-      overdueQuery.isSuccess &&
       disposalsQuery.isSuccess &&
       issuesQuery.isSuccess &&
       noticesQuery.isSuccess,
@@ -213,7 +191,6 @@ interface AttentionEntry {
  */
 const buildAttention = (data: InventoryDashboardData): AttentionEntry[] => {
   const entries: AttentionEntry[] = [];
-  const overdue = data.overdue.value ?? 0;
   const approvals = data.pendingApprovals.value ?? 0;
   const notices = data.unacknowledgedNotices.value ?? 0;
   const items = data.items.value ?? 0;
@@ -225,16 +202,6 @@ const buildAttention = (data: InventoryDashboardData): AttentionEntry[] => {
         "Nothing has been registered yet. The first item needs a person in charge and a person holding it.",
       action: "Register an item",
       to: "/inventory-admin/$year/staff/inventory",
-    });
-  }
-
-  if (overdue > 0) {
-    entries.push({
-      title: `${overdue} ${plural(overdue, "loan is", "loans are")} past the due date`,
-      detail:
-        "Equipment that is late is the one figure here that grows on its own. Take the return through the loan record, so the date and the signature are kept.",
-      action: "Open loans",
-      to: "/inventory-admin/$year/staff/inventory/loans",
     });
   }
 
@@ -472,16 +439,6 @@ export const InventoryDashboard = ({
                 label="Items"
                 figure={data.items}
                 detail={lowStockDetail}
-              />
-              <StatTile
-                label="Out on loan"
-                figure={data.outOnLoan}
-                detail="Units away with a borrower right now"
-              />
-              <StatTile
-                label="Overdue"
-                figure={data.overdue}
-                detail="Past the date they were due back"
               />
               <StatTile
                 label="Low stock"

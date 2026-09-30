@@ -10,7 +10,6 @@ import {
 } from "@school-student-teacher-management/db/schema/attendance";
 import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
-  inventoryBorrow,
   inventoryCustodyHistory,
   inventoryCustodyNoticeRecipient,
   inventoryDisposalStatusHistory,
@@ -175,11 +174,6 @@ export const deleteStaff = requireStaffPermission("delete")
             eq(inventoryCustodyHistory.changedByStaffId, existing.id)
           )
         )
-        .limit(1),
-      context.db
-        .select({ id: inventoryBorrow.id })
-        .from(inventoryBorrow)
-        .where(eq(inventoryBorrow.borrowerStaffId, existing.id))
         .limit(1),
       // A notice recipient row is evidence that this person was told
       // about a custody change, same reasoning as the history row

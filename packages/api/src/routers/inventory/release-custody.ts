@@ -132,28 +132,14 @@ export const releaseCustody = requireInventoryPermission("take")
         });
       }
 
-      // Authorization before the borrow check below, so a teacher who is not
-      // the holder learns nothing about the item's stock state.
+      // Authorization check: a teacher who is not the holder learns nothing
+      // about the item's stock state.
       const role = context.session?.user.role ?? "";
       const isAdmin = ADMIN_ROLES.has(role);
       if (existing.custodianStaffId !== actor.staffId && !isAdmin) {
         throw new ORPCError("FORBIDDEN", {
           message:
             "Only the teacher holding this item, or an administrator, can hand it back to the store",
-        });
-      }
-
-      // An item with units out on loan is not physically in anybody's hand to
-      // give back — it is out with a borrower, and the borrow has to be closed
-      // through the borrow-return flow so the return date, the returned-by
-      // signature and the counter movement are all recorded. Handing custody on
-      // here would move the pointer while the units were still away, asserting
-      // that the successor is looking after equipment that is in fact out with
-      // a student on a due date.
-      if (existing.borrowedQty > 0) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            "This item is on loan, so it has to be returned through the borrow record before it can be handed back",
         });
       }
 

@@ -2,34 +2,24 @@ import { acknowledgeCustodyNotice } from "./acknowledge-custody-notice";
 import { approveDisposal } from "./approve-disposal";
 import { assignManager } from "./assign-manager";
 import { cancelDisposal } from "./cancel-disposal";
-import { createBorrow } from "./create-borrow";
-import { createCustodyRequest } from "./create-custody-request";
 import { createDisposal } from "./create-disposal";
 import { createIssue } from "./create-issue";
 import { createItem } from "./create-item";
-import { decideCustodyRequest } from "./decide-custody-request";
 import { deleteItem } from "./delete-item";
 import { disputeCustodyNotice } from "./dispute-custody-notice";
 import { exportQrSheet } from "./export-qr-sheet";
 import { finalizeDisposal } from "./finalize-disposal";
 import { getItem } from "./get-item";
 import { getItemForScan } from "./get-item-for-scan";
-import { getPunctualityScore } from "./get-punctuality-score";
 import { listAuditLogs } from "./list-audit-logs";
-import { listBorrows } from "./list-borrows";
 import { listCategories } from "./list-categories";
 import { listCustodyHistory } from "./list-custody-history";
 import { listCustodyNotices } from "./list-custody-notices";
-import {
-  listIncomingCustodyRequests,
-  listOutgoingCustodyRequests,
-} from "./list-custody-requests";
 import { listDisposals } from "./list-disposals";
 import { listIssues } from "./list-issues";
 import { listItems } from "./list-items";
 import { listLentByMe } from "./list-lent-by-me";
 import { listMyItems } from "./list-my-items";
-import { listRequestableItems } from "./list-requestable-items";
 import { listTakeableItems } from "./list-takeable-items";
 import { listAssignableStaff } from "./list-teacher-options";
 import { listTransactions } from "./list-transactions";
@@ -37,11 +27,9 @@ import { listUnits } from "./list-units";
 import { reclaimCustody } from "./reclaim-custody";
 import { releaseCustody } from "./release-custody";
 import { restoreItem } from "./restore-item";
-import { returnBorrow } from "./return-borrow";
 import { seedCategories } from "./seed-categories";
 import { stockIn } from "./stock-in";
 import { stockOut } from "./stock-out";
-import { subscribeCustodyRequests } from "./subscribe-custody-requests";
 import { takeItem } from "./take-item";
 import { transferCustody } from "./transfer-custody";
 import { transferOwnership } from "./transfer-ownership";
@@ -57,7 +45,7 @@ import { voidItem } from "./void-item";
  * what the store holds (`categories`), find a person (`options`), keep the
  * register (`items`, `units`), move stock in and out (`stockIn` / `stockOut` on
  * `items`), decide who is responsible for a given thing (`custody`), run a
- * lifecycle that ends the item's life in the store (`issues`, `borrows`,
+ * lifecycle that ends the item's life in the store (`issues`,
  * `disposals`), and afterwards read what all of it did (`ledger`).
  *
  * **The grouping is chosen so a route guard can gate a whole group.** A
@@ -72,8 +60,8 @@ import { voidItem } from "./void-item";
  * on purpose.** `items` maintains the record — what exists, what it is called,
  * how many there are, what it is worth. `custody` decides who is responsible for
  * it, which is a different question with a different answer for every single
- * row: an item in a cupboard has a manager and no custodian, a borrowed item has
- * both, and a disposed one has neither. Collapsing them would make "who is
+
+        * and a disposed one has neither. Collapsing them would make "who is
  * holding this, and since when" — the question an audit is actually asked —
  * unaskable, because the current holders on `inventoryItem` are the answer and
  * the history is `custody.history`.
@@ -150,33 +138,8 @@ export const inventoryRouter = {
     /** The owner's view of what is out with other people. */
     lent: listLentByMe,
     takeable: { listTakeableItems },
-    /**
-     * The peer-to-peer request/approval queue — the fourth verb on custody
-     * alongside `take`, `transfer` and `release`. `requests.create` and
-     * `requests.listRequestable` are the requester's half; `listIncoming` /
-     * `listOutgoing` are each side's queue; `decide` is the custodian's
-     * approve-or-deny; `subscribe` is the live channel both sides listen on.
-     * See `custody-request-events.ts` for the channel and
-     * `decide-custody-request.ts` for why approving is the transfer.
-     */
-    requests: {
-      create: createCustodyRequest,
-      listRequestable: listRequestableItems,
-      listIncoming: listIncomingCustodyRequests,
-      listOutgoing: listOutgoingCustodyRequests,
-      decide: decideCustodyRequest,
-      subscribe: subscribeCustodyRequests,
-    },
   },
   issues: { list: listIssues, create: createIssue },
-  borrows: {
-    list: listBorrows,
-    create: createBorrow,
-    return: returnBorrow,
-    /** A borrower's punctuality score, computed live from their loan history —
-     *  see `get-punctuality-score.ts`. `staffId` optional, defaults to the caller. */
-    punctualityScore: getPunctualityScore,
-  },
   disposals: {
     list: listDisposals,
     create: createDisposal,
