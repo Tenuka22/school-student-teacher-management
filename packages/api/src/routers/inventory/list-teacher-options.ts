@@ -1,5 +1,6 @@
 import { normalizeInventoryKey } from "@school-student-teacher-management/db/constants/inventory";
 import { user } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, asc, eq, ilike, isNull, ne, or } from "drizzle-orm";
 import * as v from "valibot";
 
@@ -15,14 +16,9 @@ const DEFAULT_ASSIGNABLE_STAFF_LIMIT = 50;
  * for every manager, custodian and borrower field in the inventory UI, so
  * anything it offers can be handed a school laptop. It holds the identical
  * predicate to `assertStaffIsAssignable` in `./inventory-database`, so the list
- * and that guard offer and accept the same set.
- *
- * - **The banned and admin filters are the only ones applied.** The old
- *   employment status predicate is gone: now that user.id is written into these
- *   columns, any active, non-banned user can be assigned custody or management,
- *   regardless of their employment status. The list holds the identical
- *   predicate to `assertStaffIsAssignable` in `./inventory-database`, so the list
- *   and that guard offer and accept the same set.
+ * and that guard offer and accept the same set — a picker that offers somebody
+ * the guard then refuses is a dead end the user cannot explain, and the two
+ * agreeing is the only thing that keeps that from happening.
  *
  * - **Every category of staff qualifies, and that is the decision, not a
  *   widening left half-done.** The `staffCategory = "teacher"` restriction used
@@ -41,13 +37,17 @@ const DEFAULT_ASSIGNABLE_STAFF_LIMIT = 50;
  *   A *null* `employmentStatus` is admitted, because it means nobody has
  *   confirmed it, and refusing those would make the store unusable until an
  *   administrator filled in a field the storekeeper has no business editing.
- * - **The seeded `admin` / `principal` / `deputy-principal` accounts are still
- *   absent, and not because of anything written here.** They are users with no
- *   staff row at all (`packages/auth/src/admin.ts`), so *no* filter on `staff`
- *   reaches them and none is written for them. They administer the ledger; they
- *   are not the people who carry the laptops. A school that assigns a projector
- *   to a leadership account has lost the accountability the ledger exists to
- *   record, and that is a reason to have no staff row rather than a predicate.
+ * - **The `admin` seat is excluded by `role`, not by absence.** Leadership
+ *   seats now carry a `staff` row (`packages/auth/src/admin.ts` seeds one for
+ *   each, precisely so the register can name them), so "they have no staff row"
+ *   is no longer what keeps them off this list. What does is the same clause
+ *   `assertStaffIsAssignable` carries: `user.role = 'admin'` is refused, on the
+ *   reasoning that the top administrator *is* the ledger and must not also be a
+ *   holder inside it — otherwise clearing the last holder of a laptop would
+ *   need somebody else to clear them. Every other seat (Principal, Deputy,
+ *   Inventory Administrator, Academic Administrator) is assignable, because
+ *   each is a person in the building who can physically be handed equipment,
+ *   and the seeded register already names two of them as holders.
  *
  * **HOW THIS RELATES TO `staff/teacher-eligibility.ts:27-35`, WHICH IT NO
  * LONGER MATCHES.** That file's `activeOrUnsetEmployment` is the same expression
@@ -64,6 +64,11 @@ const DEFAULT_ASSIGNABLE_STAFF_LIMIT = 50;
  * narrower rule here — a visiting contractor or an honorary fellow who may
  * borrow but not be paid a custodian's duty — it belongs in this file alone.
  */
+const activeOrUnsetEmployment = or(
+  eq(staff.employmentStatus, "active"),
+  isNull(staff.employmentStatus)
+);
+
 /**
  * `LIKE` / `ILIKE` wildcards typed by a user have to be escaped.
  *
@@ -117,9 +122,9 @@ const escapeLikePattern = (term: string): string =>
  * of an unfiltered request is the alphabetically-first 50 members of staff and
  * paging or raising the limit is additive rather than reshuffling.
  *
- * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** — a deliberate
- * deviation from the obvious gate, and the reason is written down in two other
- * places in this repo.
+ * **`inventoryOverseerProcedure`, not `requireInventoryPermission("read")`** —
+ * a deliberate deviation from the obvious gate, and the reason is written down
+ * in two other places in this repo.
  *
  * The gate changed because `requireInventoryPermission("read")` is
  * teacher-reachable: the `teacher` role holds `inventory: ["read"]`
@@ -134,14 +139,15 @@ const escapeLikePattern = (term: string): string =>
  * the same one the gate was moved for: the audience, not the filter, is the
  * reason this is `inventoryOverseerProcedure`.
  *
- * The property this file's own comment above relies on is the reason it must not
- * be reachable by a teacher: it is the source for every manager, custodian and
- * borrower field in the inventory UI, so a teacher who could read it could be
- * handed the list of people school property is given to — and each of them is a
- * colleague, not an abstraction. Narrowing it to the caller would be worse than
- * useless (a teacher has nobody to assign to, and the combobox is only ever
- * populated by a storekeeper), so it is `inventoryOverseerProcedure`, and it now satisfies
- * the `teacher` statement's contract that `read` reaches no school-wide list.
+ * The property this file's own comment above relies on is the reason it must
+ * not be reachable by a teacher: it is the source for every manager, custodian
+ * and borrower field in the inventory UI, so a teacher who could read it could
+ * be handed the list of people school property is given to — and each of them
+ * is a colleague, not an abstraction. Narrowing it to the caller would be worse
+ * than useless (a teacher has nobody to assign to, and the combobox is only
+ * ever populated by a storekeeper), so it is `inventoryOverseerProcedure`, and
+ * it now satisfies the `teacher` statement's contract that `read` reaches no
+ * school-wide list.
  */
 export const listAssignableStaff = inventoryOverseerProcedure
   .input(
@@ -163,18 +169,32 @@ export const listAssignableStaff = inventoryOverseerProcedure
 
     const rows = await context.db
       .select({
-        id: user.id,
-        name: user.name,
+        id: staff.id,
+        name: staff.name,
+        staffCategory: staff.staffCategory,
+        employmentStatus: staff.employmentStatus,
+        serviceNo: staff.teacherServiceNo,
+        currentRole: user.role,
       })
-      .from(user)
+      .from(staff)
+      // A `left` join and not an `inner` one: most of the staff roll has no
+      // login account, and an inner join would silently drop exactly the people
+      // a storekeeper is most likely to be looking for. `staff.userId` is
+      // unique, so the join cannot multiply a staff row.
+      .leftJoin(user, eq(staff.userId, user.id))
       .where(
         and(
-          or(eq(user.banned, false), isNull(user.banned)),
-          ne(user.role, "admin"),
-          term ? ilike(user.name, pattern) : undefined
+          activeOrUnsetEmployment,
+          or(isNull(user.id), ne(user.role, "admin")),
+          term
+            ? or(
+                ilike(staff.name, pattern),
+                ilike(staff.teacherServiceNo, pattern)
+              )
+            : undefined
         )
       )
-      .orderBy(asc(user.name))
+      .orderBy(asc(staff.name))
       .limit(input.limit ?? DEFAULT_ASSIGNABLE_STAFF_LIMIT);
 
     return rows;

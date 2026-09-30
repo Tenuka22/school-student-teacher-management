@@ -17,7 +17,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import { teachingStaff } from "../teacher-eligibility";
 
 /**
@@ -61,7 +61,7 @@ import { teachingStaff } from "../teacher-eligibility";
  * teacher with no timetable this year is still markable, which is only true if
  * the list is the roll and not the subset of it that has been positioned.
  */
-export const listTeachersForAttendance = adminProcedure
+export const listTeachersForAttendance = academicProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [staffRows, gradeRows, qualificationRows] = await Promise.all([

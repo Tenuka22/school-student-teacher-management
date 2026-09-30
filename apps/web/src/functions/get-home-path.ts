@@ -9,6 +9,8 @@ import { db } from "@/services.server";
 
 export type HomeBase =
   | "/admin"
+  | "/academic-admin"
+  | "/inventory-admin"
   | "/principal"
   | "/deputy-principal"
   | "/teacher";
@@ -19,7 +21,11 @@ export type HomeBase =
  * The seeded role decides first — `principal` and `vicePrincipal` are their
  * own roles, so an account is self-describing. Position authority is the
  * fallback so a member promoted through position management still lands in
- * the right workspace, and `role: "admin"` is the plain admin desk.
+ * the right workspace, and `role: "admin"` is the plain admin desk. The two
+ * specialist seats have workspaces of their own now: the Academic
+ * Administrator runs the year's staff, classes and timetable under
+ * `/academic-admin`, and the Inventory Administrator's whole desk is the
+ * register under `/inventory-admin`.
  *
  * Returns null for a role that owns no workspace (`user`,
  * `teacher-requester`): those are not a misplaced teacher, they are simply not
@@ -40,11 +46,13 @@ export const getHomeBase = (input: {
   if (input.role === "admin") {
     return "/admin";
   }
-  // The Inventory Administrator lands in the same workspace shell as `admin`
-  // — see `getHomePath` below for why its full path skips the bare
-  // dashboard and goes straight to the register.
+  if (input.role === "academicAdmin") {
+    return "/academic-admin";
+  }
+  // Its full path skips the bare dashboard below and goes straight to the
+  // register — see `getHomePath`.
   if (input.role === "inventoryAdmin") {
-    return "/admin";
+    return "/inventory-admin";
   }
   if (input.role === "teacher") {
     return "/teacher";
@@ -94,16 +102,21 @@ export const getHomePath = (input: {
     return "/account";
   }
 
-  const path = input.year === null ? base : `${base}/${input.year}`;
+  const path: HomePath = input.year === null ? base : `${base}/${input.year}`;
 
-  // Every other widget on the bare `/admin/$year` dashboard runs on
-  // `adminProcedure`, which the Inventory Administrator does not hold (see
-  // `packages/api/src/index.ts`), so it never lands there — it goes
-  // straight to the one page that is its whole job.
-  if (input.role === "inventoryAdmin") {
-    return `${path}/staff/inventory` as unknown as HomePath;
-  }
-
+  // Every role lands on its workspace root and nothing else, which is what the
+  // three administrator seats want: `/admin/$year` is the academic overview,
+  // `/academic-admin/$year` is the same page in the other workspace, and
+  // `/inventory-admin/$year` is the store's.
+  //
+  // The Inventory Administrator used to be sent past its own workspace root
+  // straight to `/staff/inventory`, on the reasoning that the register was this
+  // seat's whole job and `$year` merely forwarded there. That was true while the
+  // store's figures had to be assembled from six panes by hand, and it is not
+  // true now that `/inventory-admin/$year` exists to show them: the special case
+  // made the one seat with a dashboard the only seat that never saw it, and the
+  // register — which is what the special case existed to reach — is one click
+  // from the dashboard's own primary action.
   return path;
 };
 

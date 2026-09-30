@@ -375,23 +375,28 @@ export const initialFormValues = (
  *
  * **This is the whole fix for the `Property 'icon' is missing` type error, and
  * the reason it is a `Pick` rather than a cast or a widened optional.** The
- * category picker renders a dot in `color` beside `name`, and submits `id`. It
- * reads nothing else — `normalizedName` is the server's dedupe key and `icon` is a
- * Tabler component name no screen in this feature consumes. The one object here
- * that is *built* rather than fetched — `initialCategory`'s stand-in for a
- * category deleted between the list being read and the row being opened — has the
- * item row to build itself from, and the item row carries `categoryName` and
- * `categoryColor` and **no icon**. So the mismatch was not a missing field: it was
- * a picker asking for a fifth fact the row it is built from cannot supply, and the
- * object literal was the only place that could be seen.
+ * picker's closed state and its submit work off `id` and `name`, and the colour
+ * is what tints the chosen category's glyph — it reads nothing else.
+ * `normalizedName` is the server's dedupe key, and `icon` is the one field the
+ * *option rows* consume: they are full `CategoryOption`s straight from
+ * `categories.list`, so the glyph drawn beside each name is always the stored
+ * one, while the value itself never carries it (the combobox writes the selected
+ * value into its input as text). The one object here that is *built* rather than
+ * fetched — `initialCategory`'s stand-in for a category deleted between the list
+ * being read and the row being opened — has the item row to build itself from,
+ * and the item row carries `categoryName` and `categoryColor` and **no icon**.
+ * So the mismatch was not a missing field: it was a picker asking for a fifth
+ * fact the row it is built from cannot supply, and the object literal was the
+ * only place that could be seen.
  *
  * The alternative — inventing `"category"`, the column's `default` — would have
  * compiled and been a lie: it would put a real-looking icon key on a record the
  * database has never held one for, in the one type in the feature that is derived
  * from the router rather than hand-written (`inventory-types.ts` says so at the
  * top of the file). `CategoryOption` itself is untouched and still requires
- * `icon`, because `categories.list` really does project it and the categories
- * panel is entitled to it.
+ * `icon`, because `categories.list` really does project it and both the picker's
+ * option rows and the categories panel read it — the stand-in simply has none,
+ * and `CategoryIcon` draws its generic glyph for a category that does not.
  */
 export type CategoryChoice = Pick<CategoryOption, "id" | "name" | "color">;
 
@@ -476,10 +481,11 @@ export interface BuildSubmitInput {
  * Everything the form can decide on its own, in one place.
  *
  * The point of pulling this out of the component is that the rules become
- * readable as a list: the schema has the fields, and the three rules a schema
- * cannot express are the category, the asset-tag count and the reorder level. A
- * `handleSubmit` that grew them inline was forty branches of "and then"; here each
- * one is a line with a reason attached, and the component is left holding state.
+ * readable as a list: the schema has the fields, and the rules a schema cannot
+ * express are the category, the asset-tag count, the SKU's shape, the two
+ * required holders and the reorder level. A `handleSubmit` that grew them inline
+ * was forty branches of "and then"; here each one is a line with a reason
+ * attached, and the component is left holding state.
  */
 export const buildSubmitOutcome = ({
   isEdit,
@@ -593,16 +599,46 @@ export const buildSubmitOutcome = ({
   }
 
   /*
+   * Both holders, and the checks come last because the responsibility fieldset is
+   * the last one on the form: a clerk who left the pickers empty while a tag
+   * count was also wrong should be told about the tag count first, since that is
+   * the field they are looking at. `createItem` refuses a creation without both —
+   * every line on the register answers "whose is this?" and "who has it?" from
+   * the day it is written — so this is the same rule stated on the field rather
+   * than learned from a refused round trip that threw away nothing (the dialog
+   * stays open) but still cost a round trip.
+   */
+  if (!managerStaffId) {
+    return {
+      ok: false,
+      errors: {
+        managerStaffId:
+          "Choose who is in charge of this item — every line on the register names a member of staff accountable for it.",
+      },
+    };
+  }
+
+  if (!custodianStaffId) {
+    return {
+      ok: false,
+      errors: {
+        custodianStaffId:
+          "Choose who is holding this item on day one — if it is going straight on the shelf, that can be the person in charge.",
+      },
+    };
+  }
+
+  /*
    * Ids are branded on the wire and plain strings in this component's state (a
    * `Combobox` hands back a `string`), so they are parsed through the repository's
    * own id schemas on the way out. That is a validation rather than an assertion: an
    * id that is not one is caught here instead of turning into a foreign-key
    * violation from the driver.
    *
-   * The two staff pointers are omitted rather than sent as `null` when they were
-   * left blank, which is the same distinction `updateItem` reads on the other side:
-   * absent is "no initial assignment recorded", and the server's own default is
-   * null anyway.
+   * Both staff pointers are always in the payload now: the two checks above have
+   * just proved they are set, and `createItem` takes them as plain required
+   * strings — absent means nothing to this procedure any more, so there is no
+   * "no initial assignment recorded" shape left to send.
    */
   return {
     ok: true,
@@ -612,12 +648,8 @@ export const buildSubmitOutcome = ({
       ...(trimmedSku === "" ? {} : { sku: trimmedSku }),
       uniqueIds: enteredTags(tagRows),
       ...(values.imageFileId ? { imageFileId: values.imageFileId } : {}),
-      ...(managerStaffId
-        ? { managerStaffId: v.parse(staffIdSchema, managerStaffId) }
-        : {}),
-      ...(custodianStaffId
-        ? { custodianStaffId: v.parse(staffIdSchema, custodianStaffId) }
-        : {}),
+      managerStaffId: v.parse(staffIdSchema, managerStaffId),
+      custodianStaffId: v.parse(staffIdSchema, custodianStaffId),
     },
   };
 };

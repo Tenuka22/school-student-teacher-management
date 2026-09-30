@@ -13,24 +13,6 @@ import {
 const OVERLAY_SHADOW =
   "shadow-[0_10px_30px_-12px_rgb(1_52_5/0.28),0_2px_8px_-4px_rgb(1_52_5/0.18)]"
 
-/**
- * The row treatment every item shares: type, icon slot, and the focus/selected
- * fill.
- *
- * `focus:bg-accent focus:text-accent-foreground` is deep green on amber —
- * 7.78:1, measured against the sidebar's own `--sidebar-primary` pair, which is
- * the same two colours. The highlight is a fill, not a hue shift, so it does not
- * depend on telling two greens apart.
- *
- * The `not-data-[variant=destructive]` guard is in the shared base rather than
- * on the destructive item, because only `DropdownMenuItem` ever sets that
- * attribute: elsewhere the selector simply never matches and the utility
- * applies as written. Without it, a destructive item's own label and icons would
- * be forced to the amber foreground while its fill went red.
- */
-const ITEM_BASE =
-  "relative flex cursor-default items-center gap-2 rounded-none px-2 py-2 text-xs outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />
 }
@@ -125,6 +107,31 @@ function DropdownMenuLabel({
   )
 }
 
+/**
+ * One row in a menu.
+ *
+ * **The classes live here rather than in a shared `ITEM_BASE` constant, and the
+ * reasoning that constant carried moved with them.** There was an `ITEM_BASE`
+ * holding the row treatment — type, icon slot, focus fill — which `this` list
+ * duplicates and then extends: `text-sm` rather than `text-xs`,
+ * `pointer-coarse:py-2.5` for a touch target, and the destructive variants. Two
+ * copies of a menu row is two places to change one, and the unused one is the
+ * copy that looks authoritative.
+ *
+ * Two decisions inside the list are worth keeping, because both look like
+ * redundancy:
+ *
+ * - **`focus:bg-accent focus:text-accent-foreground`** is deep green on amber —
+ *   7.78:1, measured against the sidebar's own `--sidebar-primary` pair, which is
+ *   the same two colours. The highlight is a fill, not a hue shift, so it does not
+ *   depend on telling two greens apart.
+ * - **`not-data-[variant=destructive]:focus:**:text-accent-foreground`** guards
+ *   the shared focus colour rather than restating it on the destructive item,
+ *   because only this component ever sets that attribute: elsewhere the selector
+ *   never matches and the utility applies as written. Without the guard, a
+ *   destructive item's own label and icons would be forced to the amber
+ *   foreground while its fill went red.
+ */
 function DropdownMenuItem({
   className,
   inset,

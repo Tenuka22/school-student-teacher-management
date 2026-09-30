@@ -36,7 +36,7 @@ Every async surface in this folder now resolves to content, a taught empty state
 - **A roster that has not answered yet** used to print "No teachers yet". `listStaff` is `enabled` only once the academic year has resolved, so for a moment after a year switch `data` is `undefined` while `isLoading` is `false`, and the page confidently claimed the College had no teachers. It now draws the loading shape.
 - **Qualifications, positions and subject assignments** each read `data ?? []`, so a failed read and a genuinely empty list were the same `[]` and each said "No qualifications recorded" / "No positions assigned" / "No subjects configured" — a claim about the record, printed by a request that had learned nothing. Each is now a `QueryErrorPanel` naming what could not be read, with a retry that re-requests.
 - **`PortTeachersDialog`** had one branch for "no data", so a request in flight and a request that failed both printed "No previous academic year". It now has a loading shape and a named failure.
-- **The write-then-refetch ordering** in `useTeachersPage` meant a _failed refetch_ after a successful create was reported to the reader as "Failed to create teacher", with a real teacher on the server and an issued password nobody was shown. The write now decides: close, then refetch in the background.
+- **The write-then-refetch ordering** in `teachers-page.tsx` meant a _failed refetch_ after a successful create was reported to the reader as "Failed to create teacher", with a real teacher on the server and an issued password nobody was shown. The write now decides: close, then refetch in the background.
 
 ### CSV import
 

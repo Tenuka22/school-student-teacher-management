@@ -378,7 +378,7 @@ export const finalizeDisposal = inventoryManagerProcedure
         .update(inventoryDisposal)
         .set({
           status: input.finalStatus,
-          finalizedByStaffId: actor.userId,
+          finalizedByStaffId: actor.staffId,
           finalizedAt,
           ...(input.estimatedValue === undefined
             ? {}
@@ -399,7 +399,7 @@ export const finalizeDisposal = inventoryManagerProcedure
         note:
           input.note ??
           `Disposal finalised as ${disposalStatusLabel(input.finalStatus)}`,
-        changedByStaffId: actor.userId,
+        changedByStaffId: actor.staffId,
       });
 
       // The one row in this flow where the two sides of the ledger differ. The
@@ -438,7 +438,7 @@ export const finalizeDisposal = inventoryManagerProcedure
         },
         after: {
           status: updated.status,
-          finalizedByStaffId: actor.userId,
+          finalizedByStaffId: actor.staffId,
           qty: updatedItem.qty,
         },
       });

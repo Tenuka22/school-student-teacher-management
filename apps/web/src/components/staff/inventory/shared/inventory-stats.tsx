@@ -10,7 +10,6 @@ import {
   IconInbox,
   IconPackage,
   IconStack2,
-  IconUserOff,
 } from "@tabler/icons-react";
 import type * as React from "react";
 
@@ -38,11 +37,6 @@ export interface InventoryStats {
   outOfStockItems: number;
   /** Items at or below their `minQty` reorder threshold. */
   lowStockItems: number;
-  /**
-   * Items with no `managerStaffId` — **counted over the page the server returned**,
-   * not over the school. See the card's own hint, which has to say so.
-   */
-  unassignedItems: number;
 }
 
 /**
@@ -98,7 +92,7 @@ export const formatCount = (
     ? new Intl.NumberFormat("en-GB", options).format(value)
     : COUNT_FORMATTER.format(value);
 
-type StatTone = "default" | "warning" | "danger" | "gap";
+type StatTone = "default" | "warning" | "danger";
 
 /**
  * `--warning-ink` rather than `--gold` for the two warning figures.
@@ -114,7 +108,6 @@ const TONE_CLASS: Record<StatTone, string> = {
   default: "text-foreground",
   warning: "text-warning-ink",
   danger: "text-destructive",
-  gap: "text-warning-ink",
 };
 
 interface StatDefinition {
@@ -126,18 +119,20 @@ interface StatDefinition {
 }
 
 /**
- * The seven numbers, in the order a storekeeper reads them: how big the store
- * is, how much of it is actually usable, what needs attention, and what has
- * nobody responsible for it.
+ * The six numbers, in the order a storekeeper reads them: how big the store is, how
+ * much of it is actually usable, and what needs attention.
  *
- * **`unassignedItems` gets a card of its own, and that is the point of the
- * row.** Every other figure here is a report: totals, a low-stock warning, a
- * count of things that are gone. "Items with no manager" is the one number a
- * school administrator actually goes and does something about, because an item
- * with a custodian and no manager is school property that somebody is holding
- * and nobody is accountable for — the state `CustodyBadge` writes out as "No
- * manager" and the one this feature exists to close. Buried inside a combined
- * card it would be read once and forgotten; on its own it is a work list.
+ * **There were seven, and the seventh is the one worth explaining.** There used to
+ * be an "Items with no manager" card here, argued for at length as the one figure a
+ * school administrator actually goes and does something about: an item with a holder
+ * and nobody accountable for it is school property somebody is holding and nobody is
+ * answerable for, and on its own card it read as a work list. It is gone because the
+ * state it counted cannot exist — `inventory_item.manager_staff_id` is `NOT NULL`, so
+ * every item is answerable to a named person from the moment it is registered — and a
+ * card that can only ever read 0 is worse than no card: it tells a storekeeper the
+ * question has been answered when nothing was asked. The "No manager only" filter
+ * beside it went for the same reason, and `CustodyBadge`'s gap chips are now the only
+ * place the shape of that row is still drawn from.
  */
 const STAT_DEFINITIONS: StatDefinition[] = [
   {
@@ -182,30 +177,6 @@ const STAT_DEFINITIONS: StatDefinition[] = [
     tone: "danger",
     Icon: IconBuildingWarehouse,
   },
-  {
-    key: "unassignedItems",
-    label: "No manager",
-    /**
-     * **The count is of the loaded page, and the hint has to say so** — this is the
-     * one card whose number is not the same kind of number as its six neighbours.
-     * `totalItems` and `lowStockItems` are server totals; this one is a predicate
-     * applied to the rows `listItems` returned, so it moves when a filter is applied
-     * and it cannot exceed `REGISTER_PAGE_SIZE` (200). "Nobody is accountable for the
-     * item" reads as a statement about the school, which makes a 12 that is really a
-     * 12-of-this-page look like the whole store's answer.
-     *
-     * The page-side fix in `inventory-page.tsx` states the scope honestly the moment
-     * the "No manager only" filter is on (`buildUnassignedScopeNote`); this is the
-     * half that has to be true in **every** state, including the one where no filter
-     * is on and the register is truncated anyway. So the hint names the two things
-     * that bound it — the page, and the control that re-derives it — and the
-     * `CustodyBadge` gap chip is worded from this same sentence, so the card, the
-     * chip and the sentence beside the toggle describe one set of rows.
-     */
-    hint: "No manager on the page shown — filter with No manager only",
-    tone: "gap",
-    Icon: IconUserOff,
-  },
 ];
 
 /**
@@ -240,21 +211,21 @@ const STAT_DEFINITIONS: StatDefinition[] = [
  * every refetch. The label and hint stay: they are the only place the register
  * states what each of these words means.
  *
- * **These are `<Card>`s and not `<Button>`s, and that is not an oversight.** The
- * "No manager" card is a *filter's* figure, and the filter's control is the "No
- * manager only" toggle the page renders immediately below this row — a toggle
- * rather than a one-shot, because it is a filter and needs an `off` the user can
- * see and press. Making the card itself the door would mean a second control for
- * one filter, a `pressed` state to keep in step with the first, and a row of seven
- * `<button>`s in the tab order above the table. The card states the figure and the
- * hint names the control that acts on it, which is the arrangement a keyboard user
- * can actually reach.
+ * **These are `<Card>`s and not `<Button>`s, and that is not an oversight.** One of
+ * them used to be a filter's figure, with the filter's control rendered by the page
+ * immediately below this row, and the arrangement was: the card states the figure,
+ * the hint names the control that acts on it. That card is gone with its filter, and
+ * the argument for the rest is simpler than the one it replaces — a number nobody
+ * can act on from this row is a number to *read*, and a row of `<button>`s in the
+ * tab order above a table is six more stops between the reader and the register
+ * itself. A figure that wanted a control would be a filter, and filters live in the
+ * filter bar.
  */
 export const InventoryStatCards: React.FC<{
   stats: InventoryStats;
   isLoading?: boolean;
 }> = ({ stats, isLoading = false }) => (
-  <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+  <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
     {STAT_DEFINITIONS.map(({ key, label, hint, tone, Icon }) => (
       <Card key={key} size="sm">
         <CardContent>

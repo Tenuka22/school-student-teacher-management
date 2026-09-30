@@ -6,9 +6,9 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
-export const getStaff = adminProcedure
+export const getStaff = academicProcedure
   .input(v.object({ id: staffIdSchema }))
   .handler(async ({ input, context }) => {
     const [row] = await context.db

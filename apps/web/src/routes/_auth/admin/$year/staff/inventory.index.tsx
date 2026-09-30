@@ -13,17 +13,18 @@ import { InventoryPage } from "@/components/staff/inventory/inventory-page";
  * through `useQuery` in `useInventoryPage`, so there is no query the page
  * blocks first paint on that a loader could warm.
  *
- * **Leadership reachability, decided: admin-only, deliberately.** Every
- * procedure the register's panes read is `adminProcedure`, which is `admin` +
- * `principal` + `vicePrincipal`
- * (`packages/api/src/routers/inventory/list-items.ts`, `list-borrows.ts`,
- * `list-transactions.ts`, `list-audit-logs.ts` all say so in their own
- * banners), so the API does admit a Principal to the register. The route tree
- * does not: `_auth/admin/route.tsx` redirects any role that is not `admin` to
- * its own workspace, and the Principal and Deputy workspaces carry only
- * `leaves`, `teacher-requests` (Principal) and `staff/attendance`. Widening
- * that is a follow-up, not a drive-by — see the sidebar's own comment above
- * `adminInventoryNav` in `app-sidebar.tsx`.
+ * **Leadership reachability, decided: admin-only, deliberately.** The
+ * register's reads run on `inventoryOverseerProcedure` (`admin` + `principal` +
+ * `vicePrincipal` + `inventoryAdmin`) and its writes on
+ * `inventoryManagerProcedure` (`admin` + `inventoryAdmin`) — see
+ * `packages/api/src/index.ts` — so the API does admit a Principal to the
+ * register. The route tree does not: `_auth/admin/route.tsx` admits the top
+ * administrator, the Principal and Deputy workspaces carry only `leaves`,
+ * `teacher-requests` (Principal) and `staff/attendance`, and
+ * `_auth/inventory-admin/route.tsx` is the register's own tree for the
+ * `inventoryAdmin` seat. Widening leadership's reach is a follow-up, not a
+ * drive-by — see the sidebar's own comment above `adminInventoryNav` in
+ * `app-sidebar.tsx`.
  */
 export const Route = createFileRoute("/_auth/admin/$year/staff/inventory/")({
   component: () => <InventoryPage section="register" />,

@@ -7,7 +7,7 @@ import {
 import { desc, eq, lt } from "drizzle-orm";
 import { array, object, optional } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
 /**
  * Copies each staff member's position(s) from the academic year immediately
@@ -16,7 +16,7 @@ import { adminProcedure } from "../../index";
  * position that's already been assigned for the target year (idempotent -
  * safe to re-run).
  */
-export const portTeachersFromPreviousYear = adminProcedure
+export const portTeachersFromPreviousYear = academicProcedure
   .input(
     object({
       toAcademicYearId: academicYearIdSchema,

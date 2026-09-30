@@ -5,7 +5,7 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 
 /**
  * List every fully-empty period slot for a class — slots with no subject on
@@ -14,7 +14,7 @@ import { adminProcedure } from "../../../index";
  * for finding the slots nothing has been put on yet.
  * School week: Monday–Friday (1–5), 8 periods (1–8) = 40 slots max.
  */
-export const listUnassignedSlots = adminProcedure
+export const listUnassignedSlots = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

@@ -23,10 +23,11 @@ export interface RegisterRow {
    * `staff.nic` is `unique()` in the database, so unlike an email or a name it
    * cannot be shared, and it is what a reader uses when two teachers are
    * similarly named. Shown in the row rather than in a tooltip: if it is the
-   * identifier, hiding it defeats the purpose. Null is a real state — a teacher
-   * whose NIC has not been recorded yet.
+   * identifier, hiding it defeats the purpose. It is `NOT NULL` as well, so this
+   * is a `string` and the column's old "No NIC on file" fallback is a state the
+   * database can no longer produce.
    */
-  nic: string | null;
+  nic: string;
   email: string | null;
   phone: string | null;
   /** The credential this row is filed under — the highest held. */

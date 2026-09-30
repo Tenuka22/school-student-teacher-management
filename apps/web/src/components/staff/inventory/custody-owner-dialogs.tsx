@@ -27,26 +27,25 @@ import { staffIdSchema } from "@school-student-teacher-management/db/schema/staf
  *   the owner (who in this school is usually a `teacher`) is the one who can use
  *   it, and narrowed **in the handler** to the caller being `managerStaffId` or
  *   sitting in one of the three leadership seats on an owner's behalf.
- * - **`assignManager`** — *nobody is, or the record is being corrected.* Gated on
+ * - **`assignManager`** — *the record is being corrected by the office.* Gated on
  *   `update`, which is administrator-only, and its `newManagerStaffId` is
- *   nullable so the same verb can also **clear** the slot into a
- *   `manager_cleared` row.
+ *   required: neither verb can clear the slot, because the owner column is
+ *   `NOT NULL` and has been required since registration.
  *
- * **Two verbs, one column, on purpose, and a single nullable input could not have
- * been one dialog.** A `null` in one field would have to mean either "somebody
- * else is answerable" or "nobody is", and a caller could not tell which a `null`
- * was going to do. Here the server refuses to let the ambiguity through, so the
- * dialog must not create it either: `newOwnerStaffId` is **required and
- * non-nullable**, and that is what lets this dialog's picker be an ordinary
- * `string | null` with no third state to guard. `null` here can only mean *nobody
- * chosen yet*, nothing is sent until a successor exists, and there is no
- * destructive default to be three clicks away from.
+ * **Two verbs, one column, on purpose, and a single input could not have been one
+ * dialog.** One moves accountability with custody in the same write and the other
+ * corrects accountability alone, and the caller has to mean one or the other
+ * rather than whichever a shared form happened to be set to. Here the server
+ * refuses to let ambiguity through on either side: `newOwnerStaffId` is
+ * **required and non-nullable**, and that is what lets this dialog's picker be an
+ * ordinary `string | null` with no third state to guard. `null` here can only
+ * mean *nobody chosen yet*, nothing is sent until a successor exists, and there is
+ * no destructive default to be three clicks away from.
  *
  * The two are also two different **authorities**. One is a grant to the owner, the
  * other the administrator's. Folding them together would either hand every teacher
- * the power to appoint and clear an owner, or take the hand-on away from the one
- * person who is allowed to make it — and the hand-on is the whole reason
- * `manageOwn` exists.
+ * the power to appoint an owner, or take the hand-on away from the one person who
+ * is allowed to make it — and the hand-on is the whole reason `manageOwn` exists.
  */
 import {
   AlertDialog,
@@ -86,7 +85,6 @@ import {
   CurrentManagerBadge,
   CustodyDialogFrame,
   CustodyNoteField,
-  IN_STORE,
   NO_MANAGER,
   focusFirstInvalidField,
   issuesToErrors,
@@ -118,8 +116,8 @@ export interface TransferOwnershipDialogProps {
    * What the server wrote, so whatever sits behind this dialog stops showing the
    * row as it was. The register hands a dialog a *snapshot* of the row it was
    * opened from, and a snapshot is stale the instant the write lands — which would
-   * leave the custody sheet behind it offering to reclaim an item that is already
-   * in the store, on a holder it no longer has.
+   * leave the custody sheet behind it offering to call an item back from a holder
+   * the write has already moved on.
    */
   onRecorded: (owner: { staffId: string; name: string | null }) => void;
 }
@@ -128,10 +126,11 @@ export interface TransferOwnershipDialogProps {
 const ACTION_WIDTH = "min-w-48";
 
 /**
- * The preview for all three outcomes: nobody chosen yet, the successor is already
- * the owner, and the hand-on itself.
+ * The preview for every outcome: nobody chosen yet, the successor is already the
+ * owner, and the hand-on itself — with the holder moving onto the successor,
+ * staying put because they already are the successor, or absent from the record.
  *
- * Returned as `ChangePreviewProps` so the two states that record nothing cannot be
+ * Returned as `ChangePreviewProps` so the states that record nothing cannot be
  * rendered as a move — the union's own enforcement, exactly as
  * `buildManagerPreview` uses it. A hand-on drawn before a successor has been picked
  * would describe a state the register is already in.
@@ -146,6 +145,7 @@ const buildOwnershipPreview = (
   const from = currentOwner ?? NO_MANAGER;
   const to = successorName ?? CHOSEN_STAFF;
   const holder = item?.custodianName ?? null;
+  const holderId = item?.custodianStaffId ?? null;
 
   if (successorId === null) {
     return {
@@ -154,7 +154,7 @@ const buildOwnershipPreview = (
         ? `Accountability is unchanged: ${currentOwner} stays the person the school asks about this item.`
         : "Accountability is unchanged: this item still has nobody in charge of it.",
       footnote:
-        "This dialog hands the ownership on, so while nobody is chosen nothing is sent to the server and no history row is appended. To leave an item with nobody in charge of it, close this and use Assign or change manager instead: that is a different verb on a different gate, and it is the only one that can clear the slot.",
+        "This dialog hands the ownership on, so while nobody is chosen nothing is sent to the server and no history row is appended. Choose somebody above to hand it on, or close the dialog and leave the item exactly as it is.",
     };
   }
 
@@ -167,12 +167,23 @@ const buildOwnershipPreview = (
     };
   }
 
+  const movesHolder = holderId !== successorId;
+
+  if (holder && movesHolder) {
+    return {
+      headline: "The person the school asks becomes",
+      from,
+      to,
+      footnote: `${from} stops being the person the school asks about this item and ${to} takes it on, and that is the whole of what changes hands. The same write moves the holder onto ${to}: ${holder} is recorded as no longer holding it — if the item is physically in their hands, handing it over stays their own deliberate act, not a side effect of somebody else's paperwork. A history row is appended for each pointer that moved, and no counter moves: nothing was counted, because nothing changed hands.`,
+    };
+  }
+
   if (holder) {
     return {
       headline: "The person the school asks becomes",
       from,
       to,
-      footnote: `${from} stops being the person the school asks about this item and ${to} takes it on, and that is the whole of what changes hands. The server clears the current holder in the same transaction, so ${holder} is recorded as no longer holding it — if the item is physically in their hands, recording that is a deliberate act they make themselves, not a side effect of somebody else's paperwork. Two rows are appended to this item's history, one for each pointer, and no counter moves: nothing was counted, because nothing changed hands.`,
+      footnote: `${from} stops being the person the school asks about this item and ${to} takes it on, and that is the whole of what changes hands. The holder does not move — ${holder} already holds this item. One row is appended to this item's history, for the owner change, and no counter moves: nothing was counted, because nothing changed hands.`,
     };
   }
 
@@ -180,7 +191,7 @@ const buildOwnershipPreview = (
     headline: "The person the school asks becomes",
     from,
     to,
-    footnote: `${from} stops being the person the school asks about this item and ${to} takes it on. Nobody is holding it, so the one row appended to this item's history is the owner change — there is no second row to write. No counter moves: nothing was counted, because nothing changed hands.`,
+    footnote: `${from} stops being the person the school asks about this item and ${to} takes it on. Nobody is recorded as holding it, so ${to} becomes the recorded holder as well — the trail notes that alongside the owner change. No counter moves: nothing was counted, because nothing changed hands.`,
   };
 };
 
@@ -193,8 +204,8 @@ const buildOwnershipPreview = (
  * dropdown here that could be saved by accident. Everything this dialog writes
  * lands on the permanent trail with a cause, and the two consequences that are not
  * obvious — who answers for the item afterwards, and the fact that the current
- * holder is cleared as part of the same write — are both on the face of the form
- * before the button is pressed.
+ * holder is moved onto the successor as part of the same write — are both on the
+ * face of the form before the button is pressed.
  *
  * **The reason is required from the first render, never as a submit-time error.**
  * `transferOwnership` declares `reason` as a required
@@ -418,19 +429,23 @@ export const TransferOwnershipDialog = ({
 
             {/*
               The consequence nobody would guess, and the reason it is a notice
-              rather than a line in the footnote: the write clears the current
-              holder in the same transaction. `transfer-ownership.ts` argues it at
-              length — a record reading "X owns it, Y is holding it" straight
-              after the ownership changed hands is a data-entry slip far more often
-              than an intent — and the user has to be told before they press the
-              button, because afterwards it is on the register whether they
-              expected it or not.
+              rather than a line in the footnote: the write moves the current
+              holder onto the successor in the same transaction.
+              `transfer-ownership.ts` argues it at length — a record reading "X
+              owns it, Y is holding it" straight after the ownership changed hands
+              is a data-entry slip far more often than an intent — and the user
+              has to be told before they press the button, because afterwards it
+              is on the register whether they expected it or not. Skipped when
+              the successor already holds it, because then nothing about the
+              holder changes and the notice would be a warning about nothing.
             */}
-            {item && item.custodianStaffId !== null ? (
+            {item &&
+            item.custodianStaffId !== null &&
+            item.custodianStaffId !== successorId ? (
               <InventoryInlineNotice
                 tone="info"
-                title="This also clears the current holder"
-                description={`${item.custodianName ?? "The current holder"} is recorded as no longer holding it, in the same transaction and on the same reason. If the item is physically in their hands, that is a record they make themselves — a hand-on is not a hand-back, and it does not fetch anything from anybody's desk.`}
+                title="This also moves the current holder"
+                description={`${item.custodianName ?? "The current holder"} is recorded as no longer holding it — the register will report ${successorName ?? CHOSEN_STAFF} as the holder instead, in the same transaction and on the same reason. If the item is physically in their hands, that is a record they make themselves — a hand-on is not a hand-back, and it does not fetch anything from anybody's desk.`}
               />
             ) : null}
 
@@ -488,25 +503,26 @@ export interface ReclaimCustodyDialogProps {
   onOpenChange: (open: boolean) => void;
   item: InventoryItemView | null;
   /**
-   * Who had it, from the server's own row, so whatever sits behind this dialog can
-   * stop showing a holder it no longer has.
+   * Who holds it now, from the server's own row, so whatever sits behind this
+   * dialog stops showing the holder it no longer has.
    *
-   * **The name is for the caller's benefit, not for the register's benefit.** The
-   * server returns `custodianStaffId: null` and `custodianName: null` together, and
-   * that pair is what a row snapshot has to be corrected with. A caller that keeps
-   * a local copy of the row wants the name here to say *who* it took it off ("Called
-   * back from S. Fernando"); a caller re-reading the row does not, and a name
-   * attached to a cleared pointer would be the one combination this folder has
-   * argued must never be rendered.
+   * **The pair is the person in charge.** `reclaim-custody.ts` returns
+   * `custodianStaffId` and `custodianName` set to the owner — the whole point of
+   * a call-back is that the person answerable for the item becomes the person
+   * recorded as holding it — and passes `previousCustodianName` separately for
+   * the toast. A caller holding a snapshot wants this pair: a name with the
+   * pointer behind it, which is the combination this folder insists on. The
+   * previous holder's name alone would be exactly what must never be rendered —
+   * a name beside a pointer that no longer says what the name says.
    */
-  onRecorded: (holder: { name: string | null }) => void;
+  onRecorded: (holder: { staffId: string; name: string | null }) => void;
 }
 
 /**
  * The confirmation in front of a reclaim, and the asymmetry it creates on purpose.
  *
  * **Handing an item *back* gets no confirm; calling one *in* does.** Both write a
- * `custody_released` row and both clear the same pointer, so the difference is not
+ * `custody_released` row and both move the same pointer, so the difference is not
  * the shape of the write — it is whose idea the write is:
  *
  * - `releaseCustody` is the holder's own voluntary hand-back, narrowed in its
@@ -520,17 +536,17 @@ export interface ReclaimCustodyDialogProps {
  *   have to call back, and why", and that question is unanswerable without one.
  *
  * **The confirm says the three things the button does not:** the holder loses the
- * item, the owner keeps it, and the row is permanent. "You keep it" is the half
- * that stops a reader assuming a reclaim is a handover in the other direction — it
- * is not, and the server does not touch `managerStaffId` at all. It also says what
- * the register will now claim about where the item *is*, because clearing the
- * pointer asserts that it is on the shelf.
+ * item, the person in charge ends up holding it, and the row is permanent. "You
+ * keep it" is the half that stops a reader assuming a reclaim is a handover in the
+ * other direction — it is not, and the server does not touch `managerStaffId` at
+ * all. It also says what the register will now claim about where the item *is*:
+ * with the person in charge, not "in the store".
  *
- * **`AlertDialog` refuses `Esc` and the backdrop by default** (see
- * `clear-manager-dialog.tsx` for why that is the right trade rather than a keyboard
- * trap), and the half-typed reason behind it is exactly the work `Esc` must not
- * destroy — the `useDiscardGuard` on the form behind this covers the same ground
- * for the dialog itself.
+ * **`AlertDialog` refuses `Esc` and the backdrop by default** — deliberately, for
+ * a destructive confirm that must not be dismissed by accident — and the
+ * half-typed reason behind it is exactly the work `Esc` must not destroy; the
+ * `useDiscardGuard` on the form behind this covers the same ground for the dialog
+ * itself.
  */
 const ReclaimConfirmDialog = ({
   isOpen,
@@ -568,21 +584,19 @@ const ReclaimConfirmDialog = ({
       <AlertDialogTitle>
         {holder
           ? `Call ${itemName} back from ${holder}?`
-          : `Call ${itemName} back to the store?`}
+          : `Call ${itemName} back?`}
       </AlertDialogTitle>
       <AlertDialogDescription>
-        {holder
-          ? `${holder} will no longer be recorded as holding it, and the register will say this item is in the store.`
-          : "The register will say this item is in the store."}{" "}
+        {holder ? `${holder} will no longer be recorded as holding it. ` : ""}
         {owner
-          ? `The ownership does not move: ${owner} is still the person the school asks about it.`
+          ? `${owner} becomes the recorded holder, and the ownership does not move — ${owner} is still the person the school asks about it.`
           : "The ownership does not move, and this item still has nobody in charge of it — it is not a hand-on, and it does not appoint anybody."}{" "}
         It is written to the permanent trail as a{" "}
         {inventoryTransferReasonLabel(reason)} row
         {note ? ", with your note," : ""} and a trail row is not editable from
         here. Nothing in this fetches the item from anybody&rsquo;s desk — it
-        records who is accountable for it, and the next person to open the
-        register will be told it is on the shelf.
+        records who is holding it, and the next person to open the register will
+        be told it is with {owner ?? "the person in charge"}.
       </AlertDialogDescription>
       <AlertDialogFooter>
         <AlertDialogCancel className={ACTION_WIDTH} disabled={isPending}>
@@ -665,16 +679,22 @@ export const ReclaimCustodyDialog = ({
     orpc.inventory.custody.reclaimCustody.mutationOptions({
       onSuccess: async (result) => {
         /*
-         * The server names who had it, so the toast can be the whole outcome. It
-         * deliberately does not say the item came back: nothing came back, and the
-         * phrasing that would imply it is the one thing this dialog must not do.
+         * The server names who had it and who holds it now, so the toast can be
+         * the whole outcome. It deliberately does not say the item came back to
+         * the store: nothing came back anywhere, and the phrasing that would
+         * imply it is the one thing this dialog must not do.
          */
         toast.success(
-          `${result.previousCustodianName ?? "The custodian"} no longer holds this item — it is recorded as being in the store, and ${owner ?? "the owner"} is still in charge of it`
+          `${result.previousCustodianName ?? "The custodian"} no longer holds this item — ${
+            result.custodianName ?? owner ?? "the person in charge"
+          } is recorded as holding it now, and stays in charge of it`
         );
         setIsConfirmOpen(false);
         onOpenChange(false);
-        onRecorded({ name: result.previousCustodianName });
+        onRecorded({
+          staffId: result.custodianStaffId,
+          name: result.custodianName,
+        });
         await invalidateInventory(queryClient, "custody");
       },
       onError: (error) => {
@@ -738,7 +758,7 @@ export const ReclaimCustodyDialog = ({
   /*
    * An item nobody is holding has nothing to call back, and `reclaimCustody`
    * refuses it with "This item is not in anybody's custody, so there is nothing to
-   * call back". The same rule as `AssignManagerDialog`'s `canClear`: a control the
+   * call back". The same rule as anywhere else in this folder: a control the
    * server always rejects is not offered, and the panel that would have offered it
    * says so in its place.
    *
@@ -779,8 +799,8 @@ export const ReclaimCustodyDialog = ({
         description={
           <>
             {item.name} <span className="font-mono text-xs">({item.sku})</span>{" "}
-            — take it back off {holder ?? "its holder"} and record it as being
-            in the store. You stay in charge of it
+            — take it back off {holder ?? "its holder"} and record it as held by{" "}
+            {owner ?? "the person in charge"}, who stays in charge of it
           </>
         }
         formId={formId}
@@ -849,9 +869,9 @@ export const ReclaimCustodyDialog = ({
 
         <ChangePreview
           footnote="You keep the ownership: this is not a hand-on, and nothing about who answers for the item changes. A custody-released row is appended to this item's history with the reason you pick — and the ledger row for it will show no counter movement on either side, because the item never physically moved. That is the record saying the register was corrected, not a missing entry."
-          from={holder ?? "nobody — it is already in the store"}
+          from={holder ?? NO_MANAGER}
           headline="Custody moves"
-          to={IN_STORE}
+          to={owner ?? "the person in charge"}
         />
       </CustodyDialogFrame>
 

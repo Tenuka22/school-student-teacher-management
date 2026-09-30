@@ -36,12 +36,32 @@ export const useActiveYear = (): string | undefined =>
 
 const WORKSPACE_SEGMENTS = [
   "admin",
+  "academic-admin",
+  "inventory-admin",
   "principal",
   "deputy-principal",
   "teacher",
 ] as const;
 
 const YEAR_SEGMENT = /^\d{4}$/u;
+
+/**
+ * The two workspaces that carry the management pages (dashboard, teachers,
+ * classes, periods, attendance, users, academic years …): the top
+ * administrator's own desk and the Academic Administrator's. A shared page
+ * renders in both, so its addresses are built from this union rather than a
+ * literal, and the route file picks the half that is its own.
+ */
+export type ManagementWorkspaceBase = "/admin" | "/academic-admin";
+
+/**
+ * The two workspaces that carry the school-wide inventory register: the
+ * administrator's (`/admin/$year/staff/inventory`) and the Inventory
+ * Administrator's own desk. Same idea as `ManagementWorkspaceBase`, different
+ * pair — the academic desk has no register and the inventory desk has no
+ * staff pages.
+ */
+export type InventoryWorkspaceBase = "/admin" | "/inventory-admin";
 
 /**
  * Swaps the `:year` segment of a workspace URL, so switching years keeps

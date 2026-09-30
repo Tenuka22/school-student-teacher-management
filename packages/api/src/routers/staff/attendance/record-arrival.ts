@@ -16,13 +16,13 @@ import {
 import { and, eq, gte, lte } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import {
   assertDateWithinAcademicYear,
   requireAttendanceAcademicYear,
 } from "./academic-year";
 
-export const recordArrival = adminProcedure
+export const recordArrival = academicProcedure
   .input(
     v.object({
       staffId: staffIdSchema,

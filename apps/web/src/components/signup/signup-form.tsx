@@ -19,10 +19,25 @@ import { formatApiErrorMessage, validationFieldErrors } from "@/lib/api-error";
 import { descriptionId, errorId, fieldA11y } from "@/lib/field-a11y";
 import { orpc } from "@/utils/orpc";
 
-const STAFF_CATEGORY_OPTIONS = [
-  { value: "teacher", label: "Teacher" },
-  { value: "officeStaff", label: "Office Staff" },
-] as const;
+/**
+ * There is no "Staff category" field here, and its absence is the decision.
+ *
+ * The form used to ask for one — a `Teacher / Office Staff` select — and it was
+ * a question with exactly one reachable answer and no server behind it. Every
+ * self-registration through this form is a `teacher` account, because office
+ * staff deliberately have **no** self-service path: their accounts are issued by
+ * an administrator, who creates the staff record and hands over the login (see
+ * `signupStaff`'s own doc comment in `packages/api/src/routers/staff/signup.ts`).
+ * `teacherSignupSchema` has no category field, so the value was dropped on the
+ * floor — and the select was the only control in the form that was not in
+ * `FormState`, which is exactly how it was found: four type errors, one control,
+ * no behaviour behind it.
+ *
+ * A person choosing "Office Staff" here was being offered an account the College
+ * does not issue by this route, and the refusal would have come much later, from
+ * the approval queue, with no way back. The form asks for what a teacher sign-up
+ * actually needs and nothing else.
+ */
 
 /**
  * A `teacher` is on the College's establishment, so the form is long and the
@@ -382,44 +397,19 @@ export const SignupForm = () => {
             </SignupField>
 
             {isTeacher && (
-              <>
-                <SignupField id="signup-phone" label="PHONE (OPTIONAL)">
-                  <input
-                    {...controlA11y("signup-phone")}
-                    type="tel"
-                    inputMode="tel"
-                    value={form.phone}
-                    onChange={(e) => setField("phone", e.target.value)}
-                    placeholder="e.g. 071 234 5678"
-                    autoComplete="tel"
-                    disabled={isSubmitting}
-                    className={INPUT_CLASS}
-                  />
-                </SignupField>
-
-                <SignupField
-                  id="signup-category"
-                  label="Staff category"
-                  error={errors.staffCategory}
-                >
-                  <select
-                    {...controlA11y("signup-category", errors.staffCategory)}
-                    value={form.staffCategory}
-                    onChange={(e) => setField("staffCategory", e.target.value)}
-                    disabled={isSubmitting}
-                    className={INPUT_CLASS}
-                  >
-                    <option value="" disabled>
-                      Select category
-                    </option>
-                    {STAFF_CATEGORY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </SignupField>
-              </>
+              <SignupField id="signup-phone" label="PHONE (OPTIONAL)">
+                <input
+                  {...controlA11y("signup-phone")}
+                  type="tel"
+                  inputMode="tel"
+                  value={form.phone}
+                  onChange={(e) => setField("phone", e.target.value)}
+                  placeholder="e.g. 071 234 5678"
+                  autoComplete="tel"
+                  disabled={isSubmitting}
+                  className={INPUT_CLASS}
+                />
+              </SignupField>
             )}
 
             <PasswordField

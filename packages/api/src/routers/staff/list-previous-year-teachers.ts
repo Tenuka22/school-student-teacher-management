@@ -7,7 +7,7 @@ import {
 import { desc, eq, inArray, lt } from "drizzle-orm";
 import { object } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
 /**
  * Staff who held any position in the academic year immediately before the
@@ -15,7 +15,7 @@ import { adminProcedure } from "../../index";
  * single closest prior year is considered, matching the workflow: porting
  * happens right after a new year is created, from the year that just ended.
  */
-export const listPreviousYearTeachers = adminProcedure
+export const listPreviousYearTeachers = academicProcedure
   .input(object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [targetYear] = await context.db

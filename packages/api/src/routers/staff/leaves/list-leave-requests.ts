@@ -15,7 +15,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import { leaveYearSchema, requireLeaveAcademicYear } from "./leadership-review";
 
 export const leaveStatusFilterSchema = v.optional(leaveStatusSchema);
@@ -39,7 +39,7 @@ export type LeaveQueue = (typeof LEAVE_QUEUE_FILTERS)[number];
  * review queue. Filterable by status or by review-chain queue; includes the
  * requesting teacher's name and badge number for one-shot rendering.
  */
-export const listLeaveRequests = adminProcedure
+export const listLeaveRequests = academicProcedure
   .input(
     v.object({
       year: leaveYearSchema,

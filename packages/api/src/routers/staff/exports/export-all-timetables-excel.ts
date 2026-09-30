@@ -12,14 +12,14 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import { buildExcelExport } from "../../../lib/export";
 import type { ExcelSheet } from "../../../lib/export";
 
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 /** Exports every class's weekly timetable for an academic year, one worksheet per class. */
-export const exportAllTimetablesExcel = adminProcedure
+export const exportAllTimetablesExcel = academicProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [classes, rows] = await Promise.all([

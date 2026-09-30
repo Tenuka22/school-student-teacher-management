@@ -6,7 +6,7 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 
 /**
  * Finds real double-bookings: a teacher named on more than one subject-slot
@@ -20,7 +20,7 @@ import { adminProcedure } from "../../../index";
  * periodNumber), so two different teachers on one subject never collide with
  * each other here.
  */
-export const listPeriodConflicts = adminProcedure
+export const listPeriodConflicts = academicProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const records = await context.db

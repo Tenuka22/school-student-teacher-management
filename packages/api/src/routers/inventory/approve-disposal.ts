@@ -154,7 +154,7 @@ export const approveDisposal = inventoryManagerProcedure
        */
       if (
         existing.requestedByStaffId !== null &&
-        actor.userId === existing.requestedByStaffId
+        actor.staffId === existing.requestedByStaffId
       ) {
         throw new ORPCError("FORBIDDEN", {
           message:
@@ -177,7 +177,7 @@ export const approveDisposal = inventoryManagerProcedure
         .update(inventoryDisposal)
         .set({
           status: "approved",
-          approvedByStaffId: actor.userId,
+          approvedByStaffId: actor.staffId,
           approvedAt,
         })
         .where(eq(inventoryDisposal.id, existing.id))
@@ -199,7 +199,7 @@ export const approveDisposal = inventoryManagerProcedure
         fromStatus: existing.status,
         toStatus: "approved",
         note: input.note ?? "Disposal approved",
-        changedByStaffId: actor.userId,
+        changedByStaffId: actor.staffId,
       });
 
       // The item is read (not locked) for its name, SKU and counters: the ledger
@@ -246,7 +246,7 @@ export const approveDisposal = inventoryManagerProcedure
         entityType: "inventory_disposal",
         entityId: existing.id,
         before: { status: existing.status, approvedAt: null },
-        after: { status: updated.status, approvedByStaffId: actor.userId },
+        after: { status: updated.status, approvedByStaffId: actor.staffId },
       });
 
       return {

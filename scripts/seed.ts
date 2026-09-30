@@ -106,20 +106,30 @@ interface DemoTeacher {
 
 /**
  * Two real, separately-logged-in-able teachers — the minimum needed to test
- * a peer-to-peer custody request end to end. NICs are fake 10-digit numbers
- * outside any real citizen's range; the password is one every seeded demo
- * account shares, same convention as the leadership seats in
+ * a peer-to-peer custody request end to end. The password is one every seeded
+ * demo account shares, same convention as the leadership seats in
  * `packages/auth/src/admin.ts`.
+ *
+ * **The NICs are synthetic, in a block that cannot be a real identity**, and they
+ * were 10 digits before `staff.nic` carried a format CHECK — two of these were
+ * `9010112345`-shaped numbers that matched no National Identity Card in the
+ * country. What is left is 12 digits with an impossible month (`90 00 00 …`): the
+ * leading `90` reads as a birth year, the `00` that follows is not a month, so
+ * the value satisfies the database's format rule while being impossible for a
+ * citizen to hold. That matters here more than it does for a seeded office seat,
+ * because **each of these is a login username** — `usernameForNic` is applied to
+ * them — so a demo teacher signs in as `900000000002` / `900000000003`, and the
+ * 10-digit values the accounts were created with no longer exist.
  */
 const DEMO_TEACHERS: DemoTeacher[] = [
   {
-    nic: "9010112345",
+    nic: "900000000002",
     name: "Priya Fernando",
     email: "priya.fernando@aloysiuscollege.lk",
     password: "teacher-2026-demo",
   },
   {
-    nic: "9105098765",
+    nic: "900000000003",
     name: "Kasun Perera",
     email: "kasun.perera@aloysiuscollege.lk",
     password: "teacher-2026-demo",

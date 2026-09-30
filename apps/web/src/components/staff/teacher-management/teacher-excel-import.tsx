@@ -96,11 +96,35 @@ const describeConflict = (
  * the template's column list rather than inside the component that renders two
  * buttons.
  */
+/**
+ * The outcome of one spreadsheet row, and **why** a row was rejected.
+ *
+ * The reason is carried rather than counted because a rejection the user cannot
+ * see the cause of is indistinguishable from a bug: the summary used to say
+ * "3 skipped (invalid data)" and nothing else, and that was survivable while the
+ * only likely rejection was a malformed date. **It is no longer survivable — a NIC
+ * is now required**, so a sheet imported from last year's template with the NIC
+ * column empty rejects every single row, and "invalid data" would be the whole of
+ * what the administrator is told about sixty people who did not save.
+ *
+ * The message is valibot's own, so it is the same sentence the form would have
+ * shown for the same field, and the first issue is reported rather than all of
+ * them: a row with three problems is fixed one message at a time, and a summary
+ * that concatenated them would be a paragraph nobody reads.
+ */
+type RowOutcome =
+  | { status: "created" | "updated" | "unchanged" | "conflict" }
+  | { status: "invalid"; reason: string };
+
+/** The first valibot issue as a sentence, or `null` when there is no failure. */
+const firstIssueMessage = (issues: v.BaseIssue<unknown>[] | undefined) =>
+  issues?.[0]?.message ?? null;
+
 const processRow = async (
   row: Record<string, string>,
   existingById: Map<string, Staff>,
   onCreate: (data: Record<string, unknown>) => Promise<void>
-): Promise<"created" | "updated" | "unchanged" | "conflict" | "invalid"> => {
+): Promise<RowOutcome> => {
   const incoming = {
     name: row.name,
     email: row.email || undefined,
@@ -125,10 +149,13 @@ const processRow = async (
       incoming
     );
     if (!result.success) {
-      return "invalid";
+      return {
+        status: "invalid",
+        reason: firstIssueMessage(result.issues) ?? "the row is not valid",
+      };
     }
     await onCreate(result.output);
-    return "created";
+    return { status: "created" };
   }
 
   const currentComparable = {
@@ -155,7 +182,12 @@ const processRow = async (
       incoming
     );
     if (!result.success) {
-      return "invalid";
+      return {
+        status: "invalid",
+        reason:
+          firstIssueMessage(result.issues) ??
+          "the row is not valid for an update",
+      };
     }
 
     // A conflicting update is staged locally, never pushed automatically —
@@ -169,10 +201,10 @@ const processRow = async (
         importedAt: new Date().toISOString(),
       },
     ]);
-    return "conflict";
+    return { status: "conflict" };
   }
 
-  return "unchanged";
+  return { status: "unchanged" };
 };
 
 export const TeacherExcelImport = ({
@@ -264,19 +296,39 @@ export const TeacherExcelImport = ({
         conflict: 0,
         invalid: 0,
       };
+      /**
+       * Rejection reasons, counted by message.
+       *
+       * A sheet that rejects all sixty rows for one reason should say that reason
+       * once; a sheet that rejects two rows for two different reasons should say
+       * both. Ordered by how many rows each message accounts for, so the thing
+       * that is blocking the import is the thing the sentence leads with.
+       */
+      const rejectionReasons = new Map<string, number>();
 
       const outcomes = await Promise.all(
         rows.map((row) => processRow(row, existingById, onCreate))
       );
       for (const outcome of outcomes) {
-        counts[outcome] += 1;
+        counts[outcome.status] += 1;
+        if (outcome.status === "invalid") {
+          rejectionReasons.set(
+            outcome.reason,
+            (rejectionReasons.get(outcome.reason) ?? 0) + 1
+          );
+        }
       }
 
       setConflicts(getImportConflicts<Staff>(NAMESPACE));
 
+      const rejections = [...rejectionReasons.entries()]
+        .toSorted((left, right) => right[1] - left[1])
+        .map(([reason, count]) => `${count} ${reason}`)
+        .join("; ");
+
       return {
         ok: true,
-        summary: `Import complete: ${counts.created} created, ${counts.unchanged} unchanged, ${counts.conflict} staged as conflicts${counts.invalid ? `, ${counts.invalid} skipped (invalid data)` : ""}`,
+        summary: `Import complete: ${counts.created} created, ${counts.unchanged} unchanged, ${counts.conflict} staged as conflicts${counts.invalid ? `, ${counts.invalid} skipped — ${rejections}` : ""}`,
       };
     } catch (error) {
       return {

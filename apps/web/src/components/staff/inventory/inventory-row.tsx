@@ -223,6 +223,20 @@ export interface InventoryRowProps {
   onReclaimCustody: (item: InventoryItemView) => void;
   onTakeItem: (item: InventoryItemView) => void;
   onReleaseCustody: (item: InventoryItemView) => void;
+  /**
+   * Whether this caller's role holds `inventory: ["take"]` — the self-service
+   * claim and hand-back. `canSelfServeInventory` in
+   * `packages/auth/src/roles.ts`, from the session, computed once by the page
+   * and handed down rather than read per row.
+   *
+   * **It decides whether the two entries are drawn, and it is not a security
+   * control.** The procedures are gated server-side and narrow again in their
+   * handlers; this only stops the register offering a seat two entries that
+   * answer `Forbidden` on every row. The Inventory Administrator was the seat
+   * that proved it: its grant is the register's, minus `take`, and the register
+   * is its own workspace.
+   */
+  canSelfServe: boolean;
   onEditItem: (item: InventoryItemView) => void;
   onRetireItem: (item: InventoryItemView) => void;
   onRestoreItem: (item: InventoryItemView) => void;
@@ -286,6 +300,7 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
     onEditItem,
     onRetireItem,
     onRestoreItem,
+    canSelfServe,
   } = actions;
   const hasCustodian = item.custodianStaffId !== null;
   const isRetired = item.deletedAt !== null;
@@ -362,7 +377,7 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
             and the order is the argument. These three write a pointer and the
             database refuses the history row without a cause
             (`inventory_custody_history_reason_required` exempts only a first
-            claim and a return to the store), so they belong in one block a
+            claim and a first appointment), so they belong in one block a
             reader can scan as "who is answerable for this"; the self-service
             take/release pair below them is a different weight of thing
             entirely. They used to be reachable only from the foot of the
@@ -415,28 +430,30 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
             always fails, and both have had to be removed from this menu more than
             once. The sheet's foot states the same rule for the same dialog.
 
-            **And "Call it back" is deliberately not "Return to the store",
-            although the two write the same pointer.** The owner is reaching into
-            a colleague's hands: the holder did not ask for it, cannot see it
-            coming, and is the person the record is about to say no longer has
-            the item — which is why this is the only write in the feature behind
-            a confirm (`ReclaimConfirmDialog`, whose cancel button is "Leave it
-            with {holder}"). "Return to the store" is the other direction and the
-            opposite weight: the holder giving something back, narrowed server-side
-            to the person already holding the item so that a hand-back is always
-            voluntary, and deliberately carrying no confirm at all, because a
-            second click to confirm a decision the caller has already made about
-            their own property teaches people to dismiss confirms.
-            `reclaim-custody.ts` is where that is argued at length — folding the
-            two together would either make a hand-back demandable by anyone, or
-            make every reclaim fail, since not holding the item is the premise.
+            **And "Call it back" is deliberately not "Hand it back", although
+            both are writes to the custodian pointer.** The owner is reaching
+            into a colleague's hands: the holder did not ask for it, cannot see
+            it coming, and is the person the record is about to say no longer
+            has the item — which is why this is the only write in the feature
+            behind a confirm (`ReclaimConfirmDialog`, whose cancel button is
+            "Leave it with {holder}"). "Hand it back" is the other direction and
+            the opposite weight: the holder giving something back, narrowed
+            server-side to the person already holding the item so that a
+            hand-back is always voluntary, and deliberately carrying no confirm
+            at all, because a second click to confirm a decision the caller has
+            already made about their own property teaches people to dismiss
+            confirms. `reclaim-custody.ts` is where that is argued at length —
+            folding the two together would either make a hand-back demandable
+            by anyone, or make every reclaim fail, since not holding the item
+            is the premise.
 
-            Hence `IconBuildingWarehouse` rather than the sheet's `IconUserMinus`:
-            that icon is two entries below on "Return to the store", and a menu
-            where two near-neighbours answer to the same glyph teaches nothing.
-            The warehouse is this file's own picture for the state a reclaim
-            produces — it is what `CurrentHolderBadge` prints for "Nobody — it is
-            in the store".
+            Hence `IconBuildingWarehouse` rather than the sheet's
+            `IconUserMinus`: that icon is two entries below on "Hand it back",
+            and a menu where two near-neighbours answer to the same glyph
+            teaches nothing. The warehouse is this file's own picture for the
+            store-side of custody — the direction a reclaim reaches from —
+            which separates it from the hand-back's glyph even though the
+            reclaim lands on the person in charge rather than on a shelf.
           */}
           {hasCustodian ? (
             <DropdownMenuItem onClick={() => onReclaimCustody(item)}>
@@ -445,23 +462,48 @@ const RowActionMenu = ({ item, ...actions }: RowActionMenuProps) => {
             </DropdownMenuItem>
           ) : null}
           {/*
-            Take and release are the self-service pair, and which one is
-            offered follows the pointer rather than a guess about the caller's
-            own staff row: `takeItem` only succeeds on a first claim, and
-            `releaseCustody` only when somebody holds it. Offering both at
-            once would put a guaranteed refusal in the menu every time.
+            Take and release are the self-service pair, and two questions decide
+            which one — or whether either — is offered.
+
+            **The pointer, not a guess about the caller's own staff row.**
+            `takeItem` only succeeds on a first claim and `releaseCustody` only
+            when somebody holds it, so offering both at once would put a
+            guaranteed refusal in the menu every time.
+
+            **And the caller's grant, which is the other half.** Both sit on
+            `requireInventoryPermission("take")`, and the Inventory Administrator
+            does not hold it — its grant is the register's, minus the two
+            self-service verbs, because custody in this school is set from that
+            seat through `transferCustody` rather than by whoever opened the row.
+            So the pair is drawn only where it can work, and the store's own verbs
+            above (Transfer custody, Call it back) are the ones that seat has.
+            A menu entry that answers `Forbidden` on every row is the same
+            defect as one that opens nothing, and this register is the Inventory
+            Administrator's whole workspace, so the audience that could not use
+            them was the *default* one. `get-item-for-scan.ts` already answers
+            the same question per item by returning `canTake` and `canHandBack`
+            on the row it hands the scanner; this is the same answer for the
+            register, and it is a role question, so it is computed once by the
+            page rather than asked of the server per row.
           */}
-          {hasCustodian ? (
+          {/*
+            Two flat conditions rather than a nested ternary, and the nesting was
+            the only thing that ever made this hard to read: "may they self-serve"
+            and "which of the pair does the pointer call for" are two questions,
+            so they are two conditions.
+          */}
+          {canSelfServe && hasCustodian ? (
             <DropdownMenuItem onClick={() => onReleaseCustody(item)}>
               <IconUserMinus />
-              Return to the store
+              Hand it back
             </DropdownMenuItem>
-          ) : (
+          ) : null}
+          {canSelfServe && !hasCustodian ? (
             <DropdownMenuItem onClick={() => onTakeItem(item)}>
               <IconPackageExport />
               Take this item
             </DropdownMenuItem>
-          )}
+          ) : null}
           <DropdownMenuItem onClick={() => onEditItem(item)}>
             <IconPencil />
             Edit details

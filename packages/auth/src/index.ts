@@ -16,6 +16,7 @@ import { eq } from "drizzle-orm";
 import { sendAuthEmail } from "./email";
 import { assertOtpSendAllowed, recordOtpSend } from "./otp-throttle";
 import {
+  academicAdmin,
   ac,
   admin,
   inventoryAdmin,
@@ -28,6 +29,7 @@ import {
 } from "./permissions";
 
 export {
+  academicAdmin,
   ac,
   admin,
   inventoryAdmin,
@@ -70,6 +72,8 @@ export {
   DEPUTY_PRINCIPAL_USERNAME,
   INVENTORY_ADMIN_EMAIL,
   INVENTORY_ADMIN_USERNAME,
+  ACADEMIC_ADMIN_EMAIL,
+  ACADEMIC_ADMIN_USERNAME,
 } from "./admin";
 export type { SeededLeadershipRole } from "./admin";
 export {
@@ -102,6 +106,8 @@ export interface AuthConfig {
   ADMIN_NAME?: string;
   INVENTORY_ADMIN_PASSWORD: string;
   INVENTORY_ADMIN_NAME?: string;
+  ACADEMIC_ADMIN_PASSWORD: string;
+  ACADEMIC_ADMIN_NAME?: string;
 }
 
 export const AUTH_COOKIE_PREFIX = "school-student-teacher-management";
@@ -161,7 +167,8 @@ const buildAuthOptions = (
     },
   },
   emailAndPassword: { enabled: true },
-  // The three institutional logins are configuration, not accounts an
+  // The institutional logins (admin, Principal, Deputy, Inventory Admin,
+  // Academic Admin) are configuration, not accounts an
   // administrator may manage: their password is re-applied on every boot, so
   // banning one would either be silently undone or lock the College out of
   // its own system. Enforced here rather than in the UI, because the admin
@@ -177,7 +184,7 @@ const buildAuthOptions = (
           if (updated.banned === true && isSeededAccount(nextUsername)) {
             throw new APIError("FORBIDDEN", {
               message:
-                "The administrator, Principal and Deputy Principal accounts cannot be banned",
+                "The seeded administrator, leadership and specialist admin accounts cannot be banned",
             });
           }
 
@@ -197,7 +204,7 @@ const buildAuthOptions = (
             if (protectedAccount && updated.role !== current?.role) {
               throw new APIError("FORBIDDEN", {
                 message:
-                  "The administrator, Principal and Deputy Principal roles cannot be changed",
+                  "The seeded institutional accounts' roles cannot be changed",
               });
             }
 
@@ -227,6 +234,7 @@ const buildAuthOptions = (
         principal,
         vicePrincipal,
         inventoryAdmin,
+        academicAdmin,
         teacher,
         teacherRequester,
         user,

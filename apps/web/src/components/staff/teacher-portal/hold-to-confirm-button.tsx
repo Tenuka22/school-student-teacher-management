@@ -40,13 +40,14 @@ export const HoldToConfirmButton = ({
   tone = "primary",
 }: HoldToConfirmButtonProps) => {
   const [isHolding, setIsHolding] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined
-  );
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancel = () => {
     setIsHolding(false);
-    clearTimeout(timeoutRef.current);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
   };
 
   const start = () => {

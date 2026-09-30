@@ -100,9 +100,9 @@ export const countersOf = (row: InventoryCountersRow): InventoryCounters => ({
 });
 
 /**
- * `user` joined twice onto the same `inventory_item` row — the manager and
- * the custodian are logins now, not staff profiles, so their display names
- * come from `user.name` rather than `staff.name`.
+ * `staff` joined twice onto the same `inventory_item` row — the manager and
+ * the custodian are people on the school roll, so their display names come
+ * from `staff.name`.
  *
  * Both aliases must be `left` joins and not `inner` joins: an item sitting
  * unassigned in the store has a null `managerStaffId` and a null
@@ -113,13 +113,9 @@ export const countersOf = (row: InventoryCountersRow): InventoryCounters => ({
  * because `manager` and `custodian` answer different questions — see the
  * `inventoryItem` schema comment — and a single join could not label which of
  * the two it had matched.
- *
- * Named `managerStaff`/`custodianStaff` rather than renamed to `*User`, so the
- * dozens of call sites that already destructure `managerName`/`custodianName`
- * off `itemViewSelection` do not need to change alongside the FK target.
  */
-export const managerStaff = alias(user, "manager_staff");
-export const custodianStaff = alias(user, "custodian_staff");
+export const managerStaff = alias(staff, "manager_staff");
+export const custodianStaff = alias(staff, "custodian_staff");
 /** The item's own photo, joined by `inventoryItem.imageFileId`. */
 export const itemImageFile = alias(files, "item_image_file");
 
@@ -240,40 +236,38 @@ export const itemViewJoins = (db: Executor) =>
 
 /**
  * Who is making the change. Every ledger and custody/holder column points at
- * `user.id` — the login — not at a `staff` row. This is a reversal of the
- * module's earlier design: identity for custody and management used to be the
- * `staff` profile precisely so it would survive the departure of the person
- * behind it, which meant the three seeded leadership logins (admin, principal,
- * deputy-principal, none of which have a `staff` row) could not hold or manage
- * equipment at all. `delete-staff.ts` now carries that survivability guarantee
- * instead: it deletes the linked `user` row in the same transaction as the
- * `staff` row, and probes every inventory column before either delete runs, the
- * same way it always has.
+ * `staff.id` — the person on the school roll — and not at the login behind
+ * them, because the register is accountable for *people*: a storekeeper who
+ * leaves must still be findable by name when the equipment they issued comes
+ * up missing. This was the module's original design, it is what
+ * `delete-staff.ts` probes before it deletes anybody, and it is what the
+ * seeded leadership seats are seeded *with* a `staff` row for (see
+ * `packages/auth/src/admin.ts`, which documents that reasoning at length).
  *
- * `staffId` remains on this interface only as reference information — whether
- * the caller happens to have a linked `staff` profile, which some non-custody
- * logic elsewhere still cares about. **Nothing writes `staffId` into a
- * `*StaffId` column any more; every such write uses `userId`, which is always
- * present for an authenticated caller.**
+ * `staffId` is non-null because **every account in this system has a staff
+ * row**: self-service sign-up writes one in the same transaction as the login
+ * (`staff/signup.ts`), an administrator's "add teacher" writes one
+ * (`staff/create-staff.ts`), and the five seeded leadership seats get one on
+ * every boot (`packages/auth/src/admin.ts`). `getInventoryActor` refusing a
+ * caller without one is therefore an invariant stated, not a policy that can
+ * misfire — see that function for the history of why this used to be nullable
+ * and what made that the wrong trade.
  */
 export interface InventoryActor {
-  /** The caller's linked staff row, if any — reference information only. Not
-   *  written into any custody/holder/actor column; see `userId` for that. */
-  staffId: string | null;
+  /** The caller's staff row. Always present; see the interface doc. */
+  staffId: string;
   /** Denormalised onto the ledger so the trail keeps a name even after the
-   *  account is gone. Never null. */
+   *  staff row is gone. Never null. */
   name: string;
-  /** The caller's login id. This is what every `*StaffId` column now stores. */
-  userId: string;
 }
 
 /**
  * `name` falls back through the session user's name, username and display
- * username because the seeded accounts that manage the inventory have no
- * `staff` row to read a name from, and an inventory error or ledger row shown to
- * one of them must still say who was acting. The last entry cannot be empty for
- * an authenticated account, so `InventoryActor.name` stays a `string` and no
- * caller has to null-check it.
+ * username for the case where the staff row's own `name` came back blank — a
+ * legacy import can carry one — and an inventory error or ledger row shown to
+ * whoever is signed in must still say who was acting. The last entry cannot be
+ * empty for an authenticated account, so `InventoryActor.name` stays a
+ * `string` and no caller has to null-check it.
  */
 const sessionDisplayName = (sessionUser: {
   name: string;
@@ -296,32 +290,29 @@ const sessionDisplayName = (sessionUser: {
 };
 
 /**
- * Resolve the caller to the `staff` row the ledger will name — and to nothing,
- * when there is not one.
+ * Resolve the caller to the `staff` row every ledger and custody column will
+ * name them by.
  *
- * **Why a null `staffId` is allowed.** The write is attributed by `userId` plus
- * the denormalised `name`, not by the staff pointer. Every `*_staff_id` column
- * on every inventory table is already nullable and already `set null` — the
- * ledger has to survive the departure of the person who wrote it, and
- * `inventoryTransaction` denormalises `meta.actorName` and
- * `inventoryAuditLog.actorName` for exactly that reason. An actor with no staff
- * row therefore writes a row that is attributed by name and by the account that
- * produced it, and a teacher who is later deleted does not reach back through
- * those columns to strip the attribution off.
+ * **Why this throws instead of returning null.** It did return null once, and
+ * the reason given was that the three seeded leadership logins had no staff
+ * row, so a refusal here followed a successful authorization check and made the
+ * register unreachable for exactly the roles it was built for. That objection
+ * is spent: `packages/auth/src/admin.ts` seeds a `staff` row for every
+ * leadership seat, `staff/signup.ts` writes one in the same transaction as a
+ * self-service login, and `staff/create-staff.ts` writes one for every
+ * administrator-issued account. Every account in this system therefore has a
+ * staff row, and a caller without one is a data fault — the row deleted behind
+ * the login's back — rather than a legitimate role. It says so, with a message
+ * an administrator can act on, instead of quietly writing an unattributed row
+ * into a register whose whole purpose is attribution.
  *
- * The alternative — throwing `FORBIDDEN` for a caller with no staff row — is
- * what this function used to do, and it made the feature unreachable: the write
- * gate is `requireInventoryPermission(...)`, whose `admin` / `principal` /
- * `vicePrincipal` grants are all short-circuited by the `ADMIN_ROLES` bypass in
- * `requirePermission`, so precisely the three roles the feature was built for
- * would pass the permission check and then be refused here. A refusal that
- * follows a successful authorization check is a bug, not a policy.
+ * `name` still falls back to the session display name when the staff row's own
+ * `name` is blank, because a ledger row that answers "who did this" cannot be
+ * allowed to answer nothing.
  *
- * Authorization is not weakened by this: the caller still has to be signed in
- * (hence the `UNAUTHORIZED` below), and the procedure that called this still
- * had to pass its own `requireInventoryPermission` gate first. What changed is
- * that a leadership account no longer needs a staff record to exercise the
- * authority it already holds.
+ * Authorization is not weakened: the caller still has to be signed in (hence
+ * `UNAUTHORIZED`), and the procedure that called this still had to pass its own
+ * `requireInventoryPermission(...)` gate first.
  */
 export const getInventoryActor = async (
   context: Context
@@ -339,10 +330,16 @@ export const getInventoryActor = async (
     .where(eq(staff.userId, sessionUser.id))
     .limit(1);
 
+  if (!record) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "This account has no staff record — ask an administrator to issue one before it can act on the register",
+    });
+  }
+
   return {
-    staffId: record?.id ?? null,
-    name: record?.name || sessionDisplayName(sessionUser),
-    userId: sessionUser.id,
+    staffId: record.id,
+    name: record.name || sessionDisplayName(sessionUser),
   };
 };
 
@@ -423,17 +420,16 @@ export const resolveBorrowerStaffBatch = async (
 
   const rows = await db
     .select({
-      id: user.id,
-      name: user.name,
-      // The one identifier a login carries that a storekeeper can act on
-      // across a counter, now that a borrower is a `user` row rather than a
-      // `staff` row — `teacherServiceNo` does not exist here, so the
-      // username fills the same role and is `null` for an account that never
-      // set one, exactly like a badge number that was never issued.
-      reference: user.username,
+      id: staff.id,
+      name: staff.name,
+      // The badge / service number, and the one staff identifier a person can
+      // be given across a counter. `teacher_service_no` is unique and nullable,
+      // so an office record that was never issued one yields a null reference
+      // rather than a missing row.
+      reference: staff.teacherServiceNo,
     })
-    .from(user)
-    .where(inArray(user.id, [...staffIds]));
+    .from(staff)
+    .where(inArray(staff.id, [...staffIds]));
 
   for (const row of rows) {
     borrowers.set(row.id, {
@@ -533,12 +529,12 @@ export const resolveBorrowerStaff = async (
   }
 
   // A loan cannot be owed back by an administrator account — same rule as
-  // `assertStaffIsAssignable`, checked directly against `user` now that the
-  // borrower pointer names a login rather than a staff row.
+  // `assertStaffIsAssignable`, reached through the staff row's own login.
   const [staffRecord] = await db
     .select({ role: user.role })
-    .from(user)
-    .where(eq(user.id, staffId))
+    .from(staff)
+    .leftJoin(user, eq(staff.userId, user.id))
+    .where(eq(staff.id, staffId))
     .limit(1);
 
   if (staffRecord?.role === "admin") {
@@ -752,19 +748,27 @@ export const assertCategoryExists = async (
 };
 
 /**
- * The target must be a real, active login — identity for custody and
- * management is the account now, not a `staff` profile behind it, so
- * "assignable" is a question `user` answers on its own.
+ * The target must be a real member of staff who is still employed.
  *
- * **This is a deliberate reversal.** The check used to be "employment status
- * is active or null", read off `staff`, precisely because a `staff` row was
- * the only way to be handed a projector — the three seeded leadership logins
- * have no `staff` row at all and were refused for exactly that reason. Now that
- * every column this guards points at `user.id`, the equivalent, simpler fact is
- * **not banned**: `better-auth`'s own `banned` flag is what a school uses to
- * say "this account is no longer active", the same signal `assertActiveOwnerExists`
- * in the source app already checked. A departed teacher whose account should stop
- * holding equipment is banned or deleted, not silently still assignable.
+ * This is the school-domain replacement for the source app's
+ * `assertActiveOwnerExists`, which asked whether a `user` row was banned. A
+ * banned login and a departed member of staff are the same fact about the
+ * store, and this repo states it as a person: **employment status that is
+ * `"active"` or null**, and nothing else. There is no `staffCategory`
+ * predicate, and its removal is the decision rather than an omission — a
+ * Principal is a person in the building, not only a login, and the bursar is
+ * who a school projector actually leaves the office with. `STAFF_CATEGORIES` has
+ * two values (`teacher`, `officeStaff`) and both describe people who are
+ * employed, so filtering on the column would have excluded a colleague rather
+ * than a category of person who cannot hold property.
+ *
+ * **The employment-status half is the half doing the work, and it is the half
+ * that stays.** It is what stops the register naming somebody who is not a real,
+ * employed person: a *terminated* or *on-leave* colleague is refused, because
+ * the equipment leaves the building with them. A *null* status is admitted,
+ * because a null means nobody has confirmed it — refusing those would make the
+ * ledger unusable until an administrator filled in a field the storekeeper has
+ * no business editing.
  *
  * **`label` names the role being filled, never the category of person.** It is
  * interpolated into the refusal below, and the whole point of the widened
@@ -779,20 +783,24 @@ export const assertCategoryExists = async (
  */
 export const assertStaffIsAssignable = async (
   db: Executor,
-  userId: string,
+  staffId: string,
   label: string
 ): Promise<{ id: string; name: string }> => {
   const [record] = await db
-    .select({ id: user.id, name: user.name, role: user.role })
-    .from(user)
+    .select({ id: staff.id, name: staff.name, role: user.role })
+    .from(staff)
+    .leftJoin(user, eq(staff.userId, user.id))
     .where(
-      and(eq(user.id, userId), or(eq(user.banned, false), isNull(user.banned)))
+      and(
+        eq(staff.id, staffId),
+        or(eq(staff.employmentStatus, "active"), isNull(staff.employmentStatus))
+      )
     )
     .limit(1);
 
   if (!record) {
     throw new ORPCError("BAD_REQUEST", {
-      message: `Select an active account as the ${label}`,
+      message: `Select an active ${label} to be in charge of this item`,
     });
   }
 
@@ -1196,12 +1204,12 @@ export interface InsertTransactionInput {
  * joined on purpose: the transactions screen renders a year of history and must
  * not turn into an N+1 over items and staff, and a store whose items are later
  * deleted must still be able to show what happened to them. `actorName` is
- * there for the same reason — `actorStaffId` (a `user.id` now, not a
- * `staff.id`) is `set null`, so a departed login's name would otherwise vanish
- * from every historic row. `actor.userId` is always present for an
- * authenticated caller, so unlike the old staff-based design there is no null
- * case to survive here — `actorName` still carries the row after the account
- * itself is deleted, which is the scenario `set null` exists for.
+ * there for the same reason — `actorStaffId` is `set null`, so a departed
+ * storekeeper's name would otherwise vanish from every historic row. It is also
+ * what makes a **null** `actor.staffId` survivable: an account with no staff row
+ * writes an unattributed `actor_staff_id` and a named `meta.actorName`, and the
+ * row still answers "who did this" long after the session that produced it is
+ * gone.
  *
  * The three defaults are spread **last** and cannot be overridden. A caller
  * that already has the right values has no reason to pass them, and a caller
@@ -1215,7 +1223,7 @@ export const insertInventoryTransaction = async (
 ): Promise<void> => {
   await db.insert(inventoryTransaction).values({
     id: crypto.randomUUID(),
-    actorStaffId: input.actor.userId,
+    actorStaffId: input.actor.staffId,
     action: input.action,
     itemId: input.item.id,
     qtyBefore: input.before.qty,
@@ -1253,11 +1261,11 @@ export interface InsertAuditLogInput {
  *
  * `actorName` is written on every row, and that is the second half of the
  * `inventory_audit_log_actor_id_or_name` CHECK: the log's job is to answer "who
- * did this", `actor_staff_id` is nullable by design (`set null`, so a teacher
- * deletion does not delete the log), and a seeded administrator has no staff row
- * at all — so without the denormalised name, one deletion anonymises everything
- * that person ever did and the only question this table exists for goes
- * unanswered. A caller with neither is refused by the database.
+ * did this", `actor_staff_id` is nullable by design (`set null`, so a staff
+ * deletion does not delete the log) — so without the denormalised name, one
+ * deletion anonymises everything that person ever did and the only question
+ * this table exists for goes unanswered. A caller with neither is refused by
+ * the database.
  */
 export const insertInventoryAuditLog = async (
   db: Executor,
@@ -1265,7 +1273,7 @@ export const insertInventoryAuditLog = async (
 ): Promise<void> => {
   await db.insert(inventoryAuditLog).values({
     id: crypto.randomUUID(),
-    actorStaffId: input.actor.userId,
+    actorStaffId: input.actor.staffId,
     actorName: input.actor.name,
     action: input.action,
     entityType: input.entityType,
@@ -1284,10 +1292,15 @@ export const insertInventoryAuditLog = async (
  *
  * The chain is derived, not stored: walk every `inventoryCustodyHistory` row
  * for the item in order, tracking who is currently holding it. A
- * `custody_released` row (the item went back to the store) empties the chain,
- * because a fresh loan afterwards has nothing to do with whoever held it
- * before it was last returned. A `custody_taken`/`custody_transferred` row
- * appends its new holder. `manager_*` rows never touch the custodian and are
+ * `custody_released` row (the hand-back: the item returned the way it came)
+ * empties the chain, because a fresh chapter afterwards has nothing to do with
+ * whoever held it before it was last handed back — and when that same row
+ * names a successor (both `releaseCustody` and `reclaimCustody` require one:
+ * `custodian_staff_id` is `NOT NULL`), that person starts the new chapter and
+ * is pushed, so later hand-overs can still find them in it. Rows written
+ * before the successors were required carry a null there and behave exactly as
+ * they always did. A `custody_taken`/`custody_transferred` row appends its new
+ * holder. `manager_*` rows never touch the custodian and are
  * skipped. Safe to call either side of inserting the row for the transfer in
  * progress: `immediatePreviousCustodianStaffId` locates that transfer's own
  * spot in the chain, and anything appended after it (including that very row,
@@ -1313,6 +1326,9 @@ export const getUpstreamSubManagerStaffIds = async (
   for (const row of rows) {
     if (row.changeType === "custody_released") {
       chain.length = 0;
+      if (row.newCustodianStaffId) {
+        chain.push(row.newCustodianStaffId);
+      }
       continue;
     }
     if (

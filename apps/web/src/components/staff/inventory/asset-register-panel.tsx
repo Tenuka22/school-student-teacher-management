@@ -444,10 +444,10 @@ export const AssetRegisterPanel = ({
        * presenting a partial count as the whole register. Narrowing the search or
        * the status filter above makes the page the whole register.
        *
-       * `InventoryStatCards` is deliberately not used here: its seven fields
-       * (`totalItems`, `lowStockItems`, `unassignedItems`, …) describe the *item*
-       * register, and bending them to describe *units* would put a card labelled
-       * "Items" above a number that is a count of tags.
+       * `InventoryStatCards` is deliberately not used here: its six fields
+       * (`totalItems`, `lowStockItems`, …) describe the *item* register, and
+       * bending them to describe *units* would put a card labelled "Items" above
+       * a number that is a count of tags.
        *
        * **Gated on `!isLoading && !isError`, and that gate is the point.** A row of six
        * zeros is a claim about the school: it says the store has no tags, nothing on

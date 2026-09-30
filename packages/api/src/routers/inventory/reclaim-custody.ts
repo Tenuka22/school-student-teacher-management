@@ -14,8 +14,12 @@
  *
  * ## What changes, and what emphatically does not
  *
- * Only `custodianStaffId` is cleared. `managerStaffId` is **left exactly as it
- * was**, and that is the load-bearing decision in this file: reclaiming custody is
+ * Only `custodianStaffId` moves — and it moves **to `managerStaffId`**, the
+ * person already answerable for the item, because the register never says
+ * "nobody": `inventory_item.custodian_staff_id` is `NOT NULL`, so a call-back
+ * has to land somewhere, and the in-charge person is the somebody an owner's
+ * demand ends with. `managerStaffId` is **left exactly as it was**, and that is
+ * the load-bearing decision in this file: reclaiming custody is
  * not transferring ownership, and a procedure that quietly moved the manager
  * column would move accountability by accident — the caller would be demanding
  * the item back and simultaneously declaring themselves still answerable for it,
@@ -57,7 +61,7 @@ import {
   inventoryItem,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -89,9 +93,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, staffId))
+    .select({ name: staff.name })
+    .from(staff)
+    .where(eq(staff.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -150,7 +154,7 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
       // possible", and because a caller who is neither the owner nor leadership
       // must learn nothing about whether the item exists beyond the `NOT_FOUND`
       // `getLockedItem` already produced.
-      const isOwner = existing.managerStaffId === actor.userId;
+      const isOwner = existing.managerStaffId === actor.staffId;
       const isLeadership = ADMIN_ROLES.has(context.session?.user.role ?? "");
       if (!isOwner && !isLeadership) {
         throw new ORPCError("FORBIDDEN", {
@@ -167,6 +171,27 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
         throw new ORPCError("CONFLICT", {
           message:
             "This item is not in anybody's custody, so there is nothing to call back",
+        });
+      }
+
+      // The call-back lands on the in-charge person (see the file comment), so
+      // an item with nobody in charge has nowhere to land. Only reachable for a
+      // leadership seat — an owner is `managerStaffId` and would have failed
+      // the check above — and it exists for legacy rows written before both
+      // pointers were required, not for the ordinary case.
+      if (!existing.managerStaffId) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "This item has nobody in charge of it, so there is nobody to hand it back to — assign an owner first",
+        });
+      }
+
+      // Refused as a no-op rather than written as a `custody_released` row that
+      // moves nothing: the item is already in the in-charge person's hands, so
+      // there is no call-back to record.
+      if (existing.custodianStaffId === existing.managerStaffId) {
+        throw new ORPCError("CONFLICT", {
+          message: `${ownerName ?? existing.managerStaffId} is both the person in charge of this item and the person holding it, so there is nothing to call back`,
         });
       }
 
@@ -196,20 +221,24 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
 
       // **`managerStaffId` is not in this `set`, on purpose.** Reclaiming custody
       // is not transferring ownership: the owner demanded the item back, which
-      // says nothing about who answers for it afterwards, and writing the manager
-      // column here would move accountability by accident. See the file comment.
-      // Nothing else is touched either — no counters, no units, no loan record.
+      // says nothing about who answers for it afterwards — the owner already
+      // answers for it, which is exactly why the holder becomes them, and
+      // writing the manager column here would still move accountability by
+      // accident. See the file comment. Nothing else is touched either — no
+      // counters, no units, no loan record.
       await tx
         .update(inventoryItem)
-        .set({ custodianStaffId: null })
+        .set({ custodianStaffId: existing.managerStaffId })
         .where(eq(inventoryItem.id, existing.id));
 
       // One row, and the four staff columns are the whole story: the previous
-      // custodian is named, the new one is null, and **both manager columns are
-      // null** because this row is about custody and nothing else.
+      // custodian is named, the new one is the person in charge, and **both
+      // manager columns are null** because this row is about custody and nothing
+      // else.
       // `inventory_custody_history_manager_columns` requires exactly that
       // equivalence — "is a custody type" must equal "both manager columns are
-      // null" — and writing the owner's id here would fail the insert. The reason
+      // null" — and writing the owner's id in the manager columns would fail the
+      // insert. The reason
       // is the closed transfer vocabulary rather than free text, and it is
       // required by `inventory_custody_history_reason_required` because
       // `custody_released` is not one of the two exempt change types.
@@ -219,7 +248,7 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
           id: crypto.randomUUID(),
           itemId: existing.id,
           previousCustodianStaffId: existing.custodianStaffId,
-          newCustodianStaffId: null,
+          newCustodianStaffId: existing.managerStaffId,
           // Explicit rather than omitted: the CHECK compares these two columns
           // against the change type, and a defaulted column that happened to
           // differ would be a constraint violation instead of a reviewable line of
@@ -229,7 +258,7 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
           changeType: "custody_released",
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.userId,
+          changedByStaffId: actor.staffId,
         })
         .returning();
 
@@ -242,7 +271,7 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
         itemId: existing.id,
         previousCustodianStaffId: existing.custodianStaffId,
         managerStaffId: existing.managerStaffId,
-        changedByStaffId: actor.userId,
+        changedByStaffId: actor.staffId,
       });
 
       // `before` and `after` are the same pair, and this is the ledger row where
@@ -259,7 +288,11 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
         before: countersOf(existing),
         after: countersOf(existing),
         note: input.note ?? null,
-        meta: { previousCustodianName, reason: input.reason },
+        meta: {
+          previousCustodianName,
+          newCustodianName: ownerName,
+          reason: input.reason,
+        },
       });
 
       // `custody.reclaim` rather than `custody.release` (which `releaseCustody`
@@ -280,8 +313,8 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
           managerName: ownerName,
         },
         after: {
-          custodianStaffId: null,
-          custodianName: null,
+          custodianStaffId: existing.managerStaffId,
+          custodianName: ownerName,
           // Unchanged, and written down as unchanged.
           managerStaffId: existing.managerStaffId,
           managerName: ownerName,
@@ -289,13 +322,14 @@ export const reclaimCustody = requireInventoryPermission("manageOwn")
       });
 
       // Mirrors `releaseCustody`'s return shape, so the web app renders one
-      // success component for "handed back" and "called in" — `custodianStaffId`
-      // and `custodianName` are literal nulls rather than a re-read of the row.
+      // success component for "handed back" and "called in" —
+      // `custodianStaffId` and `custodianName` are the in-charge person this
+      // reclaim handed the item to, which is the whole point of the call-back.
       return {
         itemId: existing.id,
         previousCustodianName,
-        custodianStaffId: null,
-        custodianName: null,
+        custodianStaffId: existing.managerStaffId,
+        custodianName: ownerName,
         changeType: "custody_released" as const,
         changedAt: iso(history.changedAt),
       };

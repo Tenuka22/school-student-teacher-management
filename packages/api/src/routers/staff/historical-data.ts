@@ -20,9 +20,9 @@ import { teacherSubjectAssignment } from "@school-student-teacher-management/db/
 import { eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
-export const getHistoricalData = adminProcedure
+export const getHistoricalData = academicProcedure
   .input(v.object({ academicYearId: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [

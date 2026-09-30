@@ -5,6 +5,15 @@ import { IconSelector, IconCheck, IconChevronUp, IconChevronDown } from "@tabler
 
 import { useFieldControlProps } from "@school-student-teacher-management/ui/components/field"
 
+/**
+ * The ink an unfilled select's value is printed in.
+ *
+ * The same argument as `input.tsx`'s `placeholderInk`, and the same state this
+ * file was in for a while: the class below was written out, documented, and left
+ * unapplied while the trigger carried `data-placeholder:text-muted-foreground` —
+ * the 2.46:1-on-`bg-accent/20` token. A select's placeholder is not decoration
+ * either: it is the only thing on screen saying that nothing has been chosen yet.
+ */
 const selectPlaceholderInk =
   "data-placeholder:text-[color-mix(in_oklab,var(--foreground)_72%,transparent)]"
 
@@ -227,7 +236,11 @@ function SelectTrigger({
       data-loading={loading || undefined}
       aria-busy={loading || undefined}
       className={cn(
-        "flex w-fit items-center justify-between gap-1.5 rounded-none border border-input bg-transparent py-2 pr-2 pl-3 text-base whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive data-placeholder:text-muted-foreground sm:text-[0.9375rem] data-[size=default]:h-9 data-[size=sm]:h-8 pointer-coarse:data-[size=default]:h-10 data-[size=sm]:rounded-none *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex w-fit items-center justify-between gap-1.5 rounded-none border border-input bg-transparent py-2 pr-2 pl-3 text-base whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive",
+        // Replaces the `data-placeholder:text-muted-foreground` this list used to
+        // carry; see the constant's own comment.
+        selectPlaceholderInk,
+        " sm:text-[0.9375rem] data-[size=default]:h-9 data-[size=sm]:h-8 pointer-coarse:data-[size=default]:h-10 data-[size=sm]:rounded-none *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...controlProps}

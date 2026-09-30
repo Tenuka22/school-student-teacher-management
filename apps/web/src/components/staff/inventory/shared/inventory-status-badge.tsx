@@ -334,11 +334,16 @@ const GapChip: React.FC<{ text: string; detail: string }> = ({
  * The "neither" state is written out as **"In store · no manager"** rather than
  * left blank, because a blank reads as *missing data* and this is a *known*
  * state: the device is on a shelf and nobody has been made accountable for it.
- * It is also the state the register's unassigned-items card counts, so the
- * badge, that card and the **"No manager only"** filter that re-derives it have
- * to describe the same set of rows — and the chip below names all three, because
- * the filter is the control a reader actually reaches this state through and a
- * sentence that pointed at a card the reader cannot press was a dead end.
+ *
+ * **Two of these four states are now unreachable, and the branches stay anyway.**
+ * `inventory_item.manager_staff_id` and `custodian_staff_id` are both `NOT NULL`, so
+ * a row cannot arrive here with one or both of them missing. The gap chips are kept
+ * because the two names are typed `string | null` and a badge that has no
+ * explanation for the shape its own props allow is the one that would render a
+ * blank column; what is *not* kept is the copy that used to point at the register's
+ * "Items with no manager" card and its "No manager only" filter, because those
+ * controls are gone and a chip that sends a reader after them is a dead end
+ * described in three sentences.
  */
 export const CustodyBadge: React.FC<{
   managerName: string | null;
@@ -370,7 +375,7 @@ export const CustodyBadge: React.FC<{
       <span className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1">
         <GapChip
           text="No manager"
-          detail={`${custodianName} is holding this item, but no teacher has been made accountable for it. This row is counted on the register's unassigned items card — the "No manager only" filter will show you every row like this one — until a manager is assigned.`}
+          detail={`${custodianName} is holding this item, but no teacher has been made accountable for it. Appoint whoever is answerable for it from the item's custody panel — that is a recorded change with a reason, not an edit to the item row.`}
         />
         <CustodianChip name={custodianName} />
       </span>

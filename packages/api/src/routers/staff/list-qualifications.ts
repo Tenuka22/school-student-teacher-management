@@ -10,7 +10,10 @@ import { requireQualificationPermission } from "../../index";
 
 const documentStatusSchema = v.picklist(["pending", "approved", "rejected"]);
 const canViewAllQualifications = (role: string | null | undefined) =>
-  role === "admin" || role === "principal" || role === "vicePrincipal";
+  role === "admin" ||
+  role === "principal" ||
+  role === "vicePrincipal" ||
+  role === "academicAdmin";
 
 /**
  * List qualifications.

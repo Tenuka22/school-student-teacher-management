@@ -9,7 +9,7 @@ import {
   inventoryCustodyRequest,
   inventoryItem,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, desc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { object } from "valibot";
@@ -17,8 +17,8 @@ import { object } from "valibot";
 import { requireInventoryPermission } from "../../index";
 import { getInventoryActor } from "./inventory-database";
 
-const requesterUser = alias(user, "custody_request_requester");
-const decidedByUser = alias(user, "custody_request_decided_by");
+const requesterStaff = alias(staff, "custody_request_requester");
+const decidedByStaff = alias(staff, "custody_request_decided_by");
 
 const REQUEST_SELECTION = {
   id: inventoryCustodyRequest.id,
@@ -28,11 +28,11 @@ const REQUEST_SELECTION = {
   status: inventoryCustodyRequest.status,
   note: inventoryCustodyRequest.note,
   requesterStaffId: inventoryCustodyRequest.requesterStaffId,
-  requesterName: requesterUser.name,
+  requesterName: requesterStaff.name,
   custodianStaffId: inventoryCustodyRequest.custodianStaffId,
   requestedAt: inventoryCustodyRequest.requestedAt,
   decidedByStaffId: inventoryCustodyRequest.decidedByStaffId,
-  decidedByName: decidedByUser.name,
+  decidedByName: decidedByStaff.name,
   decidedAt: inventoryCustodyRequest.decidedAt,
   decisionNote: inventoryCustodyRequest.decisionNote,
 } as const;
@@ -51,16 +51,16 @@ export const listIncomingCustodyRequests = requireInventoryPermission("read")
         eq(inventoryCustodyRequest.itemId, inventoryItem.id)
       )
       .innerJoin(
-        requesterUser,
-        eq(inventoryCustodyRequest.requesterStaffId, requesterUser.id)
+        requesterStaff,
+        eq(inventoryCustodyRequest.requesterStaffId, requesterStaff.id)
       )
       .leftJoin(
-        decidedByUser,
-        eq(inventoryCustodyRequest.decidedByStaffId, decidedByUser.id)
+        decidedByStaff,
+        eq(inventoryCustodyRequest.decidedByStaffId, decidedByStaff.id)
       )
       .where(
         and(
-          eq(inventoryCustodyRequest.custodianStaffId, actor.userId),
+          eq(inventoryCustodyRequest.custodianStaffId, actor.staffId),
           eq(inventoryCustodyRequest.status, "pending")
         )
       )
@@ -89,14 +89,14 @@ export const listOutgoingCustodyRequests = requireInventoryPermission("read")
         eq(inventoryCustodyRequest.itemId, inventoryItem.id)
       )
       .innerJoin(
-        requesterUser,
-        eq(inventoryCustodyRequest.requesterStaffId, requesterUser.id)
+        requesterStaff,
+        eq(inventoryCustodyRequest.requesterStaffId, requesterStaff.id)
       )
       .leftJoin(
-        decidedByUser,
-        eq(inventoryCustodyRequest.decidedByStaffId, decidedByUser.id)
+        decidedByStaff,
+        eq(inventoryCustodyRequest.decidedByStaffId, decidedByStaff.id)
       )
-      .where(eq(inventoryCustodyRequest.requesterStaffId, actor.userId))
+      .where(eq(inventoryCustodyRequest.requesterStaffId, actor.staffId))
       .orderBy(desc(inventoryCustodyRequest.requestedAt));
 
     return {

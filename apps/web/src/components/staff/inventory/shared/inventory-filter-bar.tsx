@@ -118,7 +118,7 @@ export type StatusOrderIsComplete = AssertNever<
  * What the custodian trigger says, in one place so the three cases are read
  * together rather than as a nested expression in the middle of JSX.
  *
- * The second case is the interesting one. A filter value is a `user.id` and the
+ * The second case is the interesting one. A filter value is a `staff.id` and the
  * list it is resolved against is a page of fifty names, so the person the filter
  * is actually narrowing to is routinely not on the page. Printing the raw id
  * would be honest and useless; printing a *guessed* name would be a lie that gets
@@ -127,10 +127,11 @@ export type StatusOrderIsComplete = AssertNever<
  * telling the user it cannot name them.
  *
  * When the person *is* loaded and their name is not unique on the list, the
- * collision count comes with it. `options.assignableStaff` no longer projects the
- * badge number (`serviceNo`), so the name is the only thing on the wire that
- * distinguishes two people, and "R. Perera" is not a disambiguator in a school
- * that has three of them.
+ * collision count comes with it, and the popup rows below say the same count, so
+ * the closed field and the open list cannot disagree. The badge number is on the
+ * response too (`serviceNo`, projected off `staff`), but the count is the fact
+ * this control can always state: it is about the page in front of the user, and
+ * unlike a badge number it exists for a namesake who has none.
  */
 const custodianFilterLabel = (
   resolved: AssignableStaffOption | null,
@@ -154,8 +155,12 @@ const custodianFilterLabel = (
  * A stand-in row for a filter value whose person is not on the loaded page.
  *
  * Built as a **whole** `AssignableStaffOption` — no cast, no partial — so it
- * cannot drift from the router's projection. That is now a two-field object: the
- * procedure selects `id` and `name` off `user` and returns.
+ * cannot drift from the router's projection. That is five fields off the `staff`
+ * table, and the three the stand-in cannot know are filled with the values that
+ * mean exactly "not loaded": `employmentStatus: null` is the same "nobody has
+ * confirmed it" the assignable predicate treats as assignable, and the badge
+ * number and the login's role are absent rather than invented. The category is a
+ * default this select never draws — its rows print names and collision counts.
  *
  * The row prints the filter's own words, "Current custodian", because that is the
  * claim the control is making. It is left pickable — re-picking it is a no-op that
@@ -165,6 +170,10 @@ const custodianFilterLabel = (
 const unlistedCustodian = (id: string): AssignableStaffOption => ({
   id,
   name: "Current custodian",
+  staffCategory: "teacher",
+  employmentStatus: null,
+  serviceNo: null,
+  currentRole: null,
 });
 
 /**

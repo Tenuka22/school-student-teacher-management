@@ -12,7 +12,7 @@ import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import * as v from "valibot";
 
 import type { Context } from "../../../context";
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import {
   assertDateWithinAcademicYear,
   requireAttendanceAcademicYear,
@@ -154,13 +154,18 @@ const resolveImportRows = async (
   const leaveByStaff = new Map(
     approvedLeaves.map((leave) => [leave.staffId, leave.type])
   );
+  /**
+   * The `nic` column of the sheet is how a row finds its person, so the map is
+   * keyed on it directly.
+   *
+   * It used to be filtered through a `record.nic !== null` type guard, which
+   * existed because `staff.nic` was nullable and a null would have put an
+   * unusable key in the map. The column is `NOT NULL` now, the guard's premise
+   * is gone, and a filter that can never drop a row is a step a reader has to
+   * verify before trusting the map below it.
+   */
   const staffByNicMap = new Map(
-    staffByNic
-      .filter(
-        (record): record is typeof record & { nic: string } =>
-          record.nic !== null
-      )
-      .map((record) => [record.nic, record])
+    staffByNic.map((record) => [record.nic, record])
   );
 
   const seen = new Set<string>();
@@ -232,7 +237,7 @@ const countOutcomes = (
  * columns the dialog shows — what is there, what will be there — are the answer
  * the write will actually give.
  */
-export const previewAttendanceImport = adminProcedure
+export const previewAttendanceImport = academicProcedure
   .input(attendanceImportInput)
   .handler(async ({ context, input }) => {
     const year = await requireAttendanceAcademicYear(
@@ -265,7 +270,7 @@ export const previewAttendanceImport = adminProcedure
  * the file does **not** mention are left where they are: an import overwrites
  * what it covers, it does not empty the day.
  */
-export const applyAttendanceImport = adminProcedure
+export const applyAttendanceImport = academicProcedure
   .input(attendanceImportInput)
   .handler(async ({ context, input }) => {
     const year = await requireAttendanceAcademicYear(

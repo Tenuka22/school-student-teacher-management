@@ -295,6 +295,29 @@ export const transferSchema = v.object({
 });
 
 /**
+ * `releaseCustody`'s input as a form shape: the successor, required because the
+ * register has no empty-handed state to fall back to.
+ *
+ * **`transferSchema` without the reason, and that is the whole difference
+ * between the two verbs as far as a form is concerned.** The release fixes its
+ * own cause server-side (`returned_to_store`), but it cannot fix *who takes it
+ * now* — `inventory_item.custodian_staff_id` is `NOT NULL`, so an untouched
+ * field has to become a message on the control rather than a null on the wire.
+ * The empty string is "nobody chosen yet" for exactly the reason
+ * `ownershipSchema` gives: there is no third state to encode.
+ */
+export const releaseSchema = v.object({
+  newCustodianStaffId: v.pipe(
+    v.string(),
+    v.minLength(
+      1,
+      "Choose who takes the item — it always lands on a named person"
+    )
+  ),
+  note: v.pipe(v.string(), v.trim(), v.maxLength(500)),
+});
+
+/**
  * `reason` plus the optional note, for the verbs that take nothing else.
  *
  * **One schema for three dialogs, because the pair really is the same shape.**

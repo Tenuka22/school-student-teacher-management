@@ -1,7 +1,9 @@
 "use client";
 
 import type { InferRouterInputs } from "@orpc/server";
+import type { SessionUser } from "@school-student-teacher-management/api/context";
 import type { AppRouter } from "@school-student-teacher-management/api/routers/index";
+import { canSelfServeInventory } from "@school-student-teacher-management/auth/roles";
 import {
   inventoryTransferReasonSchema,
   itemConditionLabel,
@@ -16,14 +18,9 @@ import {
   TabsList,
   TabsTrigger,
 } from "@school-student-teacher-management/ui/components/tabs";
-import {
-  IconCategory,
-  IconPlus,
-  IconRefresh,
-  IconUserOff,
-} from "@tabler/icons-react";
+import { IconCategory, IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouteContext } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import * as v from "valibot";
@@ -67,6 +64,7 @@ import {
 } from "@/components/staff/inventory/stock-dialogs";
 import { formatApiErrorMessage } from "@/lib/api-error";
 import { downloadExportFile } from "@/lib/download-export";
+import type { InventoryWorkspaceBase } from "@/lib/paths";
 import { useActiveYear, yearPath } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
@@ -143,18 +141,17 @@ type ReleaseCustodyInput = InventoryInputs["custody"]["release"];
  * refuse is dropped instead of sent, and the narrowing is what lets the object go
  * straight into `queryOptions` with no cast at all.
  *
- * ## Why there is no `managerStaffId` term here
+ * ## And there is no "no manager" term, because it is not a state
  *
- * `listItems` does accept a `managerStaffId` (`list-items.ts:114`, applied at
- * `:177`), but only as a **staff id** — a "no manager" filter has no wire
- * representation, and a sentinel string such as `"none"` would fail
- * `staffIdSchema` on the way in rather than select the null rows. So the register's
- * "no manager" filter is applied to the loaded page instead (in `useRegisterRows`,
- * below), and the count beside it is a count of the page too. The server-side fix is
- * one input — an `unassignedOnly: v.optional(v.boolean())` beside `lowStockOnly`,
- * filtered with `isNull(inventoryItem.managerStaffId)` — after which the same card
- * could be lifted to its own `limit: 1` count the way `lowStockQuery` is, and this
- * function would carry the term like every other filter.
+ * `listItems` does still accept a `managerStaffId` (`list-items.ts:114`, applied at
+ * `:177`), and the register's filter bar does not offer it, because the column it
+ * would filter on is `NOT NULL`: every item is answerable to a named person from
+ * the moment it is registered. A filter for rows where the manager is null would
+ * match nothing while looking like a real choice, so the control is gone rather
+ * than left permanently empty — a button called "No manager only" that empties the
+ * whole table is worse than no button, and a card reading "0 items with nobody in
+ * charge" tells a storekeeper a question has been closed rather than that the
+ * feature was switched off.
  */
 const toItemsInput = (filters: InventoryFilters) => {
   const condition = filters.condition
@@ -187,113 +184,26 @@ const toItemsInput = (filters: InventoryFilters) => {
 };
 
 /**
- * The register's filters plus the one that has no server-side equivalent.
+ * The rows the table draws: the page `listItems` returned, unchanged.
  *
- * A local extension rather than a change to `InventoryFilters` in
- * `inventory-types.ts`, and the reason is the sentence above: the field has no
- * representation in the wire input, so the type that describes the wire has no
- * business carrying it. `InventoryFilters` is the *request* — the search term and
- * the server-side filters — and `unassignedOnly` is a predicate this page applies to
- * what came back. Folding the second into the first would have been the tidier-looking
- * change and it would have put a browser-side filter in the middle of a translation
- * function whose whole job is describing the request.
+ * **Nothing filters this array in the browser any more, and the name is what it
+ * is because of what it used to do.** There was a client-side "no manager"
+ * predicate here and a card counting its output, and both went with the owner
+ * column's `NOT NULL`: with no item able to have a null `managerStaffId` the
+ * predicate could match nothing while reading as a real choice.
  *
- * `hasActiveInventoryFilters` cannot see this key either, which is why the page ORs
- * it into its own `isFiltered` rather than trusting the shared predicate to notice.
- */
-interface RegisterFilters extends InventoryFilters {
-  /** Client-side: keep only the rows whose `managerStaffId` is null. */
-  unassignedOnly: boolean;
-}
-
-const DEFAULT_REGISTER_FILTERS: RegisterFilters = {
-  ...DEFAULT_INVENTORY_FILTERS,
-  unassignedOnly: false,
-};
-
-/**
- * The rows the table actually renders, and the "no manager" filter over them.
+ * ## `undefined` until a request has answered, and that is the point
  *
- * One memo, because the count and the list have to be derived from the same array:
- * a card that counted the page before it was filtered, beside a table showing the
- * page after, would be two numbers about the same question.
- *
- * ## `rows` is `undefined` until a request has answered, and that is the point
- *
- * It used to coalesce "the request has never come back" into `[]`, and the two
+ * This used to coalesce "the request has never come back" into `[]`, and the two
  * are not the same fact: one is *we do not know* and the other is *there is
  * nothing there*. Coalescing them is what made a failed first load reachable as an
  * empty register — the table's "no items in the register yet" state, with its
  * "Register the first item" button, printed to a storekeeper whose request had
  * simply timed out. The table branches on `items === undefined` to tell the
- * skeleton, the error panel and the two empty states apart, and that branch is only
- * as good as what this hook hands it.
+ * skeleton, the error panel and the two empty states apart, and that branch is
+ * only as good as what it is handed.
  */
-const useRegisterRows = (
-  items: InventoryItemView[] | undefined,
-  unassignedOnly: boolean
-) => {
-  const rows = useMemo(() => {
-    if (items === undefined) {
-      return;
-    }
-
-    if (!unassignedOnly) {
-      return items;
-    }
-
-    return items.filter((row) => row.managerStaffId === null);
-  }, [items, unassignedOnly]);
-
-  /**
-   * The count the "No manager" card shows, and it is a count of the **loaded page**.
-   *
-   * `totalItems` and `lowStockItems` beside it are server totals, so this figure
-   * used to read as the same kind of number while being a different kind entirely:
-   * apply a filter and the card silently became "unassigned items matching your
-   * filter" with nothing on screen saying so. The card's own copy is in
-   * `shared/inventory-stats.tsx` and cannot be corrected from this file, so the
-   * scope is stated where the user acts on it instead — in the sentence beside the
-   * "No manager only" toggle, and in the name of the filter itself.
-   */
-  const unassignedCount = useMemo(
-    () => (items ?? []).filter((row) => row.managerStaffId === null).length,
-    [items]
-  );
-
-  return { rows, unassignedCount };
-};
-
-/**
- * The scope of the client-side "no manager" filter, stated in the user's terms.
- *
- * The card's own hint ("Nobody is accountable for the item") is in
- * `shared/inventory-stats.tsx` and cannot be qualified from this file, and the
- * "showing N of M" line beside it is deliberately kept true (both of its numbers are
- * the filtered set's own). So the one sentence that says *what the number covers* has
- * to live with the control that produced it — and it has to be a sentence rather than
- * a footnote, because the alternative is a store administrator acting on a figure that
- * is a count of the visible page and believing it is a count of the school.
- *
- * The truncation clause is conditional rather than always-present because it is only
- * true when the register is actually truncated, and a warning that is always on is a
- * warning nobody reads.
- */
-const buildUnassignedScopeNote = (
-  shownCount: number,
-  isTruncated: boolean
-): string => {
-  const subject =
-    shownCount === 1
-      ? "The 1 item in these results has"
-      : `All ${shownCount} items in these results have`;
-
-  const truncation = isTruncated
-    ? " The register is also showing only the first page of the store, so the real number can be higher."
-    : "";
-
-  return `${subject} no manager. This filter runs in your browser over the rows already loaded, so it is a subset of what the register returned rather than a count of the whole school.${truncation}`;
-};
+const useRegisterRows = (items: InventoryItemView[] | undefined) => items;
 
 /**
  * The filters in force, as one clause a caption and an empty state can both read.
@@ -324,7 +234,7 @@ const buildUnassignedScopeNote = (
  * above on screen, in the filter bar, for a reader who wants it.
  */
 const describeRegisterFilters = (
-  filters: RegisterFilters,
+  filters: InventoryFilters,
   categories: CategoryOption[]
 ): string => {
   const parts: string[] = [];
@@ -356,10 +266,6 @@ const describeRegisterFilters = (
     parts.push("at or below the reorder level");
   }
 
-  if (filters.unassignedOnly) {
-    parts.push("no manager only");
-  }
-
   if (filters.includeDeleted) {
     parts.push("including retired items");
   }
@@ -372,41 +278,46 @@ const describeRegisterFilters = (
 /**
  * What an `assignManager` call did, in one sentence.
  *
- * Three outcomes and three sentences, because the questions they answer are three:
- * who was appointed, who replaced one, and who decided an item no longer has anybody
- * accountable for it. The clearing outcome is the one this whole feature exists to
- * surface, so it gets the longest sentence of the three rather than a shrug.
+ * Two outcomes, because the owner column is `NOT NULL` and an item can no longer
+ * be left without somebody answerable for it: a first appointment, and a
+ * replacement. The second names who was replaced, because that is the question the
+ * person clicking the button is actually asking — a toast saying only "B is now in
+ * charge" leaves the clerk who just replaced A unsure whether the write landed.
+ *
+ * There used to be a third sentence for the clearing outcome, and the feature used
+ * to argue at length that it was the one worth surfacing. `assignManager` no longer
+ * has that outcome: `manager_staff_id` is `NOT NULL`, `custody-manager-dialog.tsx`
+ * has no clear state left, and `manager_cleared` survives only on historical rows
+ * written before that.
  */
 const managerChangeMessage = (result: {
   managerName: string | null;
   previousManagerName: string | null;
 }): string => {
-  if (result.managerName) {
-    return `${result.managerName} is now in charge of this item`;
+  if (result.managerName && result.previousManagerName) {
+    return `${result.managerName} has taken over from ${result.previousManagerName} as the person in charge of this item`;
   }
 
-  if (result.previousManagerName) {
-    return `${result.previousManagerName} is no longer in charge — this item has no manager until somebody is assigned`;
-  }
-
-  return "The manager slot is empty";
+  return result.managerName
+    ? `${result.managerName} is now in charge of this item`
+    : "The person in charge was changed";
 };
 
 /**
  * Everything the inventory register does, apart from drawing it.
  *
- * The split is the one `use-classes-page.ts` and `use-teachers-page.ts` already set
- * for this app: queries, mutations, dialog state and every handler live in a hook,
- * and the page component below is markup. It lives in this file rather than in a
- * sixth `use-inventory-page.ts` because the file set for this feature was fixed in
- * advance, and where a hook is filed is a file-count preference rather than an
- * architectural one.
+ * The split is the one `use-classes-page.ts` and `use-teachers-register.ts`
+ * already set for this app: queries, mutations, dialog state and every handler
+ * live in a hook, and the page component below is markup. It lives in this
+ * file rather than in a sixth `use-inventory-page.ts` because the file set for
+ * this feature was fixed in advance, and where a hook is filed is a
+ * file-count preference rather than an architectural one.
  */
 export const useInventoryPage = () => {
   const queryClient = useQueryClient();
 
-  const [filters, setFilters] = useState<RegisterFilters>(
-    DEFAULT_REGISTER_FILTERS
+  const [filters, setFilters] = useState<InventoryFilters>(
+    DEFAULT_INVENTORY_FILTERS
   );
   const [selectedItem, setSelectedItem] = useState<InventoryItemView | null>(
     null
@@ -513,21 +424,14 @@ export const useInventoryPage = () => {
   const totalCount = itemsQuery.data?.total;
 
   /**
-   * The rows the table draws, and the count the "No manager" card shows.
-   *
-   * Split out of the stats memo because the two answer different questions: the table
-   * shows the page with this browser's predicate applied, while the card counts the
-   * page exactly as the server returned it — so turning the filter on does not make
-   * the number above the table jump, and the number does not depend on which rows
-   * the filter happens to be keeping.
+   * The rows the table draws — the loaded page, unfiltered, and `undefined` until a
+   * request has answered. `useRegisterRows` above is the whole of that decision and
+   * this alias is the name its callers have always used.
    */
-  const { rows: visibleItems, unassignedCount } = useRegisterRows(
-    items,
-    filters.unassignedOnly
-  );
+  const visibleItems = useRegisterRows(items);
 
   /**
-   * The seven figures, and the honest statement of what each one counts.
+   * The six figures, and the honest statement of what each one counts.
    *
    * `totalItems` is the matched total rather than the page length, because
    * `listItems` returns both and only the former is right for a register with more
@@ -552,7 +456,7 @@ export const useInventoryPage = () => {
     const rows = items ?? [];
 
     /**
-     * Which of the seven figures could not be read, and why that is not a `0`.
+     * Which of the six figures could not be read, and why that is not a `0`.
      *
      * `borrowedUnits` and `lowStockItems` are the two figures that come from their
      * own query rather than from the loaded page, and a failed query left them at
@@ -589,7 +493,6 @@ export const useInventoryPage = () => {
         outOfStockItems: rows.filter((row) => row.status === "out_of_stock")
           .length,
         lowStockItems: lowStockQuery.data?.total ?? 0,
-        unassignedItems: unassignedCount,
       } satisfies InventoryStats,
       /**
        * A query that has failed keeps `isLoading` false forever, so a card row
@@ -616,7 +519,6 @@ export const useInventoryPage = () => {
     lowStockQuery.isError,
     lowStockQuery.isLoading,
     totalCount,
-    unassignedCount,
   ]);
 
   /**
@@ -903,7 +805,7 @@ export const useInventoryPage = () => {
   }, []);
 
   /**
-   * The ids the table's "select all" may tick, and the four numbers the selection
+   * The ids the table's "select all" may tick, and the three numbers the selection
    * bar has to be honest about — one pass over `visibleItems`, because every answer
    * is about the same page of rows and a second pass would only recompute it.
    *
@@ -939,6 +841,18 @@ export const useInventoryPage = () => {
    * bar leads with; `labelableCount` is the number the *action* will touch, so it
    * is the number on the button. The two are equal whenever the reader has not
    * narrowed anything, and the bar says so rather than staying silent about it.
+   *
+   * ## Two buckets now, and the third was a browser-side filter's doing
+   *
+   * There used to be a `hiddenCount` here — ticks held whose row a client-side
+   * predicate had filtered out, printed as "N are hidden by the current filters".
+   * The only filter that could hide a row this way was the "no manager" one, so
+   * with it gone `onScreenSelected` is the whole loaded page and
+   * `onPageSelected` is the same set: the difference is arithmetic on equal
+   * numbers, and a bar that can only ever print "0 hidden" is a control narrating
+   * a state that cannot exist. What remains is a bucket that is genuinely
+   * different: a tick whose row is not in the loaded results at all, because
+   * another clerk retired it or the refetch brought a different page.
    */
   const { selectableIds, selectedItemsForQrSheet, selection } = useMemo(() => {
     const ids: string[] = [];
@@ -952,23 +866,11 @@ export const useInventoryPage = () => {
       }
     }
 
-    /**
-     * Four buckets, and they are exhaustive on purpose.
-     *
-     * `onPageSelected` is the whole set of ticks the server's page still holds;
-     * `onScreenSelected` is the subset this browser's "no manager only" predicate
-     * kept. The difference is hidden, and what is left over — a tick whose row is
-     * not in the loaded results at all, because another clerk retired it or the
-     * refetch brought a different page — is the fourth bucket. A three-bucket split
-     * would leave those ticks in no bucket and the sentence below would add to
-     * fewer than the total, which is the one arithmetic a reader will check.
-     */
     const labelable = onScreenSelected.filter((item) => !item.deletedAt);
     const retired = onScreenSelected.filter((item) => item.deletedAt);
     const onPageCount = (items ?? []).filter((item) =>
       selectedIds.has(item.id)
     ).length;
-    const hidden = Math.max(onPageCount - onScreenSelected.length, 0);
     const missing = Math.max(selectedIds.size - onPageCount, 0);
 
     return {
@@ -978,7 +880,6 @@ export const useInventoryPage = () => {
         selectedCount: selectedIds.size,
         labelableCount: labelable.length,
         retiredCount: retired.length,
-        hiddenCount: hidden,
         missingCount: missing,
       },
     };
@@ -1027,26 +928,17 @@ export const useInventoryPage = () => {
   );
 
   /**
-   * The "No manager" toggle, as a patch like every other filter change.
+   * Clearing everything, which is now a reset of the one filters object.
    *
-   * A patch rather than a boolean so the toggle and the five `<Select>`s and the
-   * search box all reach the register through one setter — which is what lets the
-   * filter bar's `onChange` prop type stay the shape it is, and what stops this one
-   * filter from acquiring its own `useState` and its own reset path.
-   */
-  const handleUnassignedOnlyChange = useCallback((unassignedOnly: boolean) => {
-    setFilters((previous) => ({ ...previous, unassignedOnly }));
-  }, []);
-
-  /**
-   * Clearing everything, `unassignedOnly` included.
-   *
-   * `hasActiveInventoryFilters` cannot see that key — it is not on `InventoryFilters`
-   * — so a reset that left it on would have produced a register the user believed
-   * they had just cleared filters on and had not. It is a reset; it resets.
+   * There was a client-side "no manager" key on top of `InventoryFilters` once, and
+   * this handler had to reach past `hasActiveInventoryFilters` to clear it — a reset
+   * that left a filter on produces a register the user believes they have just
+   * cleared filters on and have not. With that key gone the shared defaults are the
+   * whole of the reset, and the predicate the filter bar uses to show its own
+   * "Clear filters" button is looking at the same object this handler replaces.
    */
   const handleFiltersReset = useCallback(() => {
-    setFilters(DEFAULT_REGISTER_FILTERS);
+    setFilters(DEFAULT_INVENTORY_FILTERS);
   }, []);
 
   const handleRetryItems = useCallback(
@@ -1288,15 +1180,13 @@ export const useInventoryPage = () => {
   const handleManagerSubmit = useCallback(
     async (values: {
       itemId: string;
-      newManagerStaffId: string | null;
+      newManagerStaffId: string;
       reason: string;
       note?: string;
     }) => {
       await assignManagerMutation.mutateAsync({
         itemId: v.parse(inventoryItemIdSchema, values.itemId),
-        newManagerStaffId: values.newManagerStaffId
-          ? v.parse(staffIdSchema, values.newManagerStaffId)
-          : null,
+        newManagerStaffId: v.parse(staffIdSchema, values.newManagerStaffId),
         reason: v.parse(inventoryTransferReasonSchema, values.reason),
         ...(values.note ? { note: values.note } : {}),
       } as AssignManagerInput);
@@ -1305,9 +1195,21 @@ export const useInventoryPage = () => {
   );
 
   const handleHoldSubmit = useCallback(
-    async (values: { itemId: string; note?: string }) => {
+    async (values: {
+      itemId: string;
+      note?: string;
+      newCustodianStaffId?: string;
+    }) => {
       const payload = {
         itemId: v.parse(inventoryItemIdSchema, values.itemId),
+        ...(values.newCustodianStaffId
+          ? {
+              newCustodianStaffId: v.parse(
+                staffIdSchema,
+                values.newCustodianStaffId
+              ),
+            }
+          : {}),
         ...(values.note ? { note: values.note } : {}),
       };
 
@@ -1328,7 +1230,7 @@ export const useInventoryPage = () => {
   /**
    * Dialog visibility, as `handle*` actions rather than raw setters.
    *
-   * `use-teachers-page.ts` established this and the reason holds: the page below is
+   * `teachers-page.tsx` does the same and the reason holds: the page below is
    * markup, and `onCreateOpenChange={setIsCreateOpen}` reads as a raw store setter
    * wired into a prop rather than as "this page opens the create dialog". It also
    * keeps every `set*` out of the returned object, so the page cannot accidentally
@@ -1368,12 +1270,8 @@ export const useInventoryPage = () => {
     categoriesError: categoriesQuery.error,
     isCategoriesLoading: categoriesQuery.isLoading,
     /**
-     * The rows the table draws — the loaded page, with the client-side "no manager"
-     * filter already applied. The table must never be handed the unfiltered page
-     * while the filter is on, or the toggle would appear to do nothing.
-     *
-     * **`undefined` until a request has answered**, and the table reads that
-     * difference: see `useRegisterRows`.
+     * The rows the table draws — the loaded page, unfiltered, and `undefined` until
+     * a request has answered so the table can tell a skeleton from an empty store.
      */
     items: visibleItems,
     totalCount,
@@ -1394,14 +1292,14 @@ export const useInventoryPage = () => {
     /** Retries all three stat reads, because any of them can be the one that failed. */
     handleRetryStats,
     /**
-     * The same predicate the filter bar's own "Clear filters" button uses, plus the
-     * one filter the predicate cannot see. They must be one predicate: the button
-     * appears on the bar and the table picks between its two empty states on this
-     * flag, so a register that cleared its filters and still said "nothing matches
-     * these filters" would be telling the reader to do something they had already
-     * done.
+     * The same predicate the filter bar's own "Clear filters" button uses, which is
+     * now also the whole of it: every filter the register has is a server-side one on
+     * `InventoryFilters`. They must be one predicate, because the button appears on
+     * the bar and the table picks between its two empty states on this flag, so a
+     * register that cleared its filters and still said "nothing matches these
+     * filters" would be telling the reader to do something they had already done.
      */
-    isFiltered: hasActiveInventoryFilters(filters) || filters.unassignedOnly,
+    isFiltered: hasActiveInventoryFilters(filters),
     /**
      * The filters in force, as one clause, for the table's `<caption>` and its
      * no-results state. Built here because this is the only place that holds both
@@ -1412,37 +1310,23 @@ export const useInventoryPage = () => {
     // Filters
     filters,
     handleFiltersChange,
-    handleUnassignedOnlyChange,
     handleFiltersReset,
     handleRetryItems,
     handleRetryCategories,
     /**
-     * The two numbers the "showing N of M" line needs, and **both are the filtered
-     * set's own figures while the client-side filter is on**.
+     * The two numbers the "showing N of M" line needs: the rows the server matched
+     * on this page, and its own count of the rows it matched in total.
      *
-     * `totalCount` is the server's count of the rows it matched, which knows nothing
-     * about a predicate this browser applied afterwards. Handing the bar
-     * `resultCount = 12` beside `totalCount = 340` would print "Showing 12 of 340
-     * items", which is a sentence about nothing. So the moment `unassignedOnly` is
-     * active, both numbers are the filtered page: the line reads "Showing 12 of 12",
-     * which is true, and the sentence beside the toggle
-     * (`buildUnassignedScopeNote`) is what says the twelve are the ones *in the
-     * results on screen* rather than the whole store. The table's own `aria-label`
-     * and truncation check read the same pair, so the sighted and the non-visual
-     * reading cannot disagree either.
+     * Both are the server's figures, which is what they always were once the
+     * browser-side filter went: `totalCount` is the count of the rows behind the
+     * search term and the selects, and `resultCount` is how many of them fit in the
+     * 200-row page. The table's own `aria-label` and truncation check read the same
+     * pair, so the sighted and the non-visual reading cannot disagree. Handing the
+     * bar a `resultCount` that had been filtered again in the browser would print
+     * "Showing 12 of 340" — a sentence about nothing — so this is deliberately the
+     * page length, unmodified.
      */
-    resultCount: filters.unassignedOnly
-      ? (visibleItems?.length ?? 0)
-      : items?.length,
-    registerTotal: filters.unassignedOnly
-      ? (visibleItems?.length ?? 0)
-      : totalCount,
-    /**
-     * The page the server returned, before the client-side predicate. It is the only
-     * one of the three counts that can answer "is the register truncated?", because
-     * `registerTotal` collapses to `resultCount` the moment that predicate is on.
-     */
-    loadedCount: items?.length,
+    resultCount: items?.length,
 
     // Item dialogs
     selectedItem,
@@ -1845,9 +1729,16 @@ const RegisterPaneDialogs = ({ page }: { page: InventoryPageState }) => (
 const InventoryRegisterPane = ({
   page,
   registerLabel,
+  canSelfServe,
 }: {
   page: InventoryPageState;
   registerLabel: string;
+  /**
+   * Passed rather than read here, because the session is the page's to read and
+   * the pane's to draw: this component is the register's markup, and the one
+   * thing it must not decide for itself is who is allowed to press which button.
+   */
+  canSelfServe: boolean;
 }) => (
   <section
     aria-labelledby="inventory-register-heading"
@@ -1859,49 +1750,13 @@ const InventoryRegisterPane = ({
 
     <InventoryStatCards stats={page.stats} isLoading={page.isStatsLoading} />
 
-    {/*
-      The "No manager" card's way in — see the note beside the button.
-
-      It is a toggle rather than a one-shot "show me" for the same reason the
-      filter bar's "Low stock only" is a toggle: it is a *filter*, so it needs
-      an off that the user can see and press, and `aria-pressed` states that
-      without borrowing a checkbox for the state. The icon is the card's own
-      (`IconUserOff` in `shared/inventory-stats.tsx`), so the association
-      between this control and the figure above it is by picture as well as by
-      position.
-    */}
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <Button
-        type="button"
-        variant={page.filters.unassignedOnly ? "default" : "outline"}
-        aria-pressed={page.filters.unassignedOnly}
-        onClick={() =>
-          page.handleUnassignedOnlyChange(!page.filters.unassignedOnly)
-        }
-        data-icon="inline-start"
-      >
-        <IconUserOff data-icon="inline-start" />
-        No manager only
-      </Button>
-      {page.filters.unassignedOnly ? (
-        <p className="text-muted-foreground text-sm">
-          {buildUnassignedScopeNote(
-            page.resultCount ?? 0,
-            page.loadedCount !== undefined &&
-              page.totalCount !== undefined &&
-              page.loadedCount < page.totalCount
-          )}
-        </p>
-      ) : null}
-    </div>
-
     <InventoryFilterBar
       {...page.filters}
       onChange={page.handleFiltersChange}
       onReset={page.handleFiltersReset}
       categories={page.categories}
       resultCount={page.resultCount}
-      totalCount={page.registerTotal}
+      totalCount={page.totalCount}
     />
 
     {/*
@@ -1924,7 +1779,6 @@ const InventoryRegisterPane = ({
         selectedCount={page.selection.selectedCount}
         labelableCount={page.selection.labelableCount}
         retiredCount={page.selection.retiredCount}
-        hiddenCount={page.selection.hiddenCount}
         missingCount={page.selection.missingCount}
         isPending={page.isExportingQrSheet}
         onDownload={page.handleDownloadQrSheet}
@@ -1941,7 +1795,7 @@ const InventoryRegisterPane = ({
     */}
     <InventoryTable
       items={page.items}
-      totalCount={page.registerTotal}
+      totalCount={page.totalCount}
       isLoading={page.isItemsLoading}
       isFiltered={page.isFiltered}
       error={page.itemsError}
@@ -1964,6 +1818,7 @@ const InventoryRegisterPane = ({
       onReclaimCustody={page.handleReclaimCustody}
       onTakeItem={page.handleTakeItem}
       onReleaseCustody={page.handleReleaseCustody}
+      canSelfServe={canSelfServe}
       onEditItem={page.handleEditItem}
       onRetireItem={page.handleRetireItem}
       isRetirePending={page.isRetirePending}
@@ -1979,11 +1834,47 @@ const InventoryRegisterPane = ({
   </section>
 );
 
-export const InventoryPage = ({ section }: { section: InventorySection }) => {
+export const InventoryPage = ({
+  section,
+  base = "/admin",
+}: {
+  section: InventorySection;
+  /**
+   * Which workspace's addresses this copy of the register builds. The same
+   * six routes exist under `/admin/$year/staff/inventory` and
+   * `/inventory-admin/$year/staff/inventory`, and every pane switch navigates,
+   * so a base that stayed hard-coded would drag an Inventory Administrator
+   * back into the administrator's workspace on the first tab click.
+   */
+  base?: InventoryWorkspaceBase;
+}) => {
   const navigate = useNavigate();
   const year = useActiveYear();
   const tab = section === "register" ? "register" : "records";
   const page = useInventoryPage();
+
+  /**
+   * Whether the register should offer the self-service claim and hand-back to
+   * the person looking at it.
+   *
+   * Both verbs sit on `requireInventoryPermission("take")`, and the Inventory
+   * Administrator's grant is the register's minus those two — so without this the
+   * one seat whose workspace *is* the register was shown two menu entries on every
+   * row that answered `Forbidden` for both. `canSelfServeInventory` is the
+   * client-safe copy of that grant (see its comment for why the copy exists and
+   * why the server still decides), and the session's role is the only input it
+   * needs; nothing here is asked of the server per row.
+   *
+   * The `take` grant is held by the three leadership seats, so this is true for
+   * every reader of `/admin/$year/staff/inventory` and false for every reader of
+   * `/inventory-admin/$year/staff/inventory` — which is the same division the
+   * register's own verbs already make: the store's seat moves items with
+   * **Transfer custody** and **Call it back**, both of which it can use.
+   */
+  const { session } = useRouteContext({ from: "/_auth" });
+  const canSelfServe = canSelfServeInventory(
+    (session?.user as SessionUser | undefined)?.role
+  );
 
   /**
    * The table's own name, and it carries the year.
@@ -2006,11 +1897,11 @@ export const InventoryPage = ({ section }: { section: InventorySection }) => {
       void navigate({
         to:
           next === "register"
-            ? yearPath("/admin", year, "staff", "inventory")
-            : yearPath("/admin", year, "staff", "inventory", "loans"),
+            ? yearPath(base, year, "staff", "inventory")
+            : yearPath(base, year, "staff", "inventory", "loans"),
       });
     },
-    [navigate, tab, year]
+    [navigate, tab, year, base]
   );
 
   return (
@@ -2060,7 +1951,11 @@ export const InventoryPage = ({ section }: { section: InventorySection }) => {
         it did before it was mounted inside a tab.
       */}
       <TabsContent value="register" className="text-base/relaxed">
-        <InventoryRegisterPane page={page} registerLabel={registerLabel} />
+        <InventoryRegisterPane
+          page={page}
+          registerLabel={registerLabel}
+          canSelfServe={canSelfServe}
+        />
       </TabsContent>
 
       {/**
@@ -2096,7 +1991,7 @@ export const InventoryPage = ({ section }: { section: InventorySection }) => {
               // rather than reusing the ambiguous short name.
               const segment = next === "register" ? "asset-register" : next;
               void navigate({
-                to: yearPath("/admin", year, "staff", "inventory", segment),
+                to: yearPath(base, year, "staff", "inventory", segment),
               });
             }}
             scrollToLedger={section === "ledger"}

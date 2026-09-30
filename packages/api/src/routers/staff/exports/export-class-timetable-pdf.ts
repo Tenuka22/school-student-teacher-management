@@ -17,7 +17,7 @@ import { and, eq } from "drizzle-orm";
 import type { Content } from "pdfmake/interfaces";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import {
   buildPdfExport,
   formatGeneratedAt,
@@ -36,7 +36,7 @@ const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const UNASSIGNED_COLOR = "#9ca3af";
 
 /** Exports one class's weekly timetable (5 days x 8 periods) as a printable PDF. */
-export const exportClassTimetablePdf = adminProcedure
+export const exportClassTimetablePdf = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

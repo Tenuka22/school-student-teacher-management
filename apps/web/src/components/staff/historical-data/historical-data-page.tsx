@@ -21,11 +21,11 @@ import {
   TabsTrigger,
 } from "@school-student-teacher-management/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
 import { useCallback } from "react";
 import type { ReactNode } from "react";
 
 import { useListSearchWriter } from "@/components/ui-patterns/data-table/use-list-search-writer";
+import { useActiveYear } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
 import {
@@ -142,9 +142,14 @@ const toHistoryTab = (next: unknown): HistoryTab => {
  * happens once per frame anyway.
  */
 const HistoricalDataPage = ({ search }: { search: HistorySearch }) => {
-  const { year } = useParams({
-    from: "/_auth/admin/$year/staff/historical-data",
-  });
+  /**
+   * The `:year` segment, read without naming a route id — this page is mounted
+   * under both `/admin/$year` and `/academic-admin/$year`, and a typed
+   * `useParams({ from })` would have to name one of them and would 404 the
+   * other's params. A missing segment yields `NaN`, which finds no year and
+   * falls into the "Academic year not found" state below.
+   */
+  const year = useActiveYear();
   const yearNumber = Number(year);
   const { tab } = search;
 

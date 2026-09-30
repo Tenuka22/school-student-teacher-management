@@ -48,7 +48,7 @@ import {
   inventoryBorrowUnit,
   inventoryItem,
   inventoryUnit,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { studentIdSchema } from "@school-student-teacher-management/db/schema/marking";
 import { eq, inArray } from "drizzle-orm";
@@ -159,7 +159,7 @@ const borrowAuditSnapshot = (
  * from this one object and the case cannot be lost between the two.
  */
 const borrowerSchema = variant("type", [
-  object({ type: literal("staff"), staffId: userIdSchema }),
+  object({ type: literal("staff"), staffId: staffRefSchema }),
   object({ type: literal("student"), studentId: studentIdSchema }),
 ]);
 
@@ -236,7 +236,6 @@ export const createBorrow = requireInventoryPermission("create")
   )
   .handler(({ input, context }) =>
     context.db.transaction(async (tx) => {
-
       // FOR UPDATE. Two clerks borrowing from the same item at the same moment
       // both read `borrowedQty = 1` and both decide two units are free; only
       // the lock makes the second one see the first one's write.
@@ -337,7 +336,7 @@ export const createBorrow = requireInventoryPermission("create")
           approvedBy: input.approvedBy ?? null,
           note: input.note ?? null,
           status: "borrowed",
-          borrowedByStaffId: actor.userId,
+          borrowedByStaffId: actor.staffId,
           borrowedAt,
           // The four return fields are written `null` explicitly rather than
           // omitted. `inventory_borrow_return_state` requires all four to be

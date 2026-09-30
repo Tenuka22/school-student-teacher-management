@@ -135,6 +135,26 @@ export const ApplyLeaveForm = ({
       startDate: form.startDate,
       endDate: form.endDate,
       reason: form.reason.trim() || undefined,
+      /**
+       * Two fields the procedure requires and this form has no control for, sent
+       * as what a self-service request can honestly claim.
+       *
+       * `dayPart` is `"full"` because the form offers no half-day or
+       * morning/afternoon option — the request is for whole days, which is what
+       * picking a start and an end date means. A teacher who needs half a day
+       * asks the office, and an administrator records it.
+       *
+       * `paymentStatus` is `"notApplicable"` — the column's own default, and the
+       * right answer for a request that has not been assessed. **This form
+       * deliberately does not offer a payment status**: the vocabulary is
+       * `paid` / `halfPay` / `unpaid`, and the second maternity tier
+       * (84 days on full pay and a further 84 at half pay, per person) is a fact
+       * about the College's entitlement rules, not a thing a member of staff
+       * should be able to assert about their own pay. A self-service control here
+       * would be a request to be recorded as unpaid.
+       */
+      dayPart: "full",
+      paymentStatus: "notApplicable",
     });
   };
 

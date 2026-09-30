@@ -41,15 +41,16 @@
  *   produces a page whose meaning changes depending on which of two unrelated
  *   processes last touched the item.
  *
- * ## The envelope, and the empty one
+ * ## The envelope
  *
  * The return shape is `listMyItems`'s exactly — `{ items, total, staffId,
  * staffName }` — so one component and one route guard can serve both pages, and
  * `itemViewJoins` + `toItemView` mean the rows are byte-for-byte the same shape
  * as every other list in this folder. `staffId` and `staffName` are in the
- * envelope rather than derived by the client because a caller with **no** staff
- * row has no items to be lent anything, and that is an honest empty page rather
- * than an error: it now returns the userId (not staffId).
+ * envelope rather than derived by the client so the page can head itself with
+ * whose list it is without a second request — and by the time it is built,
+ * `getInventoryActor` has already refused any caller who has no staff row, so
+ * the ids in it are always real ones.
  */
 import { inventoryItem } from "@school-student-teacher-management/db/schema/inventory";
 import {
@@ -120,7 +121,7 @@ export const listLentByMe = requireInventoryPermission("read")
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
 
-    const { userId } = actor;
+    const { staffId } = actor;
     const search = input.search?.trim();
     const limit = input.limit ?? DEFAULT_LIMIT;
 
@@ -130,14 +131,14 @@ export const listLentByMe = requireInventoryPermission("read")
     const conditions: (SQL | undefined)[] = [
       isNull(inventoryItem.deletedAt),
       // The whole security boundary of this procedure: owned by me.
-      eq(inventoryItem.managerStaffId, userId),
+      eq(inventoryItem.managerStaffId, staffId),
       // ...currently with somebody else. `isNotNull` and `ne` are both needed and
       // neither subsumes the other: `custodianStaffId <> me` alone is `null` for
       // an item sitting unheld in the store, and a `WHERE` that evaluated to
       // `null` would quietly drop every unassigned item the school owns. Written
       // as two terms, it cannot.
       isNotNull(inventoryItem.custodianStaffId),
-      ne(inventoryItem.custodianStaffId, userId),
+      ne(inventoryItem.custodianStaffId, staffId),
       search
         ? or(
             ilike(inventoryItem.name, likePattern(search)),
@@ -167,7 +168,7 @@ export const listLentByMe = requireInventoryPermission("read")
       // list are the same shape and the web app renders them with one component.
       items: rows.map((row) => toItemView(row)),
       total: totalRow?.value ?? 0,
-      staffId: userId,
+      staffId,
       staffName: actor.name,
     };
   });

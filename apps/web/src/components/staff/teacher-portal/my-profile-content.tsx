@@ -75,7 +75,10 @@ export const MyProfileContent = () => {
     ["Name", profile.name],
     ["Badge number", profile.teacherServiceNo ?? "—"],
     ["Email", profile.email ?? "—"],
-    ["NIC", profile.nic ?? "—"],
+    // Bare, and no "—" fallback: `staff.nic` is `NOT NULL`, so a member of staff
+    // reading their own profile always has one to see. The `—` next to the badge
+    // number above is a real absence and stays.
+    ["NIC", profile.nic],
     [
       "Employment status",
       profile.employmentStatus

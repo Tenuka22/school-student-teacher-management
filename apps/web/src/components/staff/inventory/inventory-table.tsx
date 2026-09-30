@@ -115,6 +115,8 @@ export interface InventoryTableProps {
   onReclaimCustody: (item: InventoryItemView) => void;
   onTakeItem: (item: InventoryItemView) => void;
   onReleaseCustody: (item: InventoryItemView) => void;
+  /** Whether the caller's role holds `inventory: ["take"]` — see `InventoryRowProps`. */
+  canSelfServe: boolean;
   onEditItem: (item: InventoryItemView) => void;
   /**
    * Resolves on success and **rejects on a refusal** — a unit still borrowed, issued
@@ -427,19 +429,19 @@ const useOwnerVerbs = (
    * **What the callback gives us, and what it does not.** `TransferOwnershipDialog`
    * reports `{ staffId, name }` for the new owner — both columns, which is the half
    * the "Responsible" cell reads. It does not report the holder, and that is not an
-   * omission in the callback: `transferOwnership` clears `custodianStaffId` in the
-   * same `set` that writes the new manager, and `TransferOwnershipDialogProps.onRecorded`
-   * documents why it reports only the owner. The custody sheet's handler writes the
-   * same two nulls by hand for the same reason, and this is that handler, one layer up.
+   * omission in the callback: `transferOwnership` writes the holder in the same
+   * `set` that writes the new manager, and the holder *is* the new owner — the two
+   * pointers converge on the same person — so this handler can derive the pair from
+   * the owner it was handed. The custody sheet's handler writes the same pair by
+   * hand for the same reason, and this is that handler, one layer up.
    *
    * **A patch rather than a replacement row, and applied to the row rather than to
    * the page's `selectedItem` — that is the difference from the sheet, and it is the
    * point.** The thing that must stop being stale is the *row*, because the row's
-   * menu is what gates "Call it back" on `hasCustodian`. A hand-on clears the
-   * holder, so without this the entry would outlive the write by a few hundred
-   * milliseconds and then open a `ReclaimCustodyDialog` that returns `null` — a menu
-   * item that reliably does nothing, which is the failure this menu has had to remove
-   * before.
+   * menu is what gates "Call it back" on `hasCustodian`. A hand-on leaves the item
+   * held — by the successor — so without this the entry would outlive the write by
+   * a few hundred milliseconds against the wrong holder, which is a menu item that
+   * opens a dialog naming the wrong colleague.
    *
    * `ownershipTarget` rather than a ref, because this is read during a render the
    * dialog's own `onOpenChange(false)` has not yet invalidated: the target is the
@@ -459,8 +461,8 @@ const useOwnerVerbs = (
         patch: {
           managerStaffId: owner.staffId,
           managerName: owner.name,
-          custodianStaffId: null,
-          custodianName: null,
+          custodianStaffId: owner.staffId,
+          custodianName: owner.name,
         },
       });
     },
@@ -468,38 +470,37 @@ const useOwnerVerbs = (
   );
 
   /**
-   * The reclaim's `onRecorded`, and **the name it carries is deliberately dropped.**
+   * The reclaim's `onRecorded`, and the holder it carries is the *new* one.
    *
-   * `ReclaimCustodyDialog` reports `{ name }` — the *previous* holder — and the
-   * feature's own `PartyName` reasoning says a name beside a null pointer is a
-   * different fact from a departed staff record, which it strikes through. Here it
-   * would be simply false: `reclaim-custody.ts` returns `custodianStaffId: null` and
-   * `custodianName: null` together, the name is in the toast and in the trail, and
-   * "nobody — it is in the store" is what the register now says.
-   *
-   * The manager pair is read back off the target rather than restated, because a
-   * reclaim does not touch it: `reclaimCustody`'s `set` is `{ custodianStaffId: null }`
-   * and nothing else, and a patch that re-wrote the owner column would be the code
-   * disagreeing with the dialog's own promise that calling something back is not a
-   * hand-on.
+   * `ReclaimCustodyDialog` reports `{ staffId, name }` — the person in charge,
+   * whom `reclaim-custody.ts` has just set as the recorded holder — which is
+   * exactly the pair this patch needs; the previous holder's name is in the toast
+   * and in the trail, not on the row any more. The manager pair is read back off
+   * the target rather than restated, because a reclaim does not touch it: the whole
+   * point of the dialog is that calling something back is not a hand-on, and a
+   * patch that re-wrote the owner column would be the code disagreeing with its own
+   * promise.
    */
-  const recordReclaim = useCallback(() => {
-    const target = reclaimTarget;
-    if (!target) {
-      return;
-    }
+  const recordReclaim = useCallback(
+    (holder: { staffId: string; name: string | null }) => {
+      const target = reclaimTarget;
+      if (!target) {
+        return;
+      }
 
-    setRecentWrite({
-      source: items,
-      itemId: target.id,
-      patch: {
-        managerStaffId: target.managerStaffId,
-        managerName: target.managerName,
-        custodianStaffId: null,
-        custodianName: null,
-      },
-    });
-  }, [items, reclaimTarget]);
+      setRecentWrite({
+        source: items,
+        itemId: target.id,
+        patch: {
+          managerStaffId: target.managerStaffId,
+          managerName: target.managerName,
+          custodianStaffId: holder.staffId,
+          custodianName: holder.name,
+        },
+      });
+    },
+    [items, reclaimTarget]
+  );
 
   const openOwnership = useCallback(
     (item: InventoryItemView) => {
@@ -567,10 +568,10 @@ const useOwnerVerbs = (
  * claim about two facts the register got wrong for a few hundred milliseconds, and
  * a type that can carry more of the row is a type that will eventually carry a `qty`
  * somebody guessed at. Both of the dialogs that report through `onRecorded` move
- * pointers and nothing else — `transferOwnership` writes `managerStaffId` and clears
- * `custodianStaffId` and `reclaimCustody` writes `custodianStaffId` alone — so these
- * four fields are the entire difference between the row the server has and the row
- * the browser is still holding.
+ * pointers and nothing else — `transferOwnership` writes both pointers onto the new
+ * owner, and `reclaimCustody` moves `custodianStaffId` onto the person in charge —
+ * so these four fields are the entire difference between the row the server has and
+ * the row the browser is still holding.
  */
 interface CustodyPointers {
   managerStaffId: string | null;
@@ -734,6 +735,7 @@ export const InventoryTable = ({
   onReclaimCustody,
   onTakeItem,
   onReleaseCustody,
+  canSelfServe,
   onEditItem,
   onRetireItem,
   isRetirePending,
@@ -960,6 +962,7 @@ export const InventoryTable = ({
                 onReclaimCustody={openReclaim}
                 onTakeItem={onTakeItem}
                 onReleaseCustody={onReleaseCustody}
+                canSelfServe={canSelfServe}
                 onEditItem={onEditItem}
                 onRetireItem={handleOpenRetire}
                 onRestoreItem={handleOpenRestore}

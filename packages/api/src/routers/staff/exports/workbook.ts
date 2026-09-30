@@ -1,6 +1,6 @@
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import { buildExcelExport } from "../../../lib/export";
 
 /**
@@ -36,7 +36,7 @@ const sheetSchema = v.object({
   rows: v.array(v.record(v.string(), v.unknown())),
 });
 
-export const exportWorkbook = adminProcedure
+export const exportWorkbook = academicProcedure
   .input(
     v.object({
       filename: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),

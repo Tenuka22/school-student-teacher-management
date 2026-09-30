@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   pgTable,
   text,
@@ -63,7 +65,16 @@ export const staffPositionIdSchema = v.pipe(
 );
 
 const phoneSchema = optionalNullable(slPhoneSchema);
-const nicSchema = optionalNullable(nicPrimitive);
+/**
+ * Required, not `optionalNullable`, because the column is.
+ *
+ * This is the valibot half of `staff_nic_format`: the format check was already
+ * here and the database had none, so a NIC could reach the row in a shape the
+ * product's own message says it cannot have. Making the field required and the
+ * column `NOT NULL` is the same decision stated twice on purpose — one for the
+ * forms, one for everything that is not a form.
+ */
+const nicSchema = nicPrimitive;
 const isoDateSchema = optionalNullable(isoDatePrimitive);
 
 /** Permanent staff record (not year-dependent). */
@@ -77,8 +88,27 @@ export const staff = pgTable(
     // an unrelated record. NIC (below) is the real unique identity.
     email: text("email"),
 
-    // Personal information (optional - teacher can fill or skip)
-    nic: text("nic").unique(),
+    // Personal information
+    /**
+     * The staff member's National Identity Card number: **required**, unique, and
+     * format-checked in the database by `staff_nic_format`.
+     *
+     * It is the identity this product keys a person on. `usernameForNic` in the
+     * auth package makes it the login username, the unique index makes it one
+     * person per value, and the CHECK makes the value itself real — a column that
+     * accepted any string was accepting a ten-digit number that matched no
+     * identity in the country, which is exactly what three seeded rows held.
+     *
+     * The format is both Sri Lankan shapes, 9 digits + V/X or 12 digits; see
+     * `NIC_FORMAT_SQL` in `./primitives` for the rule and why it is written twice.
+     *
+     * The seeded office seats carry a **synthetic** value from a block no real NIC
+     * can fall in — a Principal is not issued a National Identity Card by this
+     * school. Those keys are unique so the constraint holds, and they are never
+     * used as a login username; `ensureBootstrapAccount` is where they are
+     * defined and why.
+     */
+    nic: text("nic").notNull().unique(),
     phone: text("phone"),
     /** ISO date string */
     birthDate: text("birth_date"),
@@ -154,6 +184,21 @@ export const staff = pgTable(
     index("staff_appointment_type_idx").on(table.appointmentType),
     index("staff_employment_status_idx").on(table.employmentStatus),
     index("staff_teacher_service_no_idx").on(table.teacherServiceNo),
+    /**
+     * The format rule, in the database.
+     *
+     * Every write path in this codebase validates the NIC in TypeScript first —
+     * `nicSchema` in the insert and update schemas below, then three forms and
+     * two procedures on top of that — and the column was still holding values no
+     * identity card has, because a table that does not check its own format
+     * accepts whatever the last writer's validation let through, including a
+     * writer that was a seed script or a hand-run `UPDATE`. The CHECK is not
+     * redundant with the valibot rule: it is the version that cannot be skipped.
+     */
+    check(
+      "staff_nic_format",
+      sql`${table.nic} ~ '^[0-9]{9}[vVxX]$' OR ${table.nic} ~ '^[0-9]{12}$'`
+    ),
   ]
 );
 

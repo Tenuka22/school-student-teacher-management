@@ -74,8 +74,8 @@ export const getItemForScan = requireInventoryPermission("read")
     const isLeadership = ADMIN_ROLES.has(role);
 
     const isInvolved =
-      row.managerStaffId === actor.userId ||
-      row.custodianStaffId === actor.userId;
+      row.managerStaffId === actor.staffId ||
+      row.custodianStaffId === actor.staffId;
 
     const status = calculateItemStatus(countersOf(row), row.condition);
     const isTakeable =
@@ -91,7 +91,7 @@ export const getItemForScan = requireInventoryPermission("read")
     const isRequestable =
       row.borrowable &&
       row.custodianStaffId !== null &&
-      row.custodianStaffId !== actor.userId &&
+      row.custodianStaffId !== actor.staffId &&
       status !== "damaged";
 
     if (!isLeadership && !isInvolved && !isTakeable && !isRequestable) {
@@ -106,8 +106,8 @@ export const getItemForScan = requireInventoryPermission("read")
       // What the scanner offers next, decided server-side so the client never
       // has to re-derive eligibility from raw counters and risk offering a
       // button the mutation behind it would refuse.
-      canTake: isTakeable && row.custodianStaffId !== actor.userId,
-      canHandBack: row.custodianStaffId === actor.userId,
+      canTake: isTakeable && row.custodianStaffId !== actor.staffId,
+      canHandBack: row.custodianStaffId === actor.staffId,
       canRequest: isRequestable,
     };
   });

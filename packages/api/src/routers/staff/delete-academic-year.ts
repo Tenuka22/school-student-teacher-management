@@ -29,7 +29,7 @@ import { teacherSubjectAssignment } from "@school-student-teacher-management/db/
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { adminOrAcademicProcedure } from "../../index";
 
 /**
  * Tables that hold actual user-created data scoped to an academic year.
@@ -66,7 +66,7 @@ const DEPENDENT_TABLES = [
   { table: studentSubjectSelection, label: "student subject selections" },
 ] as const;
 
-export const deleteAcademicYear = adminOnlyProcedure
+export const deleteAcademicYear = adminOrAcademicProcedure
   .input(v.object({ id: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [existing] = await context.db

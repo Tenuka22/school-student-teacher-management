@@ -4,9 +4,9 @@ import {
   getStageForGrade,
 } from "@school-student-teacher-management/db/constants/grades";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
-export const listGrades = adminProcedure.handler(() => {
+export const listGrades = academicProcedure.handler(() => {
   const grades: { level: number; stage: string }[] = [];
   for (const level of GRADE_LEVELS) {
     if (level >= SCHOOL.gradeRange.min && level <= SCHOOL.gradeRange.max) {

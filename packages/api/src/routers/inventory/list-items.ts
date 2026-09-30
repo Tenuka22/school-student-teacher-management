@@ -14,7 +14,7 @@ import { itemConditionSchema } from "@school-student-teacher-management/db/const
 import {
   inventoryCategoryIdSchema,
   inventoryItem,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import type { SQL } from "drizzle-orm";
 import { and, count, desc, eq, ilike, isNull, lte, or, sql } from "drizzle-orm";
@@ -29,12 +29,33 @@ import { itemViewJoins, toItemView } from "./inventory-database";
 const DEFAULT_LIMIT = 200;
 
 /**
- * The three leadership seats, restated from `ADMIN_ROLES` in
- * `packages/api/src/index.ts:77` rather than imported — that list is module
- * private there, and a second copy with a pointer is cheaper than widening a
- * module's public surface for one filter guard.
+ * The seats that may see retired records, restated from the two guard lists in
+ * `packages/api/src/index.ts` rather than imported — those are module private
+ * there, and a second copy with a pointer is cheaper than widening a module's
+ * public surface for one filter guard.
+ *
+ * **`inventoryAdmin` is in this set, and it was missing while the seat could
+ * already restore what the flag hides.** `restoreItem` and `unvoidItem` both sit
+ * on `inventoryManagerProcedure`, which admits `admin` and `inventoryAdmin`. So
+ * the Inventory Administrator could be handed a retired item's id, restore it,
+ * and never once be able to *see* the row — the register's own "Show retired"
+ * toggle came back `FORBIDDEN` for the one seat whose workspace is that
+ * register. The control was visible and refused, which is the failure mode this
+ * codebase's own comments keep naming: a control that reliably fails is the same
+ * defect as one that opens nothing.
+ *
+ * The gate stays a gate. A teacher holding `inventory: ["read", "take",
+ * "manageOwn"]` still cannot widen the register to every record the school has
+ * ever dropped from it, and neither can a borrowed manager of somebody else's
+ * item — this is about *which seat*, not about *whose row*, exactly as the
+ * leadership-only rule was before it.
  */
-const ADMIN_ROLES = new Set(["admin", "principal", "vicePrincipal"]);
+const RETIRED_RECORD_ROLES = new Set([
+  "admin",
+  "principal",
+  "vicePrincipal",
+  "inventoryAdmin",
+]);
 
 /**
  * The four derived statuses. The list is `satisfies` the `InventoryItemStatus`
@@ -89,7 +110,7 @@ const escapeLikePattern = (value: string): string =>
  * teacher-reachable: the `teacher` role holds `inventory: ["read"]`
  * (`packages/auth/src/permissions.ts`), and `requirePermission` in
  * `packages/api/src/index.ts` consults that statement for anybody outside
- * `ADMIN_ROLES`. A teacher can therefore pass that gate, and this list is the
+ * the role tiers that reach this file. A teacher can therefore pass that gate, and this list is the
  * whole item register — every item in the school, with every manager's and
  * custodian's name, valuation, location and condition beside it. That is other
  * people's business, and no filter on the input can fix it: a caller who wants
@@ -110,8 +131,8 @@ export const listItems = inventoryOverseerProcedure
       categoryId: v.optional(inventoryCategoryIdSchema),
       condition: v.optional(itemConditionSchema),
       status: v.optional(itemStatusSchema),
-      custodianStaffId: v.optional(userIdSchema),
-      managerStaffId: v.optional(userIdSchema),
+      custodianStaffId: v.optional(staffRefSchema),
+      managerStaffId: v.optional(staffRefSchema),
       lowStockOnly: v.optional(v.boolean()),
       includeDeleted: v.optional(v.boolean()),
       limit: v.optional(
@@ -120,7 +141,7 @@ export const listItems = inventoryOverseerProcedure
     })
   )
   .handler(async ({ input, context }) => {
-    // ─── The one admin-only filter ──────────────────────────────────────────
+    // ─── The one seat-restricted filter ─────────────────────────────────────
     // Everything else in this input is a narrowing of a read that the
     // `inventory:read` grant already covers: a storekeeper and a teacher both
     // legitimately see the same rows, and none of the remaining filters reveal
@@ -129,12 +150,14 @@ export const listItems = inventoryOverseerProcedure
     // in the school at once, including the ones whose names, valuations and
     // holders were dropped from the working register on purpose. A
     // per-item override would be worthless as a control (the caller would simply
-    // ask for the whole set), so the flag is gated on the leadership roles
-    // alone. `deletedAt` still comes back on every row, so the UI can mark a
-    // retired record as retired rather than resurrecting it by accident.
+    // ask for the whole set), so the flag is gated on the seats that administer
+    // the register: the three leadership roles and the Inventory Administrator,
+    // who is the one seat that can act on a retired row (`restoreItem`,
+    // `unvoidItem`). `deletedAt` still comes back on every row, so the UI can
+    // mark a retired record as retired rather than resurrecting it by accident.
     if (input.includeDeleted) {
       const role = context.session?.user.role ?? "";
-      if (!ADMIN_ROLES.has(role)) {
+      if (!RETIRED_RECORD_ROLES.has(role)) {
         throw new ORPCError("FORBIDDEN", {
           message: "Only an administrator can view retired inventory records",
         });

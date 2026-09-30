@@ -49,7 +49,8 @@ const NoYearYet = () => (
  * outlet, which meant a College with no open year locked *every* signed-in
  * person out of the one page they can always use, and showed a teacher the
  * "Create your first academic year" form — a form whose procedure is
- * administrator-only.
+ * `adminOrAcademicProcedure` (`packages/api/src/index.ts`), held by the top
+ * administrator and the Academic Administrator alone.
  */
 export const AcademicYearGate = ({
   children,
@@ -59,7 +60,11 @@ export const AcademicYearGate = ({
   const queryClient = useQueryClient();
   const { session } = useRouteContext({ from: "/_auth" });
   const role = (session?.user as SessionUser | undefined)?.role;
-  const canOpenAYear = role === "admin";
+  // The same two roles the bootstrap form's procedure admits, so nobody is
+  // shown a form the server would refuse — and, just as importantly, a
+  // College with no year still shows `NoYearYet` to everyone else rather
+  // than a button they cannot press.
+  const canOpenAYear = role === "admin" || role === "academicAdmin";
 
   const yearsQuery = useQuery(orpc.staff.listAcademicYears.queryOptions());
   const setCurrentMutation = useMutation(

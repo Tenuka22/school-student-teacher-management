@@ -243,8 +243,6 @@ export interface RegisterSelectionBarProps {
   labelableCount: number;
   /** Ticks on retired rows: nothing is left to scan into them. */
   retiredCount: number;
-  /** Ticks on rows the current filters have moved off the page. */
-  hiddenCount: number;
   /** Ticks whose rows are not in the loaded results at all. */
   missingCount: number;
   isPending: boolean;
@@ -263,15 +261,22 @@ export interface RegisterSelectionBarProps {
  *
  * ## Why the blocked counts are broken out rather than summed
  *
- * "3 of 5" is true and actionable and does not tell a reader which two. They are
- * blocked for three unrelated reasons that need three different fixes: a retired
- * row is never labelable again (it is off the register — turn "Show retired" off,
- * or restore the row), a hidden row is perfectly labelable and is just not on
- * this page (widen the filter), and a row that is not in the loaded results at
- * all belongs to neither conversation. The sentence is assembled from the
- * non-zero buckets so it **always adds up to the count in the button** — a
- * reconciliation that does not add up is worse than none, because it is the one
- * number on the screen a reader is most likely to check.
+ * "3 of 5" is true and actionable and does not tell a reader which three. They are
+ * blocked for two unrelated reasons that need two different fixes: a retired row is
+ * never labelable again (it is off the register — turn "Show retired" off, or
+ * restore the row), and a row that is not in the loaded results at all belongs to
+ * neither conversation. The sentence is assembled from the non-zero buckets so it
+ * **always adds up to the count in the button** — a reconciliation that does not
+ * add up is worse than none, because it is the one number on the screen a reader is
+ * most likely to check.
+ *
+ * **There was a third bucket — "hidden by the current filters" — and it was
+ * always zero.** The only filter that moved a row off the page without un-ticking
+ * it was the browser-side "no manager" predicate, which went with the owner
+ * column's `NOT NULL`; a bucket that can only ever report 0 is a control narrating
+ * a state that cannot exist, and a sentence that spends half its length on
+ * "widen the filter" for a filter the register no longer has is a smaller lie but
+ * still a lie about what the feature does.
  *
  * **Selection survives a refetch because it is keyed by id**, so a refetch that
  * replaces the array does not un-tick anything — and a row that has genuinely
@@ -286,7 +291,6 @@ export const RegisterSelectionBar = ({
   selectedCount,
   labelableCount,
   retiredCount,
-  hiddenCount,
   missingCount,
   isPending,
   onDownload,
@@ -299,11 +303,6 @@ export const RegisterSelectionBar = ({
   if (retiredCount > 0) {
     reasons.push(
       `${retiredCount} ${plural(retiredCount, "is", "are")} retired, so there is nothing left to scan into ${retiredCount === 1 ? "it" : "them"}`
-    );
-  }
-  if (hiddenCount > 0) {
-    reasons.push(
-      `${hiddenCount} ${plural(hiddenCount, "is", "are")} hidden by the current filters`
     );
   }
   if (missingCount > 0) {

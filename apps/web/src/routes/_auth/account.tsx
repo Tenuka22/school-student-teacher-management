@@ -1,5 +1,8 @@
 import type { SessionUser } from "@school-student-teacher-management/api/context";
-import { isSeededAccount } from "@school-student-teacher-management/auth/roles";
+import {
+  isSeededAccount,
+  roleLabel,
+} from "@school-student-teacher-management/auth/roles";
 import {
   Avatar,
   AvatarFallback,
@@ -13,13 +16,13 @@ import { PasswordDialog } from "@/components/account/password-dialog";
 import { getAvatarFallback } from "@/components/nav-user";
 import { pageHead } from "@/lib/page-title";
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Administrator",
-  principal: "Principal",
-  vicePrincipal: "Deputy Principal",
-  teacher: "Teacher",
-  user: "User",
-};
+/*
+ * No local role-label map: `roleLabel` is the shared one
+ * (`packages/auth/src/roles.ts`), and this page's own copy of it had already
+ * fallen behind — it had no entry for either specialist seat, so the Academic
+ * Administrator's own profile would have printed the raw `academicAdmin`
+ * string in the two places below.
+ */
 
 const PasswordSection = ({
   email,
@@ -80,7 +83,7 @@ const ProfileHeader = ({ user }: { user: SessionUser | undefined }) => (
     </h2>
     <p className="text-primary/60 mt-0.5 text-sm">{user?.email ?? "\u2014"}</p>
     <span className="border-primary/30 text-primary mt-3 border px-3 py-1 text-xs font-extrabold tracking-[0.1em]">
-      {(ROLE_LABELS[user?.role ?? "user"] ?? user?.role ?? "").toUpperCase()}
+      {roleLabel(user?.role).toUpperCase()}
     </span>
   </div>
 );
@@ -100,7 +103,7 @@ const profileFields = (user: SessionUser | undefined) => [
   { label: "USERNAME", value: user?.username ?? "\u2014" },
   {
     label: "ROLE",
-    value: ROLE_LABELS[user?.role ?? "user"] ?? user?.role ?? "\u2014",
+    value: roleLabel(user?.role),
   },
   { label: "EMAIL VERIFIED", value: user?.emailVerified ? "Yes" : "Not yet" },
   {

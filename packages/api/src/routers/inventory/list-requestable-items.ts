@@ -56,8 +56,7 @@ export const listRequestableItems = requireInventoryPermission("read")
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
 
-
-    const { userId } = actor;
+    const { staffId } = actor;
     const limit = input.limit ?? DEFAULT_LIMIT;
     const search = input.search?.trim();
 
@@ -83,7 +82,7 @@ export const listRequestableItems = requireInventoryPermission("read")
           isNull(inventoryItem.deletedAt),
           eq(inventoryItem.borrowable, true),
           isNotNull(inventoryItem.custodianStaffId),
-          ne(inventoryItem.custodianStaffId, userId),
+          ne(inventoryItem.custodianStaffId, staffId),
           search
             ? or(
                 ilike(inventoryItem.name, `%${escapeLikePattern(search)}%`),

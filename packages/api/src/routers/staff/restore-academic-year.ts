@@ -6,7 +6,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { adminOrAcademicProcedure } from "../../index";
 
 /**
  * The inverse of `deleteAcademicYear`, and the reason a soft delete is soft
@@ -21,7 +21,7 @@ import { adminOnlyProcedure } from "../../index";
  * for any of those pickers to offer. Restoring is therefore just clearing the
  * one column that hid it.
  */
-export const restoreAcademicYear = adminOnlyProcedure
+export const restoreAcademicYear = adminOrAcademicProcedure
   .input(v.object({ id: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [existing] = await context.db

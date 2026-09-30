@@ -79,7 +79,7 @@ export const listMyItems = requireInventoryPermission("read")
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
 
-    const { userId } = actor;
+    const { staffId } = actor;
     const search = input.search?.trim();
     const limit = input.limit ?? DEFAULT_LIMIT;
 
@@ -90,8 +90,8 @@ export const listMyItems = requireInventoryPermission("read")
       isNull(inventoryItem.deletedAt),
       // The whole security boundary of this procedure.
       or(
-        eq(inventoryItem.managerStaffId, userId),
-        eq(inventoryItem.custodianStaffId, userId)
+        eq(inventoryItem.managerStaffId, staffId),
+        eq(inventoryItem.custodianStaffId, staffId)
       ),
       search
         ? or(
@@ -116,7 +116,7 @@ export const listMyItems = requireInventoryPermission("read")
       itemViewJoins(context.db)
         .where(where)
         .orderBy(
-          sql`case when ${inventoryItem.managerStaffId} = ${userId} then 0 else 1 end`,
+          sql`case when ${inventoryItem.managerStaffId} = ${staffId} then 0 else 1 end`,
           asc(inventoryItem.name)
         )
         .limit(limit),
@@ -129,7 +129,7 @@ export const listMyItems = requireInventoryPermission("read")
       // with one component.
       items: rows.map((row) => toItemView(row)),
       total: totalRow?.value ?? 0,
-      staffId: userId,
+      staffId,
       staffName: actor.name,
     };
   });

@@ -33,9 +33,12 @@ export const uploadQualification = requireQualificationPermission("create")
     })
   )
   .handler(async ({ input, context }) => {
-    const canManageAny = ["admin", "principal", "vicePrincipal"].includes(
-      context.session.user.role ?? ""
-    );
+    const canManageAny = [
+      "admin",
+      "principal",
+      "vicePrincipal",
+      "academicAdmin",
+    ].includes(context.session.user.role ?? "");
     let targetStaffId: string | undefined = input.staffId;
 
     if (!canManageAny) {

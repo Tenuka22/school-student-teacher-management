@@ -50,6 +50,13 @@
       "when": 1790530200131,
       "tag": "0006_condemned_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790741506473,
+      "tag": "0007_quiet_mother_askani",
+      "breakpoints": true
     }
   ]
 }

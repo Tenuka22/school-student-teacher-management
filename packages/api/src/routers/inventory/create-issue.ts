@@ -230,7 +230,7 @@ export const createIssue = inventoryManagerProcedure
             // staff row" case left to be null here. `actor.name` is still
             // carried on the ledger/audit rows separately, for the departure
             // case: the account itself can still be deleted later.
-            issuedByStaffId: actor.userId,
+            issuedByStaffId: actor.staffId,
             issuedAt,
           })
           .returning();

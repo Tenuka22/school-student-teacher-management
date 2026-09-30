@@ -30,20 +30,20 @@
  */
 import { ORPCError } from "@orpc/server";
 import { inventoryBorrowStatusSchema } from "@school-student-teacher-management/db/constants/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryBorrow,
   inventoryBorrowUnit,
   inventoryItem,
   inventoryItemIdSchema,
   inventoryUnit,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import {
   student,
   studentIdSchema,
 } from "@school-student-teacher-management/db/schema/marking";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import {
   and,
   asc,
@@ -98,7 +98,7 @@ import type { InventoryBorrower } from "./inventory-database";
  * batched in instead, which is also the only version of this read that stays a
  * constant number of queries at fifty rows.
  */
-const issuedByStaff = alias(user, "issued_by_staff");
+const issuedByStaff = alias(staff, "issued_by_staff");
 
 /**
  * The one definition of "this loan is late", reused as a filter, as a rendered
@@ -204,7 +204,7 @@ const listBorrowsInput = object({
    * because one of them sends the clerk to the roll to check they picked the
    * right child and the other sends them to the filter box.
    */
-  borrowerStaffId: optional(userIdSchema),
+  borrowerStaffId: optional(staffRefSchema),
   borrowerStudentId: optional(studentIdSchema),
   status: optional(inventoryBorrowStatusSchema),
   /** Open loans whose due date has passed. See `isOverdueExpression`. */

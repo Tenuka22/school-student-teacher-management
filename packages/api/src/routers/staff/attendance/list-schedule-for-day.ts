@@ -8,7 +8,7 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 
 /**
  * Every teacher's scheduled periods on one weekday (Monday-Friday) for an
@@ -17,7 +17,7 @@ import { adminProcedure } from "../../../index";
  * `listTeacherTimetable` call per row. One row per named teacher, so a
  * co-taught subject-slot yields one row per teacher on it.
  */
-export const listScheduleForDay = adminProcedure
+export const listScheduleForDay = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

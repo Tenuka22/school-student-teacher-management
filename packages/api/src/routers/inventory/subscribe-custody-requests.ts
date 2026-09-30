@@ -21,8 +21,7 @@ export const subscribeCustodyRequests = requireInventoryPermission(
 ).handler(async function* subscribeCustodyRequests({ context, signal }) {
   const actor = await getInventoryActor(context);
 
-
-  const iterator = custodyRequestEvents.subscribe(actor.userId, { signal });
+  const iterator = custodyRequestEvents.subscribe(actor.staffId, { signal });
 
   for await (const event of iterator) {
     yield event satisfies CustodyRequestEvent;

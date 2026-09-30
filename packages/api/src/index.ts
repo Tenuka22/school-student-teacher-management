@@ -79,14 +79,46 @@ const ADMIN_ROLES = ["admin", "principal", "vicePrincipal"];
 export const adminProcedure = publicProcedure.use(requireRole(...ADMIN_ROLES));
 
 /**
- * School-wide writes that only the administrator makes.
+ * The academic desk's procedures: `ADMIN_ROLES` **plus** the seeded
+ * `academicAdmin` seat.
  *
- * Switching the active academic year, opening or removing a year, seeding the
- * establishment, editing the attendance policy and setting leave quotas are not
- * per-class edits — each one changes what the whole school believes is true.
- * The leadership seats can read the ledger and act on their own queues (see
- * `leaves.leadershipReview`), but they do not get to move the goalposts for
- * everyone else, so these sit above `adminProcedure`.
+ * Leadership keeps every read it had before this tier existed — `ADMIN_ROLES`
+ * is a subset — so widening a staff-router procedure from `adminProcedure` to
+ * `academicProcedure` grants exactly one new audience and nothing else. What
+ * the seat does **not** get is listed by omission: `assignPosition` /
+ * `removePosition` stay on `adminProcedure` because they mint the
+ * `principal` / `vicePrincipal` role itself, and the `adminOnlyProcedure`
+ * family stays above it.
+ */
+export const academicProcedure = publicProcedure.use(
+  requireRole(...ADMIN_ROLES, "academicAdmin")
+);
+
+/**
+ * School-wide switches the academic desk shares with the top administrator:
+ * opening, closing, restoring and switching academic years, and editing the
+ * attendance policy.
+ *
+ * Narrower than `academicProcedure` the same way `adminOnlyProcedure` is
+ * narrower than `adminProcedure`: these change what the whole school believes
+ * is true, so the leadership seats — who can read every ledger but do not move
+ * the goalposts — are deliberately not on this list, and neither is
+ * `inventoryAdmin`.
+ */
+export const adminOrAcademicProcedure = publicProcedure.use(
+  requireRole("admin", "academicAdmin")
+);
+
+/**
+ * School-wide writes that only the top administrator makes.
+ *
+ * Setting leave quotas changes what every member of staff is entitled to, and
+ * it is the one switch in this family that no other seat shares — opening,
+ * switching and removing academic years, and editing the attendance policy,
+ * moved down to `adminOrAcademicProcedure` when the academic desk got its own
+ * workspace. The leadership seats can read the ledger and act on their own
+ * queues (see `leaves.leadershipReview`), but they do not get to move the
+ * goalposts for everyone else, so these still sit above `adminProcedure`.
  */
 export const adminOnlyProcedure = publicProcedure.use(requireRole("admin"));
 

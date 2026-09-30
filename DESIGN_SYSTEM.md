@@ -16,7 +16,7 @@ Defined in `packages/ui/src/styles/globals.css` and exposed as Tailwind colours 
 ### Colour
 
 | Token | Value | Use |
-|---|---|---|
+| --- | --- | --- |
 | `primary` / `foreground` | `#013405` | Text, primary buttons, table headers |
 | `primary-hover` | `#064A12` | Hover on primary fills |
 | `primary-foreground` | `#FFF8E7` | Text on green |
@@ -26,7 +26,7 @@ Defined in `packages/ui/src/styles/globals.css` and exposed as Tailwind colours 
 | `muted-foreground` | green at 70% (5.4:1) | Secondary text, placeholders |
 | `accent` | `#FFB203` | Gold. **Only on green or dark surfaces** (1.7:1 on cream) |
 | `accent-hover` | `#FFD45A` | Hover on gold fills |
-| `gold-text` | `#936500` (4.8:1) | Gold-coloured *text* on light surfaces, e.g. eyebrows |
+| `gold-text` | `#936500` (4.8:1) | Gold-coloured _text_ on light surfaces, e.g. eyebrows |
 | `destructive` / `destructive-foreground` | `#A51919` / cream | Errors, destructive actions |
 | `success` | `#2E7D32` | Positive status |
 | `surface-deep` | `#04220A` | Landing, 404 and auth brand panels |
@@ -47,7 +47,7 @@ A few deliberate exceptions remain: the signup page's lighter green "user accoun
 **Roles.** Use the `type-*` utilities from `globals.css`. Each one sets family, size, leading, weight and tracking together. They are not `text-*` classes, so `cn()` never drops a colour class next to them.
 
 | Role | Class | Result |
-|---|---|---|
+| --- | --- | --- |
 | Display (landing, 404) | `type-display` | Cormorant 600, 40–72px fluid, 1.02 |
 | Page title | `type-page-title` (via `PageHeader`) | Cormorant 600, 30–40px fluid, 1.1 |
 | Section title | `type-section-title` | Manrope 700, 19–22px, 1.3, −0.018em |
@@ -64,7 +64,7 @@ A few deliberate exceptions remain: the signup page's lighter green "user accoun
 
 **Uppercase:** only through `type-eyebrow`, table headers (primitive default: 12px, 600, 0.06em; green header bars use `text-xs font-bold tracking-[0.08em]`) and short status chips. Write the source text in sentence case and let CSS uppercase it. Never type labels, buttons or button states in capitals.
 
-**Responsive:** the display steps are fluid by viewport *width*. Never size text by `vh`, because it shrinks on short laptop screens and zoomed windows. Fix wrapping and layout rather than shrinking body text.
+**Responsive:** the display steps are fluid by viewport _width_. Never size text by `vh`, because it shrinks on short laptop screens and zoomed windows. Fix wrapping and layout rather than shrinking body text.
 
 ### Layout and layers
 
@@ -94,7 +94,7 @@ shadcn "base-lyra" on Base UI. Relevant defaults:
 ## Patterns (`apps/web/src/components/ui-patterns`)
 
 | Pattern | Use it for |
-|---|---|
+| --- | --- |
 | `PageHeader` | Every page's heading: `eyebrow`, `title`, `description`, `actions` |
 | `FormDialog` | Create/edit dialogs: fixed header, scrolling body, fixed footer; submit targets the form by `formId` |
 | `ConfirmDialog` | Any confirmation in front of an action. Pass `isPending`: it disables both buttons and blocks dismissal while the mutation runs. `tone="destructive"` for deletions |
@@ -130,7 +130,7 @@ shadcn "base-lyra" on Base UI. Relevant defaults:
 ## Copy
 
 - Sentence case for buttons, titles and labels ("Add teacher", "Save changes"). Uppercase only through the eyebrow and table-header styles.
-- One verb per action across the app: *Add* (create), *Save changes* (edit), *Delete* (remove a record), *Unassign* (clear a slot).
+- One verb per action across the app: _Add_ (create), _Save changes_ (edit), _Delete_ (remove a record), _Unassign_ (clear a slot).
 - In-progress labels use a typographic ellipsis: "Saving…".
 - Show enum values through their labels (e.g. `GENDER_LABELS`), never raw values.
 

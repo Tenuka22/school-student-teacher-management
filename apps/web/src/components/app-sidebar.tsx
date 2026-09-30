@@ -143,28 +143,35 @@ const resolveSidebarYear = (
 };
 
 /** The member's workspace root and label. */
-const resolveHome = (
-  isAdmin: boolean,
-  isPrincipal: boolean,
-  isDeputy: boolean,
-  isInventoryAdmin: boolean
-): { base: HomeBase; title: string } => {
-  if (isPrincipal) {
+const resolveHome = (flags: {
+  isAdmin: boolean;
+  isPrincipal: boolean;
+  isDeputy: boolean;
+  isInventoryAdmin: boolean;
+  isAcademicAdmin: boolean;
+}): { base: HomeBase; title: string } => {
+  if (flags.isPrincipal) {
     return { base: "/principal", title: "Principal's Desk" };
   }
-  if (isDeputy) {
+  if (flags.isDeputy) {
     return { base: "/deputy-principal", title: "Deputy's Desk" };
   }
-  if (isAdmin) {
+  if (flags.isAdmin) {
     return { base: "/admin", title: "Admin Dashboard" };
   }
-  // The Inventory Administrator has no dashboard of its own \u2014 every other
-  // widget on `/admin/$year` (staff roster, class roster, leave queue) runs on
-  // `adminProcedure`, which this seat does not hold, so landing there would
+  // The Academic Administrator's desk is the year itself — staff, classes,
+  // timetable — so it lands on its own overview rather than on any one page
+  // of it.
+  if (flags.isAcademicAdmin) {
+    return { base: "/academic-admin", title: "Academic Dashboard" };
+  }
+  // The Inventory Administrator has no dashboard of its own — every other
+  // widget on an overview page (staff roster, class roster, leave queue) runs
+  // on `adminProcedure`, which this seat does not hold, so landing there would
   // paint several broken widgets. The register itself is this seat's whole
   // job, so it is also its home.
-  if (isInventoryAdmin) {
-    return { base: "/admin", title: "Inventory Register" };
+  if (flags.isInventoryAdmin) {
+    return { base: "/inventory-admin", title: "Inventory Register" };
   }
   return { base: "/teacher", title: "My Dashboard" };
 };
@@ -189,6 +196,7 @@ const useSidebarRole = (user: AppSidebarProps["user"]) => {
     isPrincipal: role === "principal",
     isLeader: role === "principal" || role === "vicePrincipal",
     isInventoryAdmin: role === "inventoryAdmin",
+    isAcademicAdmin: role === "academicAdmin",
     currentYear,
     // Every workspace link below is built from the active year, so until this
     // read lands the links are not yet the ones that will be rendered. The
@@ -246,6 +254,7 @@ interface SidebarGroupsProps {
   isAdmin: boolean;
   isLeader: boolean;
   isInventoryAdmin: boolean;
+  isAcademicAdmin: boolean;
   usersUrl: string;
   staffRequestsUrl: string;
   staffRequestsCount?: string;
@@ -291,6 +300,7 @@ const SidebarGroups = ({
   isAdmin,
   isLeader,
   isInventoryAdmin,
+  isAcademicAdmin,
   usersUrl,
   staffRequestsUrl,
   staffRequestsCount,
@@ -356,6 +366,37 @@ const SidebarGroups = ({
     );
   }
 
+  /*
+   * The Academic Administrator gets the same four groups as the administrator
+   * minus the two the seat cannot use: no "My Workspace" (the seeded account
+   * owns and borrows nothing, exactly like `admin` — see `ADMIN_SELF_NAV`)
+   * and no "Inventory" group (`academicAdmin` holds no inventory grant, so
+   * every one of those six links would 403). Everything else — accounts,
+   * staffing requests, the staff management set and the academic year desk —
+   * is `academicProcedure` or `adminOrAcademicProcedure` work, which this seat
+   * holds; the URLs are simply built from its own workspace.
+   */
+  if (isAcademicAdmin) {
+    return (
+      <>
+        <NavMain label="Platform" items={platformNav} />
+        <NavMain
+          label="Admin"
+          items={[
+            { title: "Users", url: usersUrl },
+            {
+              title: "Staff Requests",
+              url: staffRequestsUrl,
+              count: staffRequestsCount,
+            },
+          ]}
+        />
+        <NavMain label="Staff Management" items={staffNav} />
+        <NavMain label="Academic" items={academicNav} />
+      </>
+    );
+  }
+
   return (
     <>
       <NavMain label="Platform" items={platformNav} />
@@ -366,22 +407,43 @@ const SidebarGroups = ({
   );
 };
 
-export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
+/**
+ * Every nav group this sidebar can render, and the flags that choose between
+ * them, resolved for one audience.
+ *
+ * This is the whole of `AppSidebar`'s body moved out under a hook name: the
+ * component is now the shell it always claimed to be (brand, switcher, groups,
+ * account menu), and the role branching, the badge reads and the six link
+ * arrays live here. Two reasons for the seam rather than an inline block: the
+ * grouping rules differ per audience and belong with the arrays they constrain,
+ * and a shell that stays under the size where a reader can hold it in one go
+ * is the point of the split in the first place.
+ */
+const useSidebarNav = (user: AppSidebarProps["user"]) => {
   // Admins get the full staff-management nav; teachers (and anyone else)
   // get their personal workspace links instead.
   // Leadership carries its own seeded role (`principal` / `vicePrincipal`)
   // and is confined to its own workspace, so `isAdmin` here means strictly
-  // the non-leadership admin account — which is also exactly the tier the
-  // academic-year writes sit on (`adminOnlyProcedure` is `requireRole("admin")`).
+  // the non-leadership admin account — which is no longer the same set as
+  // the academic-year writes: those moved to `adminOrAcademicProcedure`, so
+  // the switcher below asks `managesStaff` rather than `isAdmin`.
+  // `isAcademicAdmin` is the specialist seat that shares the staff-management
+  // set from its own workspace: same pages, same queries, different tree.
   const {
     isAdmin,
     isDeputy,
     isLeader,
     isPrincipal,
     isInventoryAdmin,
+    isAcademicAdmin,
     currentYear,
     yearsPending,
   } = useSidebarRole(user);
+
+  // The two seats that administer the school's staff rather than its
+  // property: they build the same group of links, each from its own workspace
+  // root, and they share every badge read below.
+  const managesStaff = isAdmin || isAcademicAdmin;
 
   const { year, selectedYear, currentYearId, workspaceLink } =
     useSidebarYear(currentYear);
@@ -392,13 +454,13 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     ...orpc.staff.listStaff.queryOptions({
       input: { academicYearId: currentYearId },
     }),
-    enabled: isAdmin && Boolean(currentYear),
+    enabled: managesStaff && Boolean(currentYear),
   });
   const classesQuery = useQuery({
     ...orpc.staff.listClasses.queryOptions({
       input: { academicYearId: currentYearId },
     }),
-    enabled: isAdmin && Boolean(currentYear),
+    enabled: managesStaff && Boolean(currentYear),
   });
   // An administrator reads the whole leave ledger rather than one reviewer's
   // queue, so the badge counts every request still waiting on a decision.
@@ -406,26 +468,45 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
     ...orpc.staff.leaves.listLeaveRequests.queryOptions({
       input: { year: selectedYear ?? 0, queue: "all" },
     }),
-    enabled: isAdmin && selectedYear !== undefined,
+    enabled: managesStaff && selectedYear !== undefined,
   });
   const staffRequestsQuery = useQuery({
     ...orpc.staff.listTeacherRequests.queryOptions(),
-    enabled: isAdmin,
+    enabled: managesStaff,
   });
   const admin = (...rest: string[]) => workspaceLink("/admin", ...rest);
+  const academic = (...rest: string[]) =>
+    workspaceLink("/academic-admin", ...rest);
+  const inventoryDesk = (...rest: string[]) =>
+    workspaceLink("/inventory-admin", ...rest);
   const teacher = (...rest: string[]) => workspaceLink("/teacher", ...rest);
   const principal = (...rest: string[]) => workspaceLink("/principal", ...rest);
   const deputy = (...rest: string[]) =>
     workspaceLink("/deputy-principal", ...rest);
 
-  const home = resolveHome(isAdmin, isPrincipal, isDeputy, isInventoryAdmin);
+  // Whose workspace the staff-management group addresses: the administrator's
+  // own, or the Academic Administrator's mirror of it. `isAdmin` first so the
+  // top admin's links are byte-for-byte what they were before this seat
+  // existed.
+  const management = isAcademicAdmin ? academic : admin;
+  // Same idea for the register group, whose two audiences are the top admin
+  // and the Inventory Administrator.
+  const inventoryRegister = isInventoryAdmin ? inventoryDesk : admin;
+
+  const home = resolveHome({
+    isAdmin,
+    isPrincipal,
+    isDeputy,
+    isInventoryAdmin,
+    isAcademicAdmin,
+  });
   // Platform is identical for everyone, so nobody gets a duplicate link to
   // a workspace that a lower group already lists.
   const platformNav: NavItem[] = [
     {
       title: home.title,
       url: isInventoryAdmin
-        ? admin("staff", "inventory")
+        ? inventoryDesk("staff", "inventory")
         : yearPath(home.base, year),
     },
     { title: "Account", url: "/account" },
@@ -497,21 +578,24 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   const staffNav: NavItem[] = [
     {
       title: "Teachers",
-      url: admin("staff", "teachers"),
+      url: management("staff", "teachers"),
       count: badgeCount(staffQuery.data?.length),
     },
     {
       title: "Class Assignment",
-      url: admin("staff", "classes"),
+      url: management("staff", "classes"),
       count: badgeCount(classesQuery.data?.length),
     },
-    { title: "Period Assignment", url: admin("staff", "periods") },
-    { title: "Teacher Timetable", url: admin("staff", "teacher-timetable") },
-    { title: "Historical Data", url: admin("staff", "historical-data") },
-    { title: "Attendance", url: admin("staff", "attendance") },
+    { title: "Period Assignment", url: management("staff", "periods") },
+    {
+      title: "Teacher Timetable",
+      url: management("staff", "teacher-timetable"),
+    },
+    { title: "Historical Data", url: management("staff", "historical-data") },
+    { title: "Attendance", url: management("staff", "attendance") },
     {
       title: "Leave Requests",
-      url: admin("staff", "leaves"),
+      url: management("staff", "leaves"),
       count: badgeCount(
         openLeavesQuery.data?.requests.filter((request) => !request.finalizedAt)
           .length
@@ -527,17 +611,30 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
    * URL with a `?tab=`/`?subtab=` — the same bookmarkable-path-over-query-state
    * change the equipment pages' `equipment.in-charge.tsx` etc. made, for the
    * identical reason.
+   *
+   * Built from the seat that owns the register: `/inventory-admin/...` for the
+   * Inventory Administrator, `/admin/...` for the top admin, who is the only
+   * other audience this group is shown to.
    */
   const adminInventoryNav: NavItem[] = [
-    { title: "Inventory Management", url: admin("staff", "inventory") },
-    { title: "Loans", url: admin("staff", "inventory", "loans") },
-    { title: "Issues", url: admin("staff", "inventory", "issues") },
-    { title: "Write-offs", url: admin("staff", "inventory", "write-offs") },
+    {
+      title: "Inventory Management",
+      url: inventoryRegister("staff", "inventory"),
+    },
+    { title: "Loans", url: inventoryRegister("staff", "inventory", "loans") },
+    { title: "Issues", url: inventoryRegister("staff", "inventory", "issues") },
+    {
+      title: "Write-offs",
+      url: inventoryRegister("staff", "inventory", "write-offs"),
+    },
     {
       title: "Asset Register",
-      url: admin("staff", "inventory", "asset-register"),
+      url: inventoryRegister("staff", "inventory", "asset-register"),
     },
-    { title: "Ledger", url: admin("staff", "inventory", "ledger") },
+    {
+      title: "Ledger",
+      url: inventoryRegister("staff", "inventory", "ledger"),
+    },
   ];
 
   const teacherNav: NavItem[] = [
@@ -574,9 +671,54 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
   ];
 
   const academicNav: NavItem[] = [
-    { title: "Academic Years", url: admin("academic-years") },
+    { title: "Academic Years", url: management("academic-years") },
     ...SOON_NAV,
   ];
+
+  return {
+    isAdmin,
+    isLeader,
+    isInventoryAdmin,
+    isAcademicAdmin,
+    managesStaff,
+    yearsPending,
+    usersUrl: management("users"),
+    staffRequestsUrl: management("teacher-requests"),
+    staffRequestsCount: staffRequestsQuery.data
+      ? String(
+          staffRequestsQuery.data.filter((request) => request.emailVerified)
+            .length
+        )
+      : undefined,
+    platformNav,
+    leadershipNav,
+    staffNav,
+    teacherNav,
+    inventoryNav,
+    adminInventoryNav,
+    academicNav,
+  };
+};
+
+export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
+  const {
+    isAdmin,
+    isLeader,
+    isInventoryAdmin,
+    isAcademicAdmin,
+    managesStaff,
+    yearsPending,
+    usersUrl,
+    staffRequestsUrl,
+    staffRequestsCount,
+    platformNav,
+    leadershipNav,
+    staffNav,
+    teacherNav,
+    inventoryNav,
+    adminInventoryNav,
+    academicNav,
+  } = useSidebarNav(user);
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -586,7 +728,6 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
             alt="St. Aloysius' College crest"
             size="small"
             className="h-9.5 w-auto"
-            src="/uploads/college-crest.png"
           />
           <div className="min-w-0 leading-tight">
             <div className="text-sidebar-foreground truncate text-sm font-bold tracking-[-0.005em]">
@@ -603,10 +744,12 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
             Academic year
           </div>
           {/* The switcher's "set current" and "add year" are both
-              `adminOnlyProcedure`, and this header is above the role branching
-              below, so the decision has to travel down to it. `isAdmin` is the
-              role this shell already resolved, not a second reading of it. */}
-          <AcademicYearSwitcher canManageAcademicYears={isAdmin} />
+              `adminOrAcademicProcedure`, and this header is above the role
+              branching below, so the decision has to travel down to it. These
+              are the two roles that hold it — the top admin and the Academic
+              Administrator — and `managesStaff` is the role this shell already
+              resolved, not a second reading of it. */}
+          <AcademicYearSwitcher canManageAcademicYears={managesStaff} />
         </div>
       </SidebarHeader>
 
@@ -624,17 +767,10 @@ export const AppSidebar = ({ user, ...props }: AppSidebarProps) => {
             isAdmin={isAdmin}
             isLeader={isLeader}
             isInventoryAdmin={isInventoryAdmin}
-            usersUrl={admin("users")}
-            staffRequestsUrl={admin("teacher-requests")}
-            staffRequestsCount={
-              staffRequestsQuery.data
-                ? String(
-                    staffRequestsQuery.data.filter(
-                      (request) => request.emailVerified
-                    ).length
-                  )
-                : undefined
-            }
+            isAcademicAdmin={isAcademicAdmin}
+            usersUrl={usersUrl}
+            staffRequestsUrl={staffRequestsUrl}
+            staffRequestsCount={staffRequestsCount}
             platformNav={platformNav}
             leadershipNav={leadershipNav}
             staffNav={staffNav}

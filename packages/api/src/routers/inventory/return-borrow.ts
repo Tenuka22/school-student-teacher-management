@@ -391,7 +391,7 @@ export const returnBorrow = requireInventoryPermission("update")
         .set({
           status: "returned",
           returnedAt,
-          returnedByStaffId: actor.userId,
+          returnedByStaffId: actor.staffId,
           returnCondition: input.returnCondition,
           returnNote: input.returnNote ?? null,
         })

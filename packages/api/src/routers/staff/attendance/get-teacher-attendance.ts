@@ -10,7 +10,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import {
   assertDateWithinAcademicYear,
   requireAttendanceAcademicYear,
@@ -21,7 +21,7 @@ import {
  * nothing has been marked yet - a school day with no row is "unmarked",
  * distinct from an explicitly recorded "present".
  */
-export const getTeacherAttendance = adminProcedure
+export const getTeacherAttendance = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

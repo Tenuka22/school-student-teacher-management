@@ -66,6 +66,7 @@ import {
 } from "@tabler/icons-react";
 import { useState } from "react";
 
+import { CategoryIcon } from "@/components/staff/inventory/category-icon";
 import type { CategoryOption } from "@/components/staff/inventory/inventory-types";
 import type {
   CategoryChoice,
@@ -102,14 +103,37 @@ export interface AssetTagFieldsProps {
  *
  * **`createItem` requires `uniqueIds.length === qty` the moment a single tag is
  * supplied** — `resolveAssetTags` compares the normalized count against `qty` and
- * refuses a mismatch, while an entirely empty list stays legitimate because a bulk
- * line ("200 chairs") is counted rather than tagged. That is a rule an object schema
- * cannot express, so it lives on the form: the rows track the quantity, a live count
- * says how many are still missing, and the two ways the list can be wrong (a blank
- * row, the same tag twice) are both named on the field. Learning this from the
- * server's toast would have thrown away a twenty-field form's worth of typing to be
- * told its tags were short.
+ * refuses a mismatch, while an entirely empty list means *mint them*: the server
+ * writes `${sku}//1 … ${sku}//qty`, so a bulk line ("200 chairs") leaves
+ * registration tagged like any other and every stock movement has unit rows to
+ * move. That is a rule an object schema cannot express, so it lives on the form:
+ * the rows track the quantity, a live count says how many are still missing, and
+ * the two ways the list can be wrong (a partly filled list, the same tag twice)
+ * are both named on the field. Learning this from the server's toast would have
+ * thrown away a twenty-field form's worth of typing to be told its tags were
+ * short.
  */
+/**
+ * The half of the counter line that follows "N of M entered".
+ *
+ * Three states, because blank rows mean two different things: a partly typed
+ * list is work still to do ("still blank"), an untouched one is the *mint*
+ * state the guide above describes, and a complete list has nothing to append.
+ * Printing "still blank" on a pristine form would contradict the sentence a few
+ * lines up — blank is not a gap there, it is a choice the store acts on.
+ */
+const blankRowsNote = (filled: number, missing: number): string => {
+  if (missing === 0) {
+    return "";
+  }
+
+  if (filled === 0) {
+    return " — left empty, the store mints them";
+  }
+
+  return ` — ${missing} still blank`;
+};
+
 export const AssetTagFields = ({
   formId,
   rows,
@@ -134,18 +158,17 @@ export const AssetTagFields = ({
     <FieldSet aria-describedby={guideId}>
       <FieldLegend>Asset tags</FieldLegend>
       <FieldDescription id={guideId}>
-        Optional, and it decides how this line is tracked. Leave every row blank
-        for a bulk-counted line — 20 office chairs sharing one QR code and a
-        quantity of 20. Fill in one tag per row to track each unit by its own QR
-        code instead — 3 projectors, each its own asset tag and its own history.
-        It is all-or-nothing: fill in as many as there are units, or leave all
-        of them blank.
+        Optional to type, and it decides how this line is tracked. Leave every
+        row blank and the register mints one tag per unit from this line&rsquo;s
+        SKU — INV-00042//1 through INV-00042//4 — so a bulk line gets labelled
+        too. Type your own tags instead when the labels are already on the
+        devices: one per row, and it is all-or-nothing — fill in as many as
+        there are units, or leave all of them blank.
       </FieldDescription>
       <FieldGroup>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-muted-foreground text-xs tabular-nums">
-            {filled} of {rows.length} entered
-            {missing > 0 ? ` — ${missing} still blank` : ""}
+            {filled} of {rows.length} entered{blankRowsNote(filled, missing)}
           </p>
           {duplicates.size > 0 ? (
             <Badge variant="destructive">
@@ -223,9 +246,9 @@ export const AssetTagFields = ({
         <FieldDescription>
           One tag per unit, and the number of rows follows the quantity above. A
           tag is how the school finds the thing again, so it is checked against
-          the whole register: a tag already on file anywhere is refused. A bulk
-          line that is counted rather than tracked individually simply leaves
-          these boxes empty.
+          the whole register: a tag already on file anywhere is refused. Leave
+          these boxes empty and the store mints them from this line&rsquo;s SKU
+          — INV-00042//1 upwards, one per unit.
         </FieldDescription>
       </FieldGroup>
     </FieldSet>
@@ -442,10 +465,18 @@ const CategoryPicker = ({
             {categories.map((option) => (
               <ComboboxItem key={option.id} value={option}>
                 <span className="flex items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className="ring-foreground/10 size-2 shrink-0 rounded-full ring-1"
-                    style={{ backgroundColor: option.color }}
+                  {/*
+                    The category's own glyph in its own colour, in place of the
+                    bare dot this row used to draw: the picker's options are the
+                    one place a reader meets the taxonomy before the register's
+                    200 rows, and a chair for Furniture is quicker to find than
+                    any of the eight colours on their own. `aria-hidden`, because
+                    the name is beside it.
+                  */}
+                  <CategoryIcon
+                    icon={option.icon}
+                    color={option.color}
+                    className="size-4 shrink-0"
                   />
                   <span className="truncate font-medium">{option.name}</span>
                 </span>
@@ -1266,18 +1297,23 @@ interface InitialResponsibilityFieldsetProps {
 /**
  * Who is in charge, and who is holding it — recorded once, at creation.
  *
- * `createItem` seeds the first `inventoryCustodyHistory` row from these two, with
- * `reason: null` — the single case `inventory_custody_history_reason_required`
- * exempts, because a first assignment onto an empty slot displaces nobody.
- * Afterwards the two belong to `custody.transfer` and `assignManager`, which each
- * write a history row *and* a ledger action and each demand a reason.
+ * `createItem` requires both and seeds the first two `inventoryCustodyHistory`
+ * rows from them — `manager_assigned` and `custody_taken`, each with
+ * `reason: null` — the single case
+ * `inventory_custody_history_reason_required` exempts, because a first
+ * assignment onto an empty slot displaces nobody. Afterwards the two belong to
+ * `custody.transfer` and `assignManager`, which each write a history row *and* a
+ * ledger action and each demand a reason.
  *
  * **Hence the different wording from the transfer dialogs: "Initially in charge of"
  * and "Initially held by"** rather than "In charge of this item" and "Hand it to".
  * That is not decoration — it tells the reader this choice is recorded once, here,
  * without a cause, and that the custody dialogs own these two columns from now on.
- * Both are optional: an item can sit in the store with nobody accountable for it,
- * and the register flags exactly those rows.
+ * Both are required: every line on the register answers "whose is this?" and "who
+ * has it?" from the day it is written, and a shelf-bound item is held by the
+ * member of staff who is in charge of it. The server refuses a creation without
+ * both, so the pickers do not offer a clear button — the field cannot be sent
+ * back to blank.
  *
  * Both wrappers carry `data-item-field` rather than a `Field`, because each
  * `StaffComboboxField` renders its own `Field` and mints its own id — the walk
@@ -1299,10 +1335,9 @@ export const InitialResponsibilityFieldset = ({
           value={managerStaffId}
           onChange={onManagerChange}
           label="Initially in charge of"
-          description="The member of staff accountable for this item. Optional — an item can sit in the store with nobody accountable for it, and the register flags those rows."
+          description="The member of staff accountable for this item. Required — every line on the register names one, so a shelf-bound item's answer can be the person in charge."
           error={errors.managerStaffId}
           disabled={isLoading}
-          allowClear
         />
       </div>
       <div data-item-field="custodianStaffId">
@@ -1310,10 +1345,9 @@ export const InitialResponsibilityFieldset = ({
           value={custodianStaffId}
           onChange={onCustodianChange}
           label="Initially held by"
-          description="The member of staff carrying it away today. Optional — leave blank if it is going on the shelf."
+          description="The member of staff carrying it on day one. Required — if it is going straight on the shelf, that is the person in charge."
           error={errors.custodianStaffId}
           disabled={isLoading}
-          allowClear
         />
       </div>
       <FieldDescription>

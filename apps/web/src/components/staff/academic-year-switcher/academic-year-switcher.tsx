@@ -61,11 +61,12 @@ interface AcademicYearSwitcherProps {
   /**
    * Whether this account may change what the school believes: promoting a year
    * to current (`setCurrentYear`) and opening a new one (`createAcademicYear`).
-   * Both are `adminOnlyProcedure`. The switcher sits above the sidebar's role
-   * branching, so without it every account was offered both writes and was
-   * refused both — a red toast and, for the year switch, a number that did not
-   * change. The decision is made once, by the shell that already knows the
-   * role, and handed down.
+   * Both are `adminOrAcademicProcedure` — the top administrator and the
+   * Academic Administrator, and nobody else. The switcher sits above the
+   * sidebar's role branching, so without it every account was offered both
+   * writes and was refused both - a red toast and, for the year switch, a
+   * number that did not change. The decision is made once, by the shell that
+   * already knows the role, and handed down.
    */
   canManageAcademicYears: boolean;
 }
@@ -117,14 +118,14 @@ export const AcademicYearSwitcher = ({
    * shared link, and the `$year` route guard keeps the URL and the database
    * in agreement.
    *
-   * Both halves belong to the administrator. The promotion is
-   * `setCurrentYear` (`adminOnlyProcedure`), and the navigation half only
-   * means something *after* the promotion: `loadAcademicYearRoute` forwards any
-   * year that is not the school's active year back to the active one, so for
-   * everyone else a click would be undone by the guard before the page settled —
-   * and would cost them the page they were on besides. That is why the years
-   * below are inert for a non-administrator rather than a second, quieter
-   * "switch" that quietly does not switch.
+   * Both halves belong to the two seats that may move the school's year: the
+   * promotion is `setCurrentYear` (`adminOrAcademicProcedure`), and the
+   * navigation half only means something *after* the promotion:
+   * `loadAcademicYearRoute` forwards any year that is not the school's active
+   * year back to the active one, so for everyone else a click would be undone
+   * by the guard before the page settled - and would cost them the page they
+   * were on besides. That is why the years below are inert for every other
+   * role rather than a second, quieter "switch" that quietly does not switch.
    */
   const handleSwitchYear = async (year: AcademicYear) => {
     if (year.isCurrent) {

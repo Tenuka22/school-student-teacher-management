@@ -86,7 +86,7 @@ export const voidItem = inventoryManagerProcedure
 
       const [voided] = await tx
         .update(inventoryItem)
-        .set({ voidedAt, voidReason: reason, voidedByStaffId: actor.userId })
+        .set({ voidedAt, voidReason: reason, voidedByStaffId: actor.staffId })
         .where(eq(inventoryItem.id, existing.id))
         .returning();
 

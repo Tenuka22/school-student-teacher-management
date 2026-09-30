@@ -25,17 +25,27 @@
  * record is corrected, and a school's trust in the number depends on it always
  * agreeing with the loans a clerk can actually go and look at.
  *
- * Callers: `userId` defaults to the caller's own account (the home-page case).
- * An explicit `userId` is how the same number is shown on somebody else's page
+ * Callers: `staffId` defaults to the caller's own staff row (the home-page case).
+ * An explicit `staffId` is how the same number is shown on somebody else's page
  * — an administrator or leadership reading a colleague's profile — and it is
  * not narrowed further, because a punctuality score is the same kind of fact
  * as a name: something everyone in the school can already see about a
  * colleague from the loans list itself, not private information a permission
  * needs to hide.
+ *
+ * **The input and the output are `staffId`, not `userId`,** and the rename is
+ * not cosmetic: every loan column this file filters on is
+ * `inventory_borrow.borrower_staff_id` / `borrowed_by_staff_id` and the default
+ * is `actor.staffId` from `getInventoryActor`. A procedure that called a staff
+ * id a `userId` was a name from the account layer that survived the rest of the
+ * inventory router's move onto `staff`, and it is the kind of wrong that hides
+ * a bug: `user.id` and `staff.id` are different keys, so a caller passing a
+ * real `userId` here would be silently compared against staff ids rather than
+ * refused.
  */
 import {
   inventoryBorrow,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { object, optional } from "valibot";
@@ -84,7 +94,7 @@ const totalLateDaysExpression = sql<number>`coalesce(sum(
 /**
  * The same day-lateness sum as `totalLateDaysExpression`, over the loans this
  * person **processed for someone else** rather than borrowed themselves —
- * `borrowedByStaffId = targetUserId` and `borrowerStaffId` naming somebody
+ * `borrowedByStaffId = targetStaffId` and `borrowerStaffId` naming somebody
  * different, so a clerk is never blamed twice for their own loan.
  */
 const totalVouchedLateDaysExpression = sql<number>`coalesce(sum(
@@ -98,17 +108,17 @@ const totalVouchedLateDaysExpression = sql<number>`coalesce(sum(
 ), 0)`;
 
 export const getPunctualityScore = requireInventoryPermission("read")
-  .input(object({ userId: optional(userIdSchema) }))
+  .input(object({ staffId: optional(staffRefSchema) }))
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
-    const targetUserId = input.userId ?? actor.userId;
+    const targetStaffId = input.staffId ?? actor.staffId;
 
     const [row, vouchedRow] = await Promise.all([
       context.db
-      .select({
-        totalLateDays: totalLateDaysExpression,
-        loanCount: sql<number>`count(*)`.mapWith(Number),
-        lateLoanCount: sql<number>`count(*) filter (where (
+        .select({
+          totalLateDays: totalLateDaysExpression,
+          loanCount: sql<number>`count(*)`.mapWith(Number),
+          lateLoanCount: sql<number>`count(*) filter (where (
           ${inventoryBorrow.status} = 'returned'
           and ${inventoryBorrow.returnedAt} is not null
           and ${inventoryBorrow.returnedAt}::date > ${inventoryBorrow.expectedReturnDate}::date
@@ -116,19 +126,19 @@ export const getPunctualityScore = requireInventoryPermission("read")
           ${inventoryBorrow.status} = 'borrowed'
           and ${inventoryBorrow.expectedReturnDate}::date < current_date
         ))`.mapWith(Number),
-      })
-      .from(inventoryBorrow)
-        .where(eq(inventoryBorrow.borrowerStaffId, targetUserId))
+        })
+        .from(inventoryBorrow)
+        .where(eq(inventoryBorrow.borrowerStaffId, targetStaffId))
         .then((rows) => rows[0]),
       context.db
         .select({ totalVouchedLateDays: totalVouchedLateDaysExpression })
-      .from(inventoryBorrow)
+        .from(inventoryBorrow)
         .where(
           and(
-            eq(inventoryBorrow.borrowedByStaffId, targetUserId),
+            eq(inventoryBorrow.borrowedByStaffId, targetStaffId),
             or(
               isNull(inventoryBorrow.borrowerStaffId),
-              ne(inventoryBorrow.borrowerStaffId, targetUserId)
+              ne(inventoryBorrow.borrowerStaffId, targetStaffId)
             )
           )
         )
@@ -145,7 +155,7 @@ export const getPunctualityScore = requireInventoryPermission("read")
     );
 
     return {
-      userId: targetUserId,
+      staffId: targetStaffId,
       score,
       totalLateDays,
       totalVouchedLateDays,

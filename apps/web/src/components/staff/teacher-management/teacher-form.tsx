@@ -4,6 +4,10 @@ import {
   EMPLOYMENT_STATUSES,
 } from "@school-student-teacher-management/db/constants/teachers";
 import {
+  isValidNicFormat,
+  NIC_FORMAT_MESSAGE,
+} from "@school-student-teacher-management/db/schema/primitives";
+import {
   staffInsertSchema,
   staffUpdateSchema,
 } from "@school-student-teacher-management/db/schema/staff";
@@ -50,7 +54,6 @@ interface TeacherFormProps {
 }
 
 const BADGE_NUMBER_RE = /^T\d{3,6}$/u;
-const NIC_RE = /^(?:\d{9}[VvXx]|\d{12})$/u;
 
 /** Shown as required in the form; mirrors the create schema below. */
 const REQUIRED_FIELDS = new Set<string>(["nic", "name", "email"]);
@@ -65,11 +68,26 @@ const createValidationSchema = () =>
       "gender",
       "birthDate",
     ]).entries,
-    /** NIC is required — it becomes the login username. */
+    /**
+     * Required, and the format is the schema's own rather than a regex written
+     * here.
+     *
+     * This file used to carry a local `NIC_RE` for exactly this check, which is a
+     * second copy of a rule the database also enforces — three of them, once the
+     * `staff_nic_format` CHECK counts, and the copy that is easiest to forget is
+     * the one in a form. `isValidNicFormat` is the same predicate the
+     * `staff.nic` column's valibot schema and the CHECK are both written from, so
+     * a change to the accepted formats lands in one place.
+     *
+     * The empty-string case is separate and stays here: a `v.string()` piped
+     * through the format check reports "Enter a valid Sri Lankan NIC: …" for a
+     * field nobody has typed in, and the honest message for an empty required
+     * field is that it is required.
+     */
     nic: v.pipe(
       v.string(),
       v.minLength(1, "NIC is required"),
-      v.regex(NIC_RE, "NIC must be 9 digits + V/X or 12 digits")
+      v.check(isValidNicFormat, NIC_FORMAT_MESSAGE)
     ),
     /** Optional internal reference; no longer the login identity. */
     teacherServiceNo: v.optional(

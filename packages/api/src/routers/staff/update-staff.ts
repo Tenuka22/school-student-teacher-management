@@ -57,11 +57,20 @@ export const updateStaff = requireStaffPermission("update")
       throw new ORPCError("NOT_FOUND", { message: "Staff member not found" });
     }
 
-    if (existing.userId && input.nic === null) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: "A NIC cannot be removed while the staff account is linked",
-      });
-    }
+    /**
+     * There used to be a guard here: "A NIC cannot be removed while the staff
+     * account is linked". It was guarding against `staff.nic` being nullable, and
+     * the column is `NOT NULL` now — a member of staff has an identity whether
+     * or not they have ever signed in, and the one thing a linked login adds is
+     * that changing the NIC has to move the login's username with it, which is
+     * the block below.
+     *
+     * So a `null` NIC is not "refused with a reason" any more; it is a value the
+     * request schema cannot carry at all, because `nic` is required in
+     * `staffUpdateSchema` for the same reason it is required in
+     * `staffInsertSchema`. A caller that wants a person to stop having a NIC has
+     * to delete the staff record, and the NIC goes with it.
+     */
 
     const { id, ...updates } = input;
     const normalizedUpdates = {

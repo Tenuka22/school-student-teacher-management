@@ -18,9 +18,12 @@ export const listTeacherSubjects = requireAssignmentPermission("read")
     })
   )
   .handler(async ({ input, context }) => {
-    const canViewAll = ["admin", "principal", "vicePrincipal"].includes(
-      context.session.user.role ?? ""
-    );
+    const canViewAll = [
+      "admin",
+      "principal",
+      "vicePrincipal",
+      "academicAdmin",
+    ].includes(context.session.user.role ?? "");
     if (!canViewAll) {
       const [linkedStaff] = await context.db
         .select({ id: staff.id })

@@ -7,7 +7,7 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { and, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 
 /**
  * List every subject on a class's timetable for a given academic year, each
@@ -17,7 +17,7 @@ import { adminProcedure } from "../../../index";
  * the timetable is grouped by slot for rendering, but the query itself is
  * flat: one row per subject, each carrying its own teacher list.
  */
-export const listClassTimetable = adminProcedure
+export const listClassTimetable = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

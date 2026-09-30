@@ -33,7 +33,6 @@ import {
   disposalStatusLabel,
   disposalStatusSchema,
 } from "@school-student-teacher-management/db/constants/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryDisposal,
   inventoryDisposalStatusHistory,
@@ -43,6 +42,7 @@ import {
   inventoryUnit,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import {
   and,
   asc,
@@ -92,12 +92,12 @@ const DEFAULT_LIMIT = 50;
  * failed and not data to repair, and the UI must render it as "someone who is no
  * longer here" rather than as an error or a blank cell that looks unfilled.
  */
-const requestedByStaff = alias(user, "disposal_requested_by");
-const approvedByStaff = alias(user, "disposal_approved_by");
-const finalizedByStaff = alias(user, "disposal_finalized_by");
-const cancelledByStaff = alias(user, "disposal_cancelled_by");
+const requestedByStaff = alias(staff, "disposal_requested_by");
+const approvedByStaff = alias(staff, "disposal_approved_by");
+const finalizedByStaff = alias(staff, "disposal_finalized_by");
+const cancelledByStaff = alias(staff, "disposal_cancelled_by");
 /** A fifth alias, for the status-history rows rather than the certificates. */
-const changedByStaff = alias(user, "disposal_history_changed_by");
+const changedByStaff = alias(staff, "disposal_history_changed_by");
 
 /**
  * `%` and `_` are LIKE metacharacters, so a search for "50% broken" would

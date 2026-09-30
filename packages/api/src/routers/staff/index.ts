@@ -10,7 +10,6 @@ import { deleteAcademicYear } from "./delete-academic-year";
 import { deleteClass } from "./delete-class";
 import { deleteStaff } from "./delete-staff";
 import { exportsRouter } from "./exports";
-import { getAdminOverview } from "./get-admin-overview";
 import { getMyStaff } from "./get-my-staff";
 import { getStaff } from "./get-staff";
 import { getHistoricalData } from "./historical-data";
@@ -100,9 +99,6 @@ export const staffRouter = {
   updateProfile,
   getMyStaff,
   getHistoricalData,
-
-  // Administrator overview (live counts for the admin home page)
-  getAdminOverview,
 
   // Leave management (teacher apply / admin review)
   leaves: leavesRouter,

@@ -7,20 +7,23 @@ import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
 /**
  * Roles allowed to approve a teacher requester. The Deputy Principal has the
- * same management permissions as everyone else in `adminProcedure`, but
- * granting College employment is an administrator-or-Principal decision, so
- * this check is made explicitly rather than inherited.
+ * same management permissions as everyone else in `academicProcedure`, but
+ * granting College employment is an administrator-or-leadership decision, so
+ * this check is made explicitly rather than inherited. The Academic
+ * Administrator holds it because staffing requests are this seat's queue to
+ * clear — it owns the teacher register the requester is about to enter.
  */
-const APPROVER_ROLES = new Set(["admin", "principal"]);
+const APPROVER_ROLES = new Set(["admin", "principal", "academicAdmin"]);
 
 const assertCanApprove = (role: string | null | undefined) => {
   if (!role || !APPROVER_ROLES.has(role)) {
     throw new ORPCError("FORBIDDEN", {
-      message: "Only an administrator or the Principal can approve teachers",
+      message:
+        "Only an administrator, the Principal or the Academic Administrator can approve teachers",
     });
   }
 };
@@ -36,7 +39,7 @@ const assertCanApprove = (role: string | null | undefined) => {
  * waiting. Session counts come from the same table the multi-session list
  * reads, so "active sessions" means what it says.
  */
-export const listTeacherRequests = adminProcedure.handler(
+export const listTeacherRequests = academicProcedure.handler(
   async ({ context }) => {
     const rows = await context.db
       .select({
@@ -156,7 +159,7 @@ export const listTeacherRequests = adminProcedure.handler(
  * The seeded institutional accounts are unreachable here: they hold roles no
  * requester ever has, so there is nothing to promote.
  */
-export const approveTeacherRequest = adminProcedure
+export const approveTeacherRequest = academicProcedure
   .input(v.object({ userId: v.string() }))
   .handler(async ({ input, context }) => {
     assertCanApprove(context.session.user.role);

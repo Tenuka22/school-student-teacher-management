@@ -14,14 +14,13 @@
  *
  * `newOwnerStaffId` is **required and non-nullable** here, and that is the whole
  * design in one line: this verb moves an owner to a *person*, so it cannot leave
- * the item unowned. **Clearing the owner with no successor is a different verb** —
- * `assignManager({ newManagerStaffId: null })`, which is gated on `update` and is
- * therefore administrator-only. Two verbs writing one column is deliberate, not a
- * duplicate: one of them says "somebody different is answerable for this" and the
- * other says "nobody is", and a single nullable input could not tell a caller
- * which of those a `null` was going to do. `assignManager` also stays the only
- * way to *appoint* an owner from nothing, because that is an act with no owner
- * behind it and therefore no owner to authorise it.
+ * the item unowned. **Nothing in this folder can leave an item unowned or
+ * unheld either** — `assignManager` takes a required successor for the same
+ * reason, so "nobody is answerable for this" and "nobody has this" are both
+ * states the register cannot express. `assignManager` also stays the only way
+ * to *appoint* an owner from nothing, because that is an act with no owner
+ * behind it and therefore no owner to authorise it — the case that survives is
+ * a legacy row written before both pointers were required.
  *
  * ## The gate, and what the permission does not do
  *
@@ -47,24 +46,26 @@
  * scoping lives here and nowhere else, which is the same invariant the `teacher`
  * role comment in `packages/auth/src/permissions.ts` states.
  *
- * ## Why the holder is cleared
+ * ## Why the holder becomes the new owner
  *
- * `custodianStaffId` is set to `null` as part of the transfer, and the reasoning
- * is in the handler: a record that reads "R. Perera owns it and S. Fernando is
- * holding it" *after the ownership has just changed hands* is almost always a
- * data-entry slip rather than an intent, because the new owner is by definition
- * the accountable party and there is no longer a separate question of who has it
- * to answer. If the new owner is physically sitting on it — which is the ordinary
- * case, since the motivating scenario is an item lent to a colleague — they can
- * record that with `takeItem`, which is a deliberate act they have to perform
- * rather than a side effect of someone else's paperwork. The alternative, leaving
- * the holder in place, would make every transfer produce a state the register
- * would have to keep explaining.
+ * `custodianStaffId` is set to `input.newOwnerStaffId` as part of the transfer,
+ * never cleared, because `inventory_item.custodian_staff_id` is `NOT NULL` and
+ * the register has no "nobody has this" state to clear into. Between "whoever
+ * happened to be holding it" and "the person now answerable for it", the
+ * accountable party wins: the new owner is by definition the person the register
+ * should say has it. If they are not physically on the item yet, the correction
+ * is a fresh act by whoever knows the truth — the previous holder's own
+ * `transferCustody`, or the new owner's `takeItem` — rather than a side effect
+ * of someone else's paperwork. Leaving the previous holder in place would make
+ * every transfer produce a state the register would have to keep explaining
+ * ("R. Perera owns it, but S. Fernando still has it?").
  *
- * Because the holder is cleared, the transfer writes **two** history rows and not
- * one, and each of them fills exactly one pair of the four staff columns — which
- * is what `inventory_custody_history_manager_columns` requires and why the two
- * rows cannot be merged into a single row that fills both pairs.
+ * When the holder already **is** the new owner — the ordinary motivating case,
+ * an item lent to a colleague who is being given it — custody does not move at
+ * all, and the transfer writes **one** history row rather than two. When it is
+ * not, it writes **two** and each fills exactly one pair of the four staff
+ * columns, which is what `inventory_custody_history_manager_columns` requires
+ * and why the two rows cannot be merged into a single row that fills both pairs.
  */
 import { ORPCError } from "@orpc/server";
 import { inventoryTransferReasonSchema } from "@school-student-teacher-management/db/constants/inventory";
@@ -72,11 +73,11 @@ import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 
 import { requireInventoryPermission } from "../../index";
 import type { Executor } from "./inventory-database";
@@ -112,9 +113,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, staffId))
+    .select({ name: staff.name })
+    .from(staff)
+    .where(eq(staff.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -140,9 +141,9 @@ const resolveStaffName = async (
 const mayReassignOwner = (
   role: string,
   ownerStaffId: string | null,
-  actorUserId: string
+  actorStaffId: string
 ): boolean =>
-  (ownerStaffId !== null && ownerStaffId === actorUserId) ||
+  (ownerStaffId !== null && ownerStaffId === actorStaffId) ||
   ADMIN_ROLES.has(role);
 
 export const transferOwnership = requireInventoryPermission("manageOwn")
@@ -154,10 +155,11 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
        * construction. See the file comment: the motivating case is "the person I
        * lent it to", but nothing forces the successor to be the current holder,
        * because an owner giving their item to a colleague who has never touched
-       * it is an ordinary thing to want and the holder is cleared either way.
-       * Clearing the owner instead is `assignManager({ newManagerStaffId: null })`.
+       * it is an ordinary thing to want. Either way the holder becomes
+       * `newOwnerStaffId` — it can never be cleared, and appointing an owner
+       * from nothing is `assignManager`'s job, not this verb's.
        */
-      newOwnerStaffId: userIdSchema,
+      newOwnerStaffId: staffRefSchema,
       /**
        * Required unconditionally, and it is not free text — it is a member of the
        * closed `INVENTORY_TRANSFER_REASONS` vocabulary, so a report can group
@@ -209,7 +211,7 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
         !mayReassignOwner(
           context.session?.user.role ?? "",
           existing.managerStaffId,
-          actor.userId
+          actor.staffId
         )
       ) {
         throw new ORPCError("FORBIDDEN", {
@@ -259,26 +261,32 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
         });
       }
 
-      // **The holder is cleared, not carried over.** See the file comment for the
-      // full argument: a record reading "X owns it, Y is holding it" immediately
-      // after the ownership changed hands is a data-entry slip far more often
-      // than it is an intent, the new owner is now the accountable party, and a
-      // new owner who is physically sitting on the item can say so themselves
-      // with `takeItem`. Clearing it is also what makes the second history row
-      // below necessary rather than optional.
+      // **The holder becomes the new owner, not cleared.** See the file comment
+      // for the full argument: `custodian_staff_id` is `NOT NULL` so there is
+      // no empty state to clear into, and of the two available stories — "the
+      // owner has it" versus "the previous holder still has it" — the
+      // accountable party is the one the register should name. A holder who
+      // disagrees says so with their own act (`transferCustody` or `takeItem`)
+      // rather than having this transfer guess for them.
+      //
+      // `custodyMoved` decides whether a second history row is needed: when the
+      // holder already is the new owner (the item was lent to exactly this
+      // person), custody does not move and one row is the whole story.
+      const custodyMoved = existing.custodianStaffId !== input.newOwnerStaffId;
       await tx
         .update(inventoryItem)
         .set({
           managerStaffId: input.newOwnerStaffId,
-          custodianStaffId: null,
+          custodianStaffId: input.newOwnerStaffId,
         })
         .where(eq(inventoryItem.id, existing.id));
 
-      // Two rows, because two pointers moved and the CHECK requires each row to
-      // describe exactly one of them: `inventory_custody_history_manager_columns`
-      // treats "this is a custody type" and "both manager columns are null" as
-      // the same fact, so a single row filling both pairs would be refused. The
-      // explicit nulls below are the reason the two rows are not a merge.
+      // Two rows when two pointers moved, because the CHECK requires each row
+      // to describe exactly one of them:
+      // `inventory_custody_history_manager_columns` treats "this is a custody
+      // type" and "both manager columns are null" as the same fact, so a single
+      // row filling both pairs would be refused. The explicit nulls below are
+      // the reason the two rows are not a merge.
       const historyValues = [
         {
           id: crypto.randomUUID(),
@@ -292,29 +300,36 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
           changeType: "manager_changed",
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.userId,
+          changedByStaffId: actor.staffId,
         },
-        // The release of the holder, written **only when there was a holder**. An
-        // item sitting unheld in the store has nothing to release, and a
-        // `custody_released` row with a null previous custodian would be a claim
-        // that somebody gave something back.
-        ...(existing.custodianStaffId
+        // The release of the holder, written **only when the holder actually
+        // changed** — when it already was the new owner there is no custody
+        // movement to record, and a row whose previous and new columns are the
+        // same person would be a claim that something happened.
+        //
+        // `custody_released` rather than `custody_transferred`, carrying the new
+        // owner as its successor: an ownership change starts a **new chapter**
+        // in the derived custody chain (see `getUpstreamSubManagerStaffIds`),
+        // exactly as it did when this row could name a null successor — the
+        // previous owner's era of hand-overs ends here, and the new owner's
+        // begins with them holding it.
+        ...(custodyMoved
           ? [
               {
                 id: crypto.randomUUID(),
                 itemId: existing.id,
                 previousCustodianStaffId: existing.custodianStaffId,
-                newCustodianStaffId: null,
+                newCustodianStaffId: input.newOwnerStaffId,
                 // Both manager columns null, for the same CHECK as above.
                 previousManagerStaffId: null,
                 newManagerStaffId: null,
                 changeType: "custody_released",
                 reason: input.reason,
                 note: input.note ?? null,
-                changedByStaffId: actor.userId,
+                changedByStaffId: actor.staffId,
               },
             ]
-          : [])
+          : []),
       ];
 
       const historyRows = await tx
@@ -325,31 +340,32 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
       // Matched by `changeType` rather than by position: a multi-row `INSERT ...
       // RETURNING` is not contractually ordered, and a transfer whose ledger said
       // "released at 09:14" because it read the wrong row of the two would be a
-      // lie nobody could later disprove. Both rows are required, because a
-      // transaction commits whatever was written — a missing row is a silent gap
-      // in the trail, not a rolled-back transfer.
+      // lie nobody could later disprove. The custody row is required whenever
+      // `custodyMoved` says one was written, because a transaction commits
+      // whatever was written — a missing row is a silent gap in the trail, not a
+      // rolled-back transfer.
       const managerHistory = historyRows.find(
         (row) => row.changeType === "manager_changed"
       );
-      const releaseHistory = historyRows.find(
+      const custodyHistory = historyRows.find(
         (row) => row.changeType === "custody_released"
       );
-      if (!managerHistory || (existing.custodianStaffId && !releaseHistory)) {
+      if (!managerHistory || (custodyMoved && !custodyHistory)) {
         throw new ORPCError("INTERNAL_SERVER_ERROR");
       }
 
-      if (releaseHistory) {
+      if (custodyHistory) {
         // The new owner, not `existing.managerStaffId` — the item's
         // `managerStaffId` column was just moved to `input.newOwnerStaffId` in
         // the update above, and "who is the manager" for a notice always means
         // the item as it stands now, the same live read every other custody
         // notice uses.
         await insertCustodyNoticeRecipients(tx, {
-          custodyHistoryId: releaseHistory.id,
+          custodyHistoryId: custodyHistory.id,
           itemId: existing.id,
           previousCustodianStaffId: existing.custodianStaffId,
           managerStaffId: input.newOwnerStaffId,
-          changedByStaffId: actor.userId,
+          changedByStaffId: actor.staffId,
         });
       }
 
@@ -369,8 +385,10 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
         meta: {
           previousOwnerName,
           newOwnerName: newOwner.name,
-          // Null whenever the item was sitting unheld, which is the ordinary case
-          // for a transfer and is exactly what the second history row records.
+          // The holder before the transfer: the person the second history row
+          // records as handing over to the new owner, present whenever
+          // `custodyMoved` — which, since the holder becomes the new owner, is
+          // exactly when the two were different people.
           previousCustodianName,
           reason: input.reason,
         },
@@ -379,8 +397,9 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
       // `ownership.transfer` rather than `manager.change` (which `assignManager`
       // writes): the audit log's job is to be readable by a person who does not
       // know the schema, and "ownership was transferred" is the sentence they
-      // would have written. `before` / `after` carry both pointers because this
-      // verb moved both.
+      // would have written. `before` / `after` carry both pointers — the holder
+      // before the transfer and the holder after it, which is the new owner
+      // either way, so a reader can see at a glance whether custody moved too.
       await insertInventoryAuditLog(tx, {
         actor,
         action: "ownership.transfer",
@@ -395,8 +414,8 @@ export const transferOwnership = requireInventoryPermission("manageOwn")
         after: {
           managerStaffId: input.newOwnerStaffId,
           managerName: newOwner.name,
-          custodianStaffId: null,
-          custodianName: null,
+          custodianStaffId: input.newOwnerStaffId,
+          custodianName: newOwner.name,
         },
       });
 

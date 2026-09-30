@@ -150,15 +150,19 @@ export type RequestableItemView = ElementOf<
  * `optional` inputs by dropping the empties, so the URL never carries a
  * meaningless parameter.
  *
- * `includeDeleted` is in this interface and not alongside it, unlike the
- * browser-side "no manager" filter in `inventory-page.tsx`, because **it does
- * have a wire representation**: `listItems` has taken `includeDeleted` since it
- * was written, and it is gated to the three leadership seats. The reason it
- * belongs on the *request* rather than being a predicate over what came back is
- * the opposite reason to the other one — retired rows are not in the response at
- * all unless the request asked for them, so a client-side filter could only ever
- * answer "you have none", which is a sentence that reads as "this store has never
- * retired anything".
+ * `includeDeleted` is in this interface because **it has a wire representation**:
+ * `listItems` has taken `includeDeleted` since it was written, and it is gated to
+ * the three leadership seats. A browser-side predicate could only ever answer "you
+ * have none", which is a sentence that reads as "this store has never retired
+ * anything" — retired rows are not in the response at all unless the request asked
+ * for them, so the filter has to be the request's.
+ *
+ * **Every key here is a request.** There used to be one that was not — a client-side
+ * "no manager" filter that `inventory-page.tsx` held alongside this interface and
+ * applied to the loaded page. It went with the owner column's `NOT NULL`: with no
+ * item able to have a null `managerStaffId` the predicate could match nothing while
+ * reading as a real choice, and this interface is the *request*, so a browser-side
+ * filter does not belong on it in the first place.
  */
 export interface InventoryFilters {
   search: string;

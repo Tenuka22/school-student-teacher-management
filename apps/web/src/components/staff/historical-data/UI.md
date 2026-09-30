@@ -8,7 +8,7 @@ A read-only view of one academic year's staffing, timetable, leave and attendanc
 
 ## Reading a year that is not the current one
 
-This is the one route in the app allowed to disagree with the school's active year. Every other year-scoped page is guarded to the current year, because the sidebar switcher promotes a year as you navigate. Historical views exist to read a _past_ year, so this route passes `allowAnyYear: true` to `loadAcademicYearRoute` (`routes/_auth/admin/$year/staff/historical-data.tsx`).
+This is the one page in the app allowed to disagree with the school's active year. Every other year-scoped page is guarded to the current year, because the sidebar switcher promotes a year as you navigate. Historical views exist to read a _past_ year, so both routes that mount this page pass `allowAnyYear: true` to `loadAcademicYearRoute`: `routes/_auth/admin/$year/staff/historical-data.tsx` (the administrator's tree) and `routes/_auth/academic-admin/$year/staff/historical-data.tsx` (the Academic Administrator's mirror of it).
 
 A year that does not exist is still refused, and `/account` is unaffected.
 

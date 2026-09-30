@@ -244,7 +244,7 @@ export const TransferCustodyDialog = ({
               <InventoryInlineNotice
                 tone="warning"
                 title="That person already holds this item"
-                description="The server refuses a transfer to the current custodian, because that would be a no-op on the record. Pick somebody else, or use Return to the store if the item is going back on the shelf."
+                description="The server refuses a transfer to the current custodian, because that would be a no-op on the record. Pick somebody else, or hand it back instead — that one goes to the person in charge."
               />
             ) : null}
           </FieldGroup>

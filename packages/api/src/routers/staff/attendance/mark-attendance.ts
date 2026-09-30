@@ -18,7 +18,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import * as v from "valibot";
 
 import type { Context } from "../../../context";
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import { resolveAuthority } from "../leaves/leadership-review";
 import {
   assertDateWithinAcademicYear,
@@ -119,7 +119,7 @@ const periodsForAttendanceStatus = (
   );
 };
 
-export const markAttendance = adminProcedure
+export const markAttendance = academicProcedure
   .input(
     v.object({
       staffId: staffIdSchema,

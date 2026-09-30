@@ -1,16 +1,23 @@
 /**
- * Designate — or un-designate — the teacher in charge of an item.
+ * Designate — or replace — the teacher in charge of an item.
  *
  * **The manager is not the custodian.** The manager is the person accountable
  * for the item: the one a principal asks why the science cupboard is short, and
  * the one whose name goes on the audit when a microscope cannot be found. The
- * custodian is the person physically carrying it. A manager can be set on an
- * item sitting in the store with nobody holding it, and a custodian can hold an
- * item that has no manager at all — both are ordinary states, and a school needs
- * to be able to change one without disturbing the other. Collapsing the two into
- * a single "owner" pointer would force every hand-over to rewrite
+ * custodian is the person the register says has it. Neither pointer may ever be
+ * empty — both columns on `inventory_item` are `NOT NULL` — but a school still
+ * needs to change one without disturbing the other: replacing who is
+ * answerable must not disturb who is carrying it, and vice versa. Collapsing
+ * the two into a single "owner" pointer would force every hand-over to rewrite
  * accountability as well, and the trail could no longer answer "who is
  * responsible for this?" independently of "who has it?".
+ *
+ * **There is no clearing this pointer any more.** `newManagerStaffId` is
+ * required, non-nullable: "nobody is answerable for this" is a state the
+ * register will not write, and a legacy row that has no owner is fixed by
+ * appointing one rather than by keeping an emptying verb around for it. The
+ * appointment-from-nothing case (`previousManagerStaffId` null →
+ * `manager_assigned`) is the one route by which an unowned row becomes owned.
  *
  * That is also why the history table has a `changeType` at all, and why this
  * procedure writes the **custodian** columns as `null` (and `transfer-custody`
@@ -21,15 +28,15 @@
  */
 import { ORPCError } from "@orpc/server";
 import { inventoryTransferReasonSchema } from "@school-student-teacher-management/db/constants/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
-import { minLength, nullable, object, optional, pipe, string } from "valibot";
+import { minLength, object, optional, pipe, string } from "valibot";
 
 import { inventoryManagerProcedure } from "../../index";
 import type { Executor } from "./inventory-database";
@@ -50,61 +57,55 @@ import {
  */
 const resolveStaffName = async (
   db: Executor,
-  userId: string
+  staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, userId))
+    .select({ name: staff.name })
+    .from(staff)
+    .where(eq(staff.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
 };
 
 /**
- * The three manager outcomes, decided from the two pointers.
+ * The two manager outcomes, decided from the current one.
  *
  * Deliberately total over the reachable combinations rather than nullable: the
- * no-op case (same manager, or clearing an already-empty slot) is refused by
- * the caller before this runs, so a null here would only ever be a bug.
+ * no-op case (same manager) is refused by the caller before this runs, and the
+ * successor is required by the input and can never be null, so the only branch
+ * that matters is whether there was an owner to replace. `manager_cleared` is
+ * not one of the outcomes because nothing in this folder can write it any more
+ * — the vocabulary keeps the value for rows written before the clearing path
+ * was removed.
  */
 const resolveManagerChangeType = (
-  previousManagerStaffId: string | null,
-  newManagerStaffId: string | null
-): "manager_assigned" | "manager_changed" | "manager_cleared" => {
-  if (previousManagerStaffId) {
-    return newManagerStaffId ? "manager_changed" : "manager_cleared";
-  }
-
-  return "manager_assigned";
-};
+  previousManagerStaffId: string | null
+): "manager_assigned" | "manager_changed" =>
+  previousManagerStaffId ? "manager_changed" : "manager_assigned";
 
 /**
  * The audit verb for a manager outcome.
  *
- * Three verbs rather than one, because the questions they answer are three: who
- * appointed this manager, who replaced one, and who decided an item no longer
- * has anybody in charge of it. A single `manager.update` would make the audit
- * log unable to distinguish an appointment from a resignation.
+ * Two verbs rather than one, because the questions they answer are two: who
+ * appointed this manager, and who replaced one. A single `manager.update` would
+ * make the audit log unable to distinguish an appointment from a resignation.
  */
 const managerAuditAction = (
-  changeType: "manager_assigned" | "manager_changed" | "manager_cleared"
-): string => {
-  if (changeType === "manager_assigned") {
-    return "manager.assign";
-  }
-
-  return changeType === "manager_changed" ? "manager.change" : "manager.clear";
-};
+  changeType: "manager_assigned" | "manager_changed"
+): string =>
+  changeType === "manager_assigned" ? "manager.assign" : "manager.change";
 
 export const assignManager = inventoryManagerProcedure
   .input(
     object({
       itemId: inventoryItemIdSchema,
-      /** `null` clears the manager. Deliberately nullable, not merely
-       *  optional: "leave it alone" and "remove the current manager" are
-       *  different requests and the UI has to be able to say both. */
-      newManagerStaffId: optional(nullable(userIdSchema)),
+      /** Required, non-nullable: every item stays answerable to a person, so
+       *  there is no clearing this pointer any more (see the file comment).
+       *  Must differ from the current manager — the no-op is refused below.
+       *  The label says "staff member" because that is who may be put in
+       *  charge of a school item. */
+      newManagerStaffId: staffRefSchema,
       /** Required unconditionally — see `transfer-custody.ts` for why that is
        *  stricter than `inventory_custody_history_reason_required`. Only
        *  `manager_assigned` is exempt there, and the stricter input costs one
@@ -124,7 +125,7 @@ export const assignManager = inventoryManagerProcedure
         getInventoryActor(context),
         getLockedItem(tx, input.itemId),
       ]);
-      const newManagerStaffId = input.newManagerStaffId ?? null;
+      const { newManagerStaffId } = input;
 
       const previousManagerName = existing.managerStaffId
         ? await resolveStaffName(tx, existing.managerStaffId)
@@ -132,29 +133,22 @@ export const assignManager = inventoryManagerProcedure
 
       if (existing.managerStaffId === newManagerStaffId) {
         throw new ORPCError("BAD_REQUEST", {
-          message: newManagerStaffId
-            ? `${previousManagerName ?? existing.managerStaffId} is already the manager in charge of this item`
-            : "This item already has nobody in charge of it",
+          message: `${previousManagerName ?? existing.managerStaffId} is already the manager in charge of this item`,
         });
       }
 
-      // Only a set manager is checked: `null` is not a person and there is
-      // nothing to assert about it. The label says "teacher" because that is
-      // who may be put in charge of a school item.
-      let newManagerName: string | null = null;
-      if (newManagerStaffId) {
-        const newManager = await assertStaffIsAssignable(
-          tx,
-          newManagerStaffId,
-          "staff member"
-        );
-        newManagerName = newManager.name;
-      }
-
-      const changeType = resolveManagerChangeType(
-        existing.managerStaffId,
-        newManagerStaffId
+      // The successor must be real, employable staff — the same school-domain
+      // assertion every holder write makes, so an item cannot be put in the
+      // charge of a departed or unassignable row. Returns the name this write
+      // needs on the new side of the change.
+      const newManager = await assertStaffIsAssignable(
+        tx,
+        newManagerStaffId,
+        "staff member"
       );
+      const newManagerName = newManager.name;
+
+      const changeType = resolveManagerChangeType(existing.managerStaffId);
 
       await tx
         .update(inventoryItem)
@@ -176,7 +170,7 @@ export const assignManager = inventoryManagerProcedure
           changeType,
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.userId,
+          changedByStaffId: actor.staffId,
         })
         .returning();
 
@@ -200,9 +194,8 @@ export const assignManager = inventoryManagerProcedure
         },
       });
 
-      // Three audit verbs rather than one, because the questions they answer
-      // are three: who appointed this manager, who replaced one, and who
-      // decided an item no longer has anybody in charge of it.
+      // Two audit verbs rather than one, because the questions they answer
+      // are two: who appointed this manager, and who replaced one.
       await insertInventoryAuditLog(tx, {
         actor,
         action: managerAuditAction(changeType),

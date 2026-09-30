@@ -61,6 +61,18 @@ interface ClassesTabsProps {
   classes: Class[];
   staff: Staff[];
   isLoading?: boolean;
+  /**
+   * The list read failed — including the year lookup behind it, which the
+   * page folds into the same flag. `classes` defaults to `[]` for every
+   * reason a request can come back without rows, so without this the failure
+   * and an empty year render as the same "No classes yet" screen, with the
+   * seed button offered against a year the client cannot even read.
+   */
+  isError?: boolean;
+  /** What to say about that failure; the page formats the server's message. */
+  errorMessage?: string;
+  /** Re-ask the server rather than re-rendering the cached failure. */
+  onRetry?: () => void;
   onCreateClick: () => void;
   onEditClick: (cls: Class) => void;
   onAssignTeacherClick: (cls: Class) => void;
@@ -74,6 +86,9 @@ export const ClassesTabs = ({
   classes,
   staff,
   isLoading = false,
+  isError = false,
+  errorMessage,
+  onRetry,
   onCreateClick,
   onEditClick,
   onAssignTeacherClick,
@@ -132,6 +147,36 @@ export const ClassesTabs = ({
             // biome-ignore lint: static skeleton list, no stable id available
             <Skeleton key={i} className="h-10 w-full" />
           ))}
+        </div>
+      </Card>
+    );
+  }
+
+  // Before the empty state, deliberately: a failed read also hands back no
+  // rows, and "No classes yet" would offer to seed a year the client could
+  // not confirm exists. Checked after `isLoading` so the retry above shows
+  // the skeleton rather than the failure it is already fixing.
+  if (isError) {
+    return (
+      <Card>
+        <div className="border-destructive/30 px-[22px] py-4">
+          <p className="text-destructive text-sm font-bold">
+            The class list could not be loaded
+          </p>
+          <p className="text-primary/65 mt-1 text-[13px]">
+            {errorMessage ?? "The server did not return the class list."}{" "}
+            Nothing has been changed.
+          </p>
+          {onRetry ? (
+            <Button
+              className="mt-3"
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+            >
+              Try again
+            </Button>
+          ) : null}
         </div>
       </Card>
     );

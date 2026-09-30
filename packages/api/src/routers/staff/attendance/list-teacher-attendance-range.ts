@@ -7,7 +7,7 @@ import {
 import { and, between, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import {
   assertDateRangeWithinAcademicYear,
   requireAttendanceAcademicYear,
@@ -18,7 +18,7 @@ import {
  * Dates in the range with no row are unmarked, not fetched here - the
  * caller fills in the gaps as "unmarked" for its own calendar/strip UI.
  */
-export const listTeacherAttendanceRange = adminProcedure
+export const listTeacherAttendanceRange = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

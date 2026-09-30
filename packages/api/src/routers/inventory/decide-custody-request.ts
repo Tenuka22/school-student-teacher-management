@@ -19,7 +19,7 @@ import {
   inventoryCustodyRequestIdSchema,
   inventoryItem,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import {
   literal,
@@ -51,9 +51,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, staffId))
+    .select({ name: staff.name })
+    .from(staff)
+    .where(eq(staff.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -69,7 +69,6 @@ export const decideCustodyRequest = requireInventoryPermission("take")
   )
   .handler(async ({ input, context }) => {
     const actor = await getInventoryActor(context);
-
 
     const result = await context.db.transaction(async (tx) => {
       const [requestRow] = await tx
@@ -91,7 +90,7 @@ export const decideCustodyRequest = requireInventoryPermission("take")
 
       const role = context.session?.user.role ?? "";
       const isAdmin = ADMIN_ROLES.has(role);
-      if (requestRow.custodianStaffId !== actor.userId && !isAdmin) {
+      if (requestRow.custodianStaffId !== actor.staffId && !isAdmin) {
         throw new ORPCError("FORBIDDEN", {
           message:
             "Only the teacher currently holding this item, or an administrator, can decide this request",
@@ -119,7 +118,7 @@ export const decideCustodyRequest = requireInventoryPermission("take")
           .update(inventoryCustodyRequest)
           .set({
             status: input.decision,
-            decidedByStaffId: actor.userId,
+            decidedByStaffId: actor.staffId,
             decidedAt: new Date(),
             decisionNote: input.note ?? null,
           })
@@ -159,7 +158,7 @@ export const decideCustodyRequest = requireInventoryPermission("take")
           changeType: "custody_transferred",
           reason: "teacher_transfer",
           note: input.note ?? requestRow.note,
-          changedByStaffId: actor.userId,
+          changedByStaffId: actor.staffId,
         })
         .returning();
 
@@ -172,7 +171,7 @@ export const decideCustodyRequest = requireInventoryPermission("take")
         itemId: existing.id,
         previousCustodianStaffId: existing.custodianStaffId,
         managerStaffId: existing.managerStaffId,
-        changedByStaffId: actor.userId,
+        changedByStaffId: actor.staffId,
       });
 
       await insertInventoryTransaction(tx, {

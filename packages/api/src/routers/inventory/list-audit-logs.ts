@@ -1,4 +1,3 @@
-import { user } from "@school-student-teacher-management/db/schema/auth";
 /**
  * The entity audit trail, read: *"what did this row look like before and after
  * it was changed?"*
@@ -22,9 +21,10 @@ import { user } from "@school-student-teacher-management/db/schema/auth";
  */
 import {
   inventoryAuditLog,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, count, desc, eq, gte, lt } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -80,7 +80,7 @@ const auditSelection = {
   actorStaffId: inventoryAuditLog.actorStaffId,
   createdAt: inventoryAuditLog.createdAt,
   /** The live name, null once the staff row is gone. */
-  joinedActorName: user.name,
+  joinedActorName: staff.name,
 } as const;
 
 /**
@@ -114,7 +114,7 @@ export const listAuditLogs = inventoryOverseerProcedure
     object({
       entityType: optional(pipe(string(), maxLength(60))),
       entityId: optional(pipe(string(), maxLength(64))),
-      actorStaffId: optional(userIdSchema),
+      actorStaffId: optional(staffRefSchema),
       /**
        * Free text, deliberately. On this table `action` is a CRUD verb —
        * `"item.update"`, `"custody.transfer"`, `"category.create"` — and not one
@@ -182,7 +182,7 @@ export const listAuditLogs = inventoryOverseerProcedure
       context.db
         .select(auditSelection)
         .from(inventoryAuditLog)
-        .leftJoin(user, eq(inventoryAuditLog.actorStaffId, user.id))
+        .leftJoin(staff, eq(inventoryAuditLog.actorStaffId, staff.id))
         .where(where)
         .orderBy(...orderBy)
         .limit(limit),

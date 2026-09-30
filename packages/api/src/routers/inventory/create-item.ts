@@ -18,7 +18,7 @@ import {
   inventoryItemInsertSchema,
   inventoryItemReplacement,
   inventoryUnit,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { count, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
@@ -138,6 +138,15 @@ interface AssetTag {
 /**
  * Normalise the request's tags, and refuse the two ways a tag list can be wrong.
  *
+ * **An empty list is not "un-tagged" any more — it means "mint them."** Every
+ * line on the register is tagged: a line the storekeeper typed labels for keeps
+ * them, and one they left blank gets `${sku}//1 … ${sku}//qty`, which is the tag
+ * scheme the label printer writes anyway (`INV-00042//1`). The store used to
+ * distinguish "counted bulk" from "tagged units" at the row level, and a bulk
+ * line came out with no unit rows, so a stock movement had nothing to move and
+ * the counter and the labels could disagree from the first day. One rule now:
+ * `qty` units, `qty` tags, always.
+ *
  * The duplicate check is a request-level guard, not a database one: the global
  * unique index would reject the second row, but only after the caller had been
  * told its list was fine. More usefully, two identical entries are almost always
@@ -145,7 +154,18 @@ interface AssetTag {
  * shown a constraint name. The count check is the other one — see the module
  * comment on why the tag count and `qty` have to agree.
  */
-const resolveAssetTags = (uniqueIds: string[], qty: number): AssetTag[] => {
+const resolveAssetTags = (
+  uniqueIds: string[],
+  qty: number,
+  sku: string
+): AssetTag[] => {
+  if (uniqueIds.length === 0) {
+    return Array.from({ length: qty }, (_, index) => {
+      const tag = `${sku}//${index + 1}`;
+      return { tag, key: normalizeInventoryKey(tag) };
+    });
+  }
+
   const tags = uniqueIds.map((tag) => ({
     tag,
     key: normalizeInventoryKey(tag),
@@ -158,9 +178,9 @@ const resolveAssetTags = (uniqueIds: string[], qty: number): AssetTag[] => {
     });
   }
 
-  if (keys.length > 0 && keys.length !== qty) {
+  if (keys.length !== qty) {
     throw new ORPCError("BAD_REQUEST", {
-      message: `Enter one asset tag for each of the ${qty} unit(s), or clear the tags to record a counted bulk quantity`,
+      message: `Enter one asset tag for each of the ${qty} unit(s), or clear the tags and the store will mint ${sku}//1 through ${sku}//${qty}`,
     });
   }
 
@@ -225,33 +245,25 @@ const generateItemName = async (
 /**
  * A person who could never be assigned custody must not be assignable on day
  * zero either, or the item sits in the register with a holder no later
- * procedure would ever have allowed. Independent checks, issued together
- * rather than as a waterfall of round trips.
+ * procedure would ever have allowed. Both holders are required now, so both
+ * checks always run — issued together rather than as a waterfall of round trips.
  */
 const assertInitialHoldersAssignable = (
   db: Executor,
-  managerStaffId: string | null | undefined,
-  custodianStaffId: string | null | undefined
+  managerStaffId: string,
+  custodianStaffId: string
 ): Promise<unknown> =>
   Promise.all([
-    ...(managerStaffId
-      ? [
-          assertStaffIsAssignable(
-            db,
-            managerStaffId,
-            "staff member in charge of the item"
-          ),
-        ]
-      : []),
-    ...(custodianStaffId
-      ? [
-          assertStaffIsAssignable(
-            db,
-            custodianStaffId,
-            "staff member holding the item"
-          ),
-        ]
-      : []),
+    assertStaffIsAssignable(
+      db,
+      managerStaffId,
+      "staff member in charge of the item"
+    ),
+    assertStaffIsAssignable(
+      db,
+      custodianStaffId,
+      "staff member holding the item"
+    ),
   ]);
 
 /**
@@ -335,8 +347,9 @@ const insertItem = async (
  *
  * `inventoryCustodyHistory` is the trail that answers "who has had this, and
  * since when", and a trail that begins at the *second* change cannot answer it
- * for the first holder. Two rows rather than one when both columns are supplied
- * is forced by the schema: `changeType` names one kind of change, and a
+ * for the first holder. Two rows rather than one — both columns are required
+ * at create (see the module doc) — is forced by the schema: `changeType` names
+ * one kind of change, and a
  * `manager_assigned` row carrying a custodian would fail
  * `inventory_custody_history_manager_columns`. This is also the only place in the
  * feature where the two changes share a transaction — afterwards custody moves
@@ -451,16 +464,24 @@ const insertUnits = async (
 /**
  * Create an item, its tagged units, and the first row of its custody trail.
  *
- * **The count and the tags must agree.** `qty` is required and `uniqueIds` may
- * be empty, but the moment the caller supplies even one tag the number of tags
- * has to equal `qty`. A row of N tagged units and a counter of N are one fact
- * seen from two directions, and a store that disagrees with itself is the thing
- * this whole feature exists to prevent: the counter is what every list, badge
- * and low-stock warning reads, and the unit rows are what every borrow and
- * disposal actually moves. If they are allowed to start out unequal there is no
- * point at which the discrepancy is visible — the ledger would be born wrong. An
- * empty tag list is still legitimate: a bulk line ("200 chairs") is counted, not
- * tagged, and only a tagged item has unit rows.
+ * **Both holders are required, and both come from the picker.** `managerStaffId`
+ * and `custodianStaffId` are plain required strings: every line on the register
+ * answers "whose is this?" from the day it is written, and a line with nobody
+ * in charge is a line nobody can be asked about. `assertInitialHoldersAssignable`
+ * runs both through the same guard every later assignment uses, so day zero and
+ * day two accept exactly the same set of people.
+ *
+ * **The count and the tags must agree, and a blank tag list means "mint them".**
+ * `qty` is required. If the caller supplies tags, their number has to equal
+ * `qty`: a row of N tagged units and a counter of N are one fact seen from two
+ * directions, and a store that disagrees with itself is the thing this whole
+ * feature exists to prevent — the counter is what every list, badge and
+ * low-stock warning reads, and the unit rows are what every borrow and disposal
+ * actually moves. If they are allowed to start out unequal there is no point at
+ * which the discrepancy is visible; the ledger would be born wrong. If the
+ * caller supplies none, the store mints `${sku}//1 … ${sku}//qty` itself, so a
+ * bulk line ("200 chairs") is tagged too and every item leaves registration
+ * with unit rows.
  *
  * Note what is *not* checked here: `minQty` may exceed `qty` at creation
  * without complaint, because a store registering a line it is already short of
@@ -496,9 +517,14 @@ export const createItem = inventoryManagerProcedure
        * has nothing for the ledger's `after` column to record.
        */
       qty: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1000)),
-      /** Both are plain fields here. On an update they are not — see `updateItem`. */
-      managerStaffId: v.optional(v.nullable(userIdSchema)),
-      custodianStaffId: v.optional(v.nullable(userIdSchema)),
+      /**
+       * Both are required, and both are plain fields here. On an update they
+       * are not — see `updateItem`. An item with nobody in charge or nobody
+       * holding it cannot be entered: every line on the register answers
+       * "whose is this?" from the day it is written.
+       */
+      managerStaffId: staffRefSchema,
+      custodianStaffId: staffRefSchema,
       uniqueIds: v.array(itemUniqueNoSchema),
       /**
        * Retired items this new line stands in for — 12 worn chairs retired,
@@ -524,15 +550,19 @@ export const createItem = inventoryManagerProcedure
         input.custodianStaffId
       );
 
-      const tags = resolveAssetTags(input.uniqueIds, input.qty);
+      const category = await assertCategoryExists(tx, input.categoryId);
+      const name = await generateItemName(tx, input.categoryId, category.name);
+      const sku = input.sku ?? (await resolveAvailableSku(tx));
+
+      // The SKU comes first because a blank tag list is minted from it — the
+      // auto-tags are `${sku}//1 … ${sku}//qty`, so there is no tag list to
+      // build until the SKU this line will carry is settled.
+      const tags = resolveAssetTags(input.uniqueIds, input.qty, sku);
       await assertTagsNotOnFile(
         tx,
         tags.map((entry) => entry.key)
       );
 
-      const category = await assertCategoryExists(tx, input.categoryId);
-      const name = await generateItemName(tx, input.categoryId, category.name);
-      const sku = input.sku ?? (await resolveAvailableSku(tx));
       const condition = input.condition ?? "Good";
       const location = input.location ?? "";
       const purchaseValue = input.purchaseValue ?? null;
@@ -541,8 +571,7 @@ export const createItem = inventoryManagerProcedure
         ? new Date(input.purchaseDate)
         : null;
       const depreciationRatePercent = input.depreciationRatePercent ?? null;
-      const managerStaffId = input.managerStaffId ?? null;
-      const custodianStaffId = input.custodianStaffId ?? null;
+      const { managerStaffId, custodianStaffId } = input;
 
       // Every id named in `replacesItemIds` must be a retired item — checked
       // once, in a single batched read, before anything is written. A missing
@@ -570,7 +599,7 @@ export const createItem = inventoryManagerProcedure
         currentValue,
         purchaseDate,
         depreciationRatePercent,
-        createdByStaffId: actor.userId,
+        createdByStaffId: actor.staffId,
         managerStaffId,
         custodianStaffId,
         imageFileId: input.imageFileId ?? null,
@@ -582,7 +611,7 @@ export const createItem = inventoryManagerProcedure
             id: crypto.randomUUID(),
             newItemId: itemId,
             retiredItemId,
-            createdByStaffId: actor.userId,
+            createdByStaffId: actor.staffId,
           }))
         );
       }
@@ -591,7 +620,7 @@ export const createItem = inventoryManagerProcedure
         itemId,
         managerStaffId,
         custodianStaffId,
-        actor.userId
+        actor.staffId
       );
       if (custodyRows.length > 0) {
         await tx.insert(inventoryCustodyHistory).values(custodyRows);

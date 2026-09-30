@@ -15,7 +15,7 @@ import {
   inventoryCustodyRequest,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -47,7 +47,6 @@ export const createCustodyRequest = requireInventoryPermission("take")
 
     const actor = await getInventoryActor(context);
 
-
     const result = await context.db.transaction(async (tx) => {
       const existing = await getLockedItem(tx, input.itemId);
 
@@ -64,7 +63,7 @@ export const createCustodyRequest = requireInventoryPermission("take")
         });
       }
 
-      if (existing.custodianStaffId === actor.userId) {
+      if (existing.custodianStaffId === actor.staffId) {
         throw new ORPCError("BAD_REQUEST", {
           message: "This item is already assigned to you",
         });
@@ -90,7 +89,7 @@ export const createCustodyRequest = requireInventoryPermission("take")
         .where(
           and(
             eq(inventoryCustodyRequest.itemId, input.itemId),
-            eq(inventoryCustodyRequest.requesterStaffId, actor.userId),
+            eq(inventoryCustodyRequest.requesterStaffId, actor.staffId),
             eq(inventoryCustodyRequest.status, "pending")
           )
         )
@@ -107,16 +106,16 @@ export const createCustodyRequest = requireInventoryPermission("take")
       // itself.
       const [[custodian], [created]] = await Promise.all([
         tx
-          .select({ name: user.name })
-          .from(user)
-          .where(eq(user.id, existing.custodianStaffId))
+          .select({ name: staff.name })
+          .from(staff)
+          .where(eq(staff.id, existing.custodianStaffId))
           .limit(1),
         tx
           .insert(inventoryCustodyRequest)
           .values({
             id: crypto.randomUUID(),
             itemId: existing.id,
-            requesterStaffId: actor.userId,
+            requesterStaffId: actor.staffId,
             custodianStaffId: existing.custodianStaffId,
             note: input.note ?? null,
           })
@@ -139,7 +138,7 @@ export const createCustodyRequest = requireInventoryPermission("take")
       requestId: result.request.id,
       itemId: result.request.itemId,
       itemName: result.itemName,
-      requesterStaffId: actor.userId,
+      requesterStaffId: actor.staffId,
       requesterName: actor.name,
       custodianStaffId: result.request.custodianStaffId,
       custodianName: result.custodianName ?? "",

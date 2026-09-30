@@ -12,7 +12,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 
 /**
  * List every subject-slot a teacher is named on, for a given academic year,
@@ -22,7 +22,7 @@ import { adminProcedure } from "../../../index";
  * intentional, not a data error, and co-teaching a subject with someone else
  * shows up as one row per teacher, not one row per subject.
  */
-export const listTeacherTimetable = adminProcedure
+export const listTeacherTimetable = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,
@@ -30,9 +30,12 @@ export const listTeacherTimetable = adminProcedure
     })
   )
   .handler(async ({ input, context }) => {
-    const canViewAll = ["admin", "principal", "vicePrincipal"].includes(
-      context.session.user.role ?? ""
-    );
+    const canViewAll = [
+      "admin",
+      "principal",
+      "vicePrincipal",
+      "academicAdmin",
+    ].includes(context.session.user.role ?? "");
     if (!canViewAll) {
       const [linkedStaff] = await context.db
         .select({ id: staff.id })

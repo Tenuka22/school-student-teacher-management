@@ -215,7 +215,7 @@ export const cancelDisposal = inventoryManagerProcedure
         .update(inventoryDisposal)
         .set({
           status: "cancelled",
-          cancelledByStaffId: actor.userId,
+          cancelledByStaffId: actor.staffId,
           cancelledAt,
           cancellationReason: input.reason,
         })
@@ -262,7 +262,7 @@ export const cancelDisposal = inventoryManagerProcedure
         fromStatus: existing.status,
         toStatus: "cancelled",
         note: input.reason,
-        changedByStaffId: actor.userId,
+        changedByStaffId: actor.staffId,
       });
 
       /**
@@ -314,7 +314,7 @@ export const cancelDisposal = inventoryManagerProcedure
         after: {
           status: updated.status,
           cancellationReason: updated.cancellationReason,
-          cancelledByStaffId: actor.userId,
+          cancelledByStaffId: actor.staffId,
         },
       });
 

@@ -13,6 +13,7 @@ import { Skeleton } from "@school-student-teacher-management/ui/components/skele
 import { IconSeedling } from "@tabler/icons-react";
 
 import { QueryErrorPanel } from "@/components/query-error-panel";
+import { CategoryIcon } from "@/components/staff/inventory/category-icon";
 import type { CategoryOption } from "@/components/staff/inventory/inventory-types";
 import { InventoryEmptyState } from "@/components/staff/inventory/shared";
 import { formatApiErrorMessage } from "@/lib/api-error";
@@ -30,28 +31,22 @@ import { formatApiErrorMessage } from "@/lib/api-error";
 const SEED_CATEGORIES_LABEL = "Seed the eight starter categories";
 const SEEDING_LABEL = "Seeding...";
 
-/**
- * The category's colour, as a dot.
- *
- * `aria-hidden`, always, because the category's **name** is always beside it. A
- * colour that was the only channel would leave a reader who cannot tell two of them
- * apart with no way to tell the categories apart at all — and the whole reason a
- * category carries a colour is to be recognised at a glance in a 200-row register.
- */
-const CategorySwatch: React.FC<{ color: string }> = ({ color }) => (
-  <span
-    aria-hidden="true"
-    className="ring-foreground/10 size-3 shrink-0 rounded-full ring-1"
-    style={{ backgroundColor: color }}
-  />
-);
-
 interface CategoryListProps {
   categories: CategoryOption[];
 }
 
 /**
- * The list, one row per category, read-only.
+ * The list, one row per category, read-only: the category's glyph in its
+ * colour, then its name.
+ *
+ * The glyph replaces the bare colour dot this list used to draw, and the colour
+ * still travels with it — `CategoryIcon` tints the glyph with the category's own
+ * hex, so the two never disagree. It is `aria-hidden` because the category's
+ * **name** is always beside it: a colour that was the only channel would leave a
+ * reader who cannot tell two of them apart with no way to tell the categories
+ * apart at all — and the whole reason a category carries a colour is to be
+ * recognised at a glance in a 200-row register. A glyph has the second channel
+ * the colour never had, which is why this list shows both in one element.
  *
  * Categories are a closed set now — the eight `DEFAULT_INVENTORY_CATEGORIES`,
  * each with a fixed name, colour and icon, seeded once and never created or
@@ -67,7 +62,11 @@ const CategoryList = ({ categories }: CategoryListProps) => (
         key={category.id}
         className="flex items-center gap-2 border-b py-2 last:border-b-0"
       >
-        <CategorySwatch color={category.color} />
+        <CategoryIcon
+          icon={category.icon}
+          color={category.color}
+          className="size-4 shrink-0"
+        />
         <span className="min-w-0 flex-1 truncate font-medium">
           {category.name}
         </span>

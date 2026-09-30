@@ -11,13 +11,13 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import {
   assertDateWithinAcademicYear,
   requireAttendanceAcademicYear,
 } from "./academic-year";
 
-export const listAttendanceForDate = adminProcedure
+export const listAttendanceForDate = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

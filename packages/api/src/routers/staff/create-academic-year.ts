@@ -17,7 +17,7 @@ import {
 import { desc } from "drizzle-orm";
 import { object, optional, pick } from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { adminOrAcademicProcedure } from "../../index";
 
 const inputSchema = object({
   ...pick(academicYearInsertSchema, ["year", "startDate", "endDate"]).entries,
@@ -31,7 +31,7 @@ const inputSchema = object({
   ),
 });
 
-export const createAcademicYear = adminOnlyProcedure
+export const createAcademicYear = adminOrAcademicProcedure
   .input(inputSchema)
   .handler(async ({ input, context }) => {
     // Default to the most recently created academic year's structure

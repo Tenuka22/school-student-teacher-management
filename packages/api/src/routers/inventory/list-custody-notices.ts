@@ -26,15 +26,15 @@ import {
   inventoryCustodyNoticeRecipient,
   inventoryItem,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { requireInventoryPermission } from "../../index";
 import { getInventoryActor, iso } from "./inventory-database";
 
-const currentCustodian = alias(user, "notice_current_custodian");
-const changedBy = alias(user, "notice_changed_by");
+const currentCustodian = alias(staff, "notice_current_custodian");
+const changedBy = alias(staff, "notice_changed_by");
 
 const NOTICE_LIMIT = 50;
 
@@ -59,7 +59,10 @@ export const listCustodyNotices = requireInventoryPermission("read").handler(
       .from(inventoryCustodyNoticeRecipient)
       .innerJoin(
         inventoryCustodyHistory,
-        eq(inventoryCustodyNoticeRecipient.custodyHistoryId, inventoryCustodyHistory.id)
+        eq(
+          inventoryCustodyNoticeRecipient.custodyHistoryId,
+          inventoryCustodyHistory.id
+        )
       )
       .innerJoin(
         inventoryItem,
@@ -75,7 +78,7 @@ export const listCustodyNotices = requireInventoryPermission("read").handler(
       )
       .where(
         and(
-          eq(inventoryCustodyNoticeRecipient.staffId, actor.userId),
+          eq(inventoryCustodyNoticeRecipient.staffId, actor.staffId),
           isNull(inventoryCustodyNoticeRecipient.acknowledgedAt)
         )
       )

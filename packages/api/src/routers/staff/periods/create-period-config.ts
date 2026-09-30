@@ -1,5 +1,5 @@
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 
-export const createPeriodConfig = adminProcedure.handler(() => {
+export const createPeriodConfig = academicProcedure.handler(() => {
   throw new Error("Period configuration is code-defined");
 });

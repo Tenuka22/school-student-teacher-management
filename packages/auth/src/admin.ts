@@ -59,6 +59,14 @@ export const DEPUTY_PRINCIPAL_USERNAME = "deputy-principal";
 export const INVENTORY_ADMIN_USERNAME = "inventory-admin";
 
 /**
+ * The Academic Administrator's seat. Owns the academic desk \u2014 teacher
+ * register, class and period assignment, attendance, academic years, teacher
+ * requests and accounts \u2014 in its own `/academic-admin/$year` workspace.
+ * See `packages/auth/src/permissions.ts` for what the role reaches.
+ */
+export const ACADEMIC_ADMIN_USERNAME = "academic-admin";
+
+/**
  * Real, deliverable addresses for the seeded accounts. Unlike ordinary staff
  * — whose accounts carry the email they typed at sign-up — these are fixed
  * institutional addresses, so one-time codes for elevated actions have
@@ -70,10 +78,47 @@ export const ADMIN_EMAIL = "admin@aloysiuscollege.lk";
 export const PRINCIPAL_EMAIL = "principal@aloysiuscollege.lk";
 export const DEPUTY_PRINCIPAL_EMAIL = "deputy-principal@aloysiuscollege.lk";
 export const INVENTORY_ADMIN_EMAIL = "inventory-admin@aloysiuscollege.lk";
+export const ACADEMIC_ADMIN_EMAIL = "academic-admin@aloysiuscollege.lk";
 
 /** Synthetic internal email backing a username login (never shown). */
 export const internalEmailForUsername = (accountUsername: string) =>
   `${accountUsername.toLowerCase()}@school-student-teacher-management.internal`;
+
+/**
+ * The synthetic NIC each seeded office seat carries.
+ *
+ * `staff.nic` is `NOT NULL` — it is the identity this product keys a person on,
+ * and the login username for everyone who signs in with a NIC — and a Principal
+ * is not issued a National Identity Card by their own school. So the seats carry
+ * a value that is obviously not a person's, in a block chosen so that it cannot
+ * be mistaken for one: **all twelve characters are digits, and the first eight
+ * are zero.** A real 12-digit NIC carries a date of birth in its leading
+ * positions, so `00` is not a year anyone was issued, and a row reading
+ * `000000000001` is a seat rather than a citizen the moment anybody looks at it.
+ *
+ * **The numbering is the seat's position in `LEADERSHIP_ROLE_BY_POSITION` and
+ * then the two specialist seats, and it is a constant per seat rather than a
+ * derived sequence.** A derived one would move if somebody reordered the map
+ * above, and a NIC that changes because a map was reordered is a NIC that
+ * changes identity.
+ *
+ * Two properties matter and both come from `staff.nic` being unique: each seat
+ * needs its own value (they do), and no seeded value may ever collide with a
+ * real one (it cannot, for the reason above).
+ *
+ * **These keys are never a login username.** `usernameForNic` is not applied to
+ * them — the seats sign in with the fixed usernames above, which is the whole
+ * reason the two concepts are documented apart. What the key is *for* is
+ * satisfying a constraint the school asked for while making it obvious, on any
+ * screen that shows the column, which seat it is.
+ */
+export const SEEDED_PLACEHOLDER_NIC = {
+  [ADMIN_USERNAME]: "000000000001",
+  [PRINCIPAL_USERNAME]: "000000000002",
+  [DEPUTY_PRINCIPAL_USERNAME]: "000000000003",
+  [INVENTORY_ADMIN_USERNAME]: "000000000004",
+  [ACADEMIC_ADMIN_USERNAME]: "000000000005",
+} as const satisfies Record<string, string>;
 
 /**
  * Username for a staff login account: **the NIC itself** (lowercased so
@@ -81,9 +126,10 @@ export const internalEmailForUsername = (accountUsername: string) =>
  * guaranteed by the unique index on `staff.nic` — one NIC, one person,
  * one account. No random suffixes, nothing auto-generated to remember.
  *
- * The seeded admin/leadership accounts are the exception: they have a `staff`
- * row but no NIC on it, so they use the fixed usernames above. See
- * `ensureBootstrapAccount` for why no NIC is invented for them.
+ * The seeded admin/leadership accounts are the exception: their `staff` rows
+ * carry a synthetic placeholder NIC (`SEEDED_PLACEHOLDER_NIC`) and their logins
+ * use the fixed usernames above, so no seat can ever be signed into with a
+ * fabricated identity. See `ensureBootstrapAccount`.
  */
 export const usernameForNic = (nic: string) => nic.toLowerCase();
 
@@ -185,6 +231,16 @@ interface EnsureBootstrapAccountConfig {
   name: string;
   /** Seeded auth role: `admin`, `principal`, `vicePrincipal` or `teacher`. */
   role: string;
+  /**
+   * The synthetic NIC the seat's `staff` row carries, from
+   * `SEEDED_PLACEHOLDER_NIC` by the seat's username.
+   *
+   * Passed rather than looked up inside the function so a caller that invents a
+   * sixth seat cannot quietly get a `null` NIC again: the compiler asks for the
+   * field, and the five call sites in `ensureBootstrapUsers` each name their own
+   * key rather than trusting a lookup to stay in step with the seat list.
+   */
+  placeholderNic: string;
 }
 
 /**
@@ -266,13 +322,28 @@ const seededStaffId = (accountUsername: string): string =>
  * staff.userId })`, for the same reason the password is never re-asserted: an
  * administrator who renames the Principal to "Mrs Perera" must not find the
  * name silently reverted to "Principal" on the next restart, and a school that
- * fills in a NIC or a service number for the seat must not have it cleared.
- * Only a *missing* row is repaired.
+ * fills in a service number for the seat must not have it cleared. Only a
+ * *missing* row is repaired.
  *
- * `nic` is left `null`. The column is `text("nic").unique()` and therefore
- * nullable; every ordinary staff member's NIC is their login username, but
- * these seats are the documented exception (`usernameForNic` below) and there
- * is no honest 10-digit identity to invent for them.
+ * **One consequence of that rule is a migration's job, not this function's.**
+ * A row created before `staff.nic` became `NOT NULL` carries no placeholder, and
+ * this insert will never fill it in — "only a missing row is repaired" is the
+ * property that stops a school's edits being reverted, and it applies to a
+ * placeholder exactly as it applies to a name. So the five seeded seats get their
+ * keys from the one-time backfill that migration rather than from here.
+ *
+ * `nic` is the seat's **synthetic placeholder** from `SEEDED_PLACEHOLDER_NIC`, not
+ * a real identity and not `null`. The column is `NOT NULL` and
+ * format-checked — it is the identity this product keys a person on — and a
+ * Principal is not issued a National Identity Card by their own school, so there
+ * is no honest number to put there. The placeholder is a value from a block no
+ * real NIC can occupy (see that constant), which is what lets the column keep its
+ * constraint instead of the seeder being the one place that bypasses it.
+ *
+ * **Still not a login username.** These seats sign in with the fixed usernames
+ * above, so the fabricated key can never be typed into a sign-in box, and no
+ * account's `username` is derived from it. It exists to satisfy the schema and to
+ * be visibly synthetic on the screens that show a NIC.
  *
  * `employmentStatus` is left `null` rather than asserted as `"active"`. The
  * widened guard in `listStaff` and in `teacher-eligibility.ts` accepts
@@ -288,7 +359,14 @@ const seededStaffId = (accountUsername: string): string =>
  */
 const ensureBootstrapAccount = async (
   database: Database,
-  { username, email, password, name, role }: EnsureBootstrapAccountConfig
+  {
+    username,
+    email,
+    password,
+    name,
+    role,
+    placeholderNic,
+  }: EnsureBootstrapAccountConfig
 ) => {
   assertValidBootstrapUsername(username, name);
   const accountUsername = username.toLowerCase();
@@ -390,8 +468,12 @@ const ensureBootstrapAccount = async (
       // surface. Changing it to "teacher" is not a cosmetic change — it puts
       // the seat in the roster, the attendance register and the teacher export.
       staffCategory: SEEDED_STAFF_CATEGORY,
-      // `nic` and `employmentStatus` are left null on purpose; see the doc
-      // comment above for why neither is invented.
+      // The synthetic key, not a real identity and not `null`; see the doc
+      // comment above and `SEEDED_PLACEHOLDER_NIC` for why it exists and why it
+      // is deliberately not a login username.
+      nic: placeholderNic,
+      // `employmentStatus` is left null on purpose; see the doc comment above
+      // for why it is not invented.
     })
     .onConflictDoNothing({ target: staff.userId })
     .returning({ id: staff.id });
@@ -506,18 +588,19 @@ const ensureInventoryCategories = async (database: Database) => {
 };
 
 /**
- * Bootstraps the admin, Principal and Deputy Principal accounts from env, and
- * the inventory register's default categories.
+ * Bootstraps the admin, Principal, Deputy Principal, Inventory Administrator
+ * and Academic Administrator accounts from env, and the inventory register's
+ * default categories.
  *
  * Runs on every server start, so a missing account is created and a changed
  * role, name or address is restored. It does **not** re-assert a password that
  * already exists, nor overwrite a `staff` row a school has edited — see
  * `ensureBootstrapAccount` for why, and for how to reset one deliberately.
  *
- * The category seed runs after the three accounts, and therefore after
+ * The category seed runs after the five accounts, and therefore after
  * `Promise.all` settles: a boot that failed to create a seat has already told
  * the operator so, and the log lines stay readable in the order the work
- * happened rather than interleaved from three concurrent tasks.
+ * happened rather than interleaved from five concurrent tasks.
  */
 export const ensureBootstrapUsers = async (
   database: Database,
@@ -530,6 +613,7 @@ export const ensureBootstrapUsers = async (
       password: env.ADMIN_PASSWORD,
       name: env.ADMIN_NAME || "Admin",
       role: "admin",
+      placeholderNic: SEEDED_PLACEHOLDER_NIC[ADMIN_USERNAME],
     }),
     ensureBootstrapAccount(database, {
       username: PRINCIPAL_USERNAME,
@@ -537,6 +621,7 @@ export const ensureBootstrapUsers = async (
       password: env.PRINCIPAL_PASSWORD,
       name: env.PRINCIPAL_NAME || "Principal",
       role: leadershipRoleForPosition(PRINCIPAL_POSITION) ?? "admin",
+      placeholderNic: SEEDED_PLACEHOLDER_NIC[PRINCIPAL_USERNAME],
     }),
     ensureBootstrapAccount(database, {
       username: DEPUTY_PRINCIPAL_USERNAME,
@@ -544,6 +629,7 @@ export const ensureBootstrapUsers = async (
       password: env.DEPUTY_PRINCIPAL_PASSWORD,
       name: env.DEPUTY_PRINCIPAL_NAME || "Deputy Principal",
       role: leadershipRoleForPosition(DEPUTY_PRINCIPAL_POSITION) ?? "admin",
+      placeholderNic: SEEDED_PLACEHOLDER_NIC[DEPUTY_PRINCIPAL_USERNAME],
     }),
     ensureBootstrapAccount(database, {
       username: INVENTORY_ADMIN_USERNAME,
@@ -551,6 +637,15 @@ export const ensureBootstrapUsers = async (
       password: env.INVENTORY_ADMIN_PASSWORD,
       name: env.INVENTORY_ADMIN_NAME || "Inventory Administrator",
       role: "inventoryAdmin",
+      placeholderNic: SEEDED_PLACEHOLDER_NIC[INVENTORY_ADMIN_USERNAME],
+    }),
+    ensureBootstrapAccount(database, {
+      username: ACADEMIC_ADMIN_USERNAME,
+      email: ACADEMIC_ADMIN_EMAIL,
+      password: env.ACADEMIC_ADMIN_PASSWORD,
+      name: env.ACADEMIC_ADMIN_NAME || "Academic Administrator",
+      role: "academicAdmin",
+      placeholderNic: SEEDED_PLACEHOLDER_NIC[ACADEMIC_ADMIN_USERNAME],
     }),
   ]);
 

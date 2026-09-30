@@ -169,11 +169,11 @@ export const FINAL_OUTCOME_CONSEQUENCE: Record<
  * The four header counts, as a **real table**.
  *
  * Rendered locally rather than through `InventoryStatCards`, and deliberately so:
- * that component's seven fields (`totalItems`, `lowStockItems`, `unassignedItems`,
- * …) describe the *item* register, and a card labelled "Items" sitting above a count
- * of write-off certificates would be a lie about what the number is. These four come
- * from `listDisposals`' own `summary`, which is computed over the **whole filtered
- * set** rather than the page — a header reading "3 awaiting approval" while the list
+ * that component's six fields (`totalItems`, `lowStockItems`, …) describe the
+ * *item* register, and a card labelled "Items" sitting above a count of write-off
+ * certificates would be a lie about what the number is. These four come from
+ * `listDisposals`' own `summary`, which is computed over the **whole filtered set**
+ * rather than the page — a header reading "3 awaiting approval" while the list
  * shows one of them is a bug the user cannot see through.
  *
  * It used to be a four-cell grid of `small label over large number`, which is the

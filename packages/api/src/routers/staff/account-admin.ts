@@ -3,7 +3,7 @@ import { purgeUnverifiedAccounts } from "@school-student-teacher-management/auth
 import { user } from "@school-student-teacher-management/db/schema/auth";
 import { and, eq, lt } from "drizzle-orm";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
 /** Accounts are swept once they are this old without confirming an address. */
 const UNVERIFIED_RETENTION_DAYS = 7;
@@ -16,7 +16,7 @@ const UNVERIFIED_RETENTION_MS = UNVERIFIED_RETENTION_DAYS * 24 * 60 * 60 * 1000;
  * anyone commits to deleting them, which is the difference between an
  * informed decision and a surprise.
  */
-export const previewUnverifiedPurge = adminProcedure.handler(
+export const previewUnverifiedPurge = academicProcedure.handler(
   async ({ context }) => {
     const cutoff = new Date(Date.now() - UNVERIFIED_RETENTION_MS);
     const rows = await context.db
@@ -44,16 +44,18 @@ export const previewUnverifiedPurge = adminProcedure.handler(
  * server start and on a schedule; this endpoint is the manual version for an
  * administrator who wants it done now.
  */
-export const purgeUnverified = adminProcedure.handler(async ({ context }) => {
-  const result = await purgeUnverifiedAccounts(context.db, {
-    olderThanMs: UNVERIFIED_RETENTION_MS,
-  });
-
-  if (result.removed === 0) {
-    throw new ORPCError("NOT_FOUND", {
-      message: `No unverified accounts older than ${UNVERIFIED_RETENTION_DAYS} days`,
+export const purgeUnverified = academicProcedure.handler(
+  async ({ context }) => {
+    const result = await purgeUnverifiedAccounts(context.db, {
+      olderThanMs: UNVERIFIED_RETENTION_MS,
     });
-  }
 
-  return { removed: result.removed };
-});
+    if (result.removed === 0) {
+      throw new ORPCError("NOT_FOUND", {
+        message: `No unverified accounts older than ${UNVERIFIED_RETENTION_DAYS} days`,
+      });
+    }
+
+    return { removed: result.removed };
+  }
+);

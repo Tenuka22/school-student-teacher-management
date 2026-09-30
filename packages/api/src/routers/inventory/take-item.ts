@@ -24,7 +24,7 @@ import {
   inventoryItem,
   inventoryItemIdSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -69,9 +69,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, staffId))
+    .select({ name: staff.name })
+    .from(staff)
+    .where(eq(staff.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -98,7 +98,6 @@ export const takeItem = requireInventoryPermission("take")
     // Resolved before the transaction opens: the null-staff refusal below should
     // not take a row lock on an item it is about to abandon.
     const actor = await getInventoryActor(context);
-
 
     const result = await context.db.transaction(async (tx) => {
       const existing = await getLockedItem(tx, input.itemId);
@@ -131,7 +130,7 @@ export const takeItem = requireInventoryPermission("take")
         ? await resolveStaffName(tx, existing.custodianStaffId)
         : null;
 
-      if (existing.custodianStaffId === actor.userId) {
+      if (existing.custodianStaffId === actor.staffId) {
         throw new ORPCError("BAD_REQUEST", {
           message: "This item is already assigned to you",
         });
@@ -153,7 +152,7 @@ export const takeItem = requireInventoryPermission("take")
 
       await tx
         .update(inventoryItem)
-        .set({ custodianStaffId: actor.userId })
+        .set({ custodianStaffId: actor.staffId })
         .where(eq(inventoryItem.id, existing.id));
 
       // The guard above means `existing.custodianStaffId` is always null by
@@ -169,13 +168,13 @@ export const takeItem = requireInventoryPermission("take")
           id: crypto.randomUUID(),
           itemId: existing.id,
           previousCustodianStaffId: existing.custodianStaffId,
-          newCustodianStaffId: actor.userId,
+          newCustodianStaffId: actor.staffId,
           previousManagerStaffId: null,
           newManagerStaffId: null,
           changeType,
           reason,
           note: input.note ?? null,
-          changedByStaffId: actor.userId,
+          changedByStaffId: actor.staffId,
         })
         .returning();
 
@@ -188,7 +187,7 @@ export const takeItem = requireInventoryPermission("take")
         itemId: existing.id,
         previousCustodianStaffId: existing.custodianStaffId,
         managerStaffId: existing.managerStaffId,
-        changedByStaffId: actor.userId,
+        changedByStaffId: actor.staffId,
       });
 
       // Taking an item is a change of hands, not of stock: the units are still
@@ -204,7 +203,7 @@ export const takeItem = requireInventoryPermission("take")
         meta: {
           previousCustodianName,
           // `actor.name` is the staff row's name whenever `staffId` is
-          // now always present via actor.userId.
+          // now always present via actor.staffId.
           newCustodianName: actor.name,
           reason,
         },
@@ -219,7 +218,7 @@ export const takeItem = requireInventoryPermission("take")
           custodianStaffId: existing.custodianStaffId,
           custodianName: previousCustodianName,
         },
-        after: { custodianStaffId: actor.userId, custodianName: actor.name },
+        after: { custodianStaffId: actor.staffId, custodianName: actor.name },
       });
 
       // The same shape `transferCustody` returns, so the web app can render one
@@ -228,7 +227,7 @@ export const takeItem = requireInventoryPermission("take")
       return {
         itemId: existing.id,
         previousCustodianName,
-        custodianStaffId: actor.userId,
+        custodianStaffId: actor.staffId,
         custodianName: actor.name,
         changeType,
         changedAt: iso(history.changedAt),

@@ -1,10 +1,7 @@
 "use client";
 
 import type { SessionUser } from "@school-student-teacher-management/api/context";
-import {
-  isAdminRole,
-  isLeadershipRole,
-} from "@school-student-teacher-management/auth/roles";
+import { isAdminRole } from "@school-student-teacher-management/auth/roles";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
   Dialog,
@@ -262,12 +259,12 @@ const AttendancePolicyForm = ({ page }: AttendancePolicyEditorProps) => {
  *
  * **One component for both tiers.** This used to be two — an editor card and a
  * summary card — because a read-only seat cannot be shown inputs it may not
- * submit, and `updatePolicy` is `adminOnlyProcedure`, so a Principal and a Deputy
- * were being refused every save. That reasoning is right about the *form* and
- * wrong about the *numbers*: the read tier and the write tier describe one policy,
- * and a Principal marking a register has exactly as much use for "cut-off 08:00"
- * as an administrator does. So both seats get the same four figures, and only the
- * administrator gets the button.
+ * submit, and `updatePolicy` is `adminOrAcademicProcedure`, so a Principal and
+ * a Deputy were being refused every save. That reasoning is right about the
+ * *form* and wrong about the *numbers*: the read tier and the write tier
+ * describe one policy, and a Principal marking a register has exactly as much
+ * use for "cut-off 08:00" as an administrator does. So both seats get the
+ * same four figures, and only the two seats the server accepts get the button.
  *
  * The numbers are placed to the **left** of the button, deliberately: the question
  * this strip answers is "what are today's rules", and that is a reading task, not
@@ -328,11 +325,12 @@ const AttendancePolicyStrip = ({
 /**
  * `canEdit` is the server's own division, not a UI preference.
  *
- * `updatePolicy` is `adminOnlyProcedure` — `requireRole("admin")`, one seat —
- * while this card is mounted by all three admin-workspace routes, so the Deputy
- * and the Principal were being handed the form and the Save button that
- * `adminOnlyProcedure` refuses every time. The server is right and stays right;
- * the gate lives here so that nobody is invited to fail.
+ * `updatePolicy` is `adminOrAcademicProcedure` - `admin` plus `academicAdmin`,
+ * two seats - while this card is mounted by every route that shows the
+ * register (both admin workspaces and leadership's own attendance pages), so
+ * the Deputy and the Principal were being handed the form and the Save button
+ * that procedure refuses every time. The server is right and stays right; the
+ * gate lives here so that nobody is invited to fail.
  */
 const AttendancePolicyCard = ({
   canEdit,
@@ -424,26 +422,27 @@ interface AttendancePageContentProps {
  *
  * Two tiers meet here, and they are not the same set.
  *
- * - **Read** — the card is the admin workspace's: `getPolicy` is a
- *   `protectedProcedure` and the register around it is `adminProcedure`, so
- *   `admin`, `principal` and `vicePrincipal` all see it. That is what
- *   `isAdminRole` answers, and it is also the set of roles the three routes
- *   mounting `AttendancePageContent` are guarded to.
- * - **Write** — one seat above that. `updatePolicy` is `adminOnlyProcedure`,
- *   i.e. `requireRole("admin")`, and `isAdminRole` on its own is the *wrong*
- *   gate: it would hand the form to exactly the two leadership seats the
- *   server refuses. The write tier is the admin set minus leadership, which is
- *   the same reading `academic-year-gate.tsx` makes for `setCurrentYear`.
+ * - **Read** — `isAdminRole` (`admin`, `principal`, `vicePrincipal`) **plus**
+ *   `academicAdmin`. The policy lives behind `academicProcedure`
+ *   (`packages/api/src/index.ts`: `ADMIN_ROLES` plus the Academic
+ *   Administrator), which is also the tier the three routes mounting
+ *   `AttendancePageContent` are guarded to — so this is exactly the set that
+ *   can load the page at all, and `isAdminRole` alone would hide the card
+ *   from the Academic Administrator standing in front of it.
+ * - **Write** — the same two roles `adminOrAcademicProcedure` admits: `admin`
+ *   and `academicAdmin`. Leadership reads the policy and never edits it,
+ *   which is why `isAdminRole` on its own is the *wrong* gate: it would hand
+ *   the form to exactly the two seats the server refuses.
  *
  * The gate is here, in the UI, only so that a Deputy is not invited to fill in
- * a school-wide form and be told no. `adminOnlyProcedure` stays as it is.
+ * a school-wide form and be told no. `adminOrAcademicProcedure` stays as it is.
  */
 const AttendancePolicySection = ({ page }: { page: AttendancePageApi }) => {
   const { session } = useRouteContext({ from: "/_auth" });
   const role = (session?.user as SessionUser | undefined)?.role;
 
-  const canReadPolicy = isAdminRole(role);
-  const canEditPolicy = isAdminRole(role) && !isLeadershipRole(role);
+  const canReadPolicy = isAdminRole(role) || role === "academicAdmin";
+  const canEditPolicy = role === "admin" || role === "academicAdmin";
 
   if (!canReadPolicy) {
     return null;

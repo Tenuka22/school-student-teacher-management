@@ -4,7 +4,7 @@ import { and, asc, count, desc, eq, ilike, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
 /**
  * The columns a column header may sort by, and nothing else.
@@ -51,14 +51,15 @@ const pageSizeSchema = v.optional(
  * `{ users: [], total: 0 }` — which on a screen whose job is to describe the
  * College's accounts is indistinguishable from "there are none".
  *
- * The audience is deliberately unchanged: `adminProcedure` is
- * `admin | principal | vicePrincipal`, and those three already hold
- * `adminAc.statements`, which is what the plugin's `user: ["list"]` check reads.
- * Nothing that could read the list before can be stopped, and nothing that was
- * stopped can now read it. The *writes* stay on the plugin, because that is where
- * the rules about the seeded institutional logins live.
+ * The audience widened by exactly one seat: `academicProcedure` is
+ * `admin | principal | vicePrincipal | academicAdmin`, and all four hold
+ * `adminAc.statements`, which is what the plugin's `user: ["list"]` check
+ * reads — the academic seat carries those statements precisely so this page
+ * works for it. Nothing that could read the list before can be stopped, and
+ * `inventoryAdmin` still cannot. The *writes* stay on the plugin, because
+ * that is where the rules about the seeded institutional logins live.
  */
-export const listAccounts = adminProcedure
+export const listAccounts = academicProcedure
   .input(
     v.optional(
       v.object({

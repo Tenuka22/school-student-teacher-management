@@ -8,8 +8,7 @@ import { redirectToHome } from "@/lib/home-redirect";
 import { isWorkspaceRoot } from "@/lib/year-guard";
 
 /**
- * Admin workspace \u2014 the non-leadership `admin` account, plus the seeded
- * `inventoryAdmin` seat.
+ * Admin workspace \u2014 the non-leadership `admin` account.
  *
  * The Principal and Deputy Principal hold `principal` / `vicePrincipal` roles
  * so an account is self-describing, but they have their own workspaces at
@@ -17,22 +16,29 @@ import { isWorkspaceRoot } from "@/lib/year-guard";
  * management *permissions*; what differs is the surface they land in, so
  * neither can wander into the other one's area.
  *
- * `inventoryAdmin` is admitted here rather than getting its own workspace
- * because the register it manages already lives under `/admin/$year/staff/
- * inventory` \u2014 building a parallel `/inventory-admin/$year` shell for one
- * page would be a second workspace for a single destination. It cannot reach
- * anything else under here: every other admin sub-route calls
- * `adminProcedure`/`adminOnlyProcedure`, which check the literal role list and
- * do not include `inventoryAdmin`, so a typed-in URL to `/admin/$year/users`
- * or the bare dashboard fails at the API layer even though the route itself
- * loads.
+ * The two specialist seats have trees of their own and are deliberately **not**
+ * admitted here: `academicAdmin` at `/academic-admin/$year` (the year's staff,
+ * classes, timetable, attendance and accounts) and `inventoryAdmin` at
+ * `/inventory-admin/$year` (the register). This tree used to carry both as
+ * guests, and each of them arrived at a workspace whose every link outside its
+ * one job failed at the API layer \u2014 their procedures are
+ * `academicProcedure` and `inventoryOverseerProcedure`/`inventoryManagerProcedure`
+ * respectively, and neither holds `adminProcedure` outright. Each seat now
+ * starts at the pages it can actually use, and this workspace is the top
+ * administrator's alone.
+ *
+ * administrator's alone. Leadership was never admitted here either \u2014 the
+ * old doc said it was and the code disagreed \u2014 and it stays out: the
+ * Principal and Deputy build every link from their own workspace helpers, and
+ * the pages they are meant to review live at `/principal/$year/leaves`,
+ * `/deputy-principal/$year/leaves` and the two `staff/attendance` routes.
  */
 export const Route = createFileRoute("/_auth/admin")({
   component: Outlet,
   beforeLoad: async ({ context, location }) => {
     const role = (context.session?.user as SessionUser | undefined)?.role;
 
-    if (role !== "admin" && role !== "inventoryAdmin") {
+    if (role !== "admin") {
       await redirectToHome(location.pathname);
     }
 

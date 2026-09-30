@@ -1,5 +1,6 @@
 import { QUALIFICATION_LEVELS } from "@school-student-teacher-management/db/constants/teachers";
 import type { QualificationLevel } from "@school-student-teacher-management/db/constants/teachers";
+import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
@@ -21,6 +22,7 @@ import {
   IconUserOff,
 } from "@tabler/icons-react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { cn } from "cn";
 
 import type { AttendancePageApi } from "@/components/staff/attendance/use-attendance-page";
 import { DataTableColumnHeader } from "@/components/ui-patterns/data-table/data-table-column-header";
@@ -28,6 +30,7 @@ import type { ListTableFeatures } from "@/components/ui-patterns/data-table/list
 import { sortColumn } from "@/components/ui-patterns/data-table/sort-column";
 
 import type { RegisterRow } from "./attendance-register-rows";
+import { describePeriodRecord } from "./period-record";
 
 /** The human name of a credential. A missing one is said, not shown as a dash. */
 export const qualificationLabel = (level: QualificationLevel | null): string =>
@@ -76,6 +79,117 @@ const StatusBadge = ({ status }: { status: RegisterRow["status"] }) => {
     return <Badge variant="outline">Half day</Badge>;
   }
   return <Badge variant="outline">Late / short leave</Badge>;
+};
+
+/**
+ * The eight periods of the day, as one strip.
+ *
+ * ## Why this exists
+ *
+ * The cell used to print `P1, P2, …` **only when there were absences**, so a
+ * teacher marked present for the day showed nothing at all about the periods —
+ * which reads as *no period information* rather than as *all eight present*, and
+ * those are opposite answers. A whole-day absence made it worse: every period
+ * ticked means the chip printed `P1, P2, P3, P4, P5, P6, P7, P8`, eight numbers
+ * saying "every one", which is what the `Absent` badge beside it already said.
+ *
+ * The data was always this way. `teacher_attendance` carries the day and
+ * `teacher_period_absence` carries only the periods **missed**, so "present" is
+ * stored as the absence of absences: the day-level **Present** button writes zero
+ * missed periods and the **Absent** button writes all eight
+ * (`performToggleSchool`), which is exactly the rule the periods dialog states in
+ * its own description. What was missing was the sentence, and a way in.
+ *
+ * ## It says the same words as the dialog, and the boxes mean the same thing
+ *
+ * The sentence comes from `describePeriodRecord` in `period-record.ts` — the
+ * dialog's own function, imported — and the dialog's checkboxes were inverted to
+ * match this strip (a tick means **present**). They first disagreed: the strip
+ * said "All 8 periods present" for a teacher whose dialog opened with eight empty
+ * boxes, and a reader who went to check the strip could not tell whether
+ * "present" or "nothing recorded" was the truth. One function and one meaning for
+ * a tick is the whole fix.
+ *
+ * ## The boxes are decoration; the sentence is the fact
+ *
+ * Eight small numbered boxes is a *visual* encoding: the numbers are positions,
+ * not words, and a screen reader announcing "one two three four five six seven
+ * eight" after the badge has already said "Present" is noise. So the boxes are
+ * `aria-hidden` and carry the detail in a `title`, and the sentence printed
+ * beside them is both what a sighted reader reads and what is announced. There is
+ * deliberately no `role="img"` wrapper: the sentence is real text, so the element
+ * holding it needs no role to be read correctly.
+ */
+
+/**
+ * One period's box, and its tooltip — two small functions rather than nested
+ * ternaries, because "not recorded / missed / present" is a three-way fact and a
+ * nested conditional hides the third case behind the first.
+ */
+const periodBoxClass = (unrecorded: boolean, isMissed: boolean): string => {
+  if (unrecorded) {
+    return "text-muted-foreground/50 border border-dashed";
+  }
+
+  if (isMissed) {
+    return "bg-destructive text-destructive-foreground";
+  }
+
+  return "bg-primary/10 text-primary";
+};
+
+const periodTitle = (
+  period: (typeof CODE_DEFINED_PERIODS)[number],
+  unrecorded: boolean,
+  isMissed: boolean
+): string => {
+  if (unrecorded) {
+    return `Period ${period.periodNumber}, ${period.startTime}–${period.endTime}: not recorded`;
+  }
+
+  if (isMissed) {
+    return `Period ${period.periodNumber}, ${period.startTime}–${period.endTime}: missed`;
+  }
+
+  return `Period ${period.periodNumber}, ${period.startTime}–${period.endTime}: present`;
+};
+
+const PeriodStrip = ({
+  absentPeriods,
+  status,
+}: {
+  absentPeriods: number[];
+  status: RegisterRow["status"];
+}) => {
+  const missed = new Set(absentPeriods);
+  const summary = describePeriodRecord(absentPeriods, status !== "unmarked");
+  const unrecorded = status === "unmarked";
+
+  return (
+    <div className="flex items-center gap-2">
+      {CODE_DEFINED_PERIODS.map((period) => {
+        const isMissed = missed.has(period.periodNumber);
+
+        return (
+          <span
+            // Decorative: the sentence beside these boxes is the whole fact, and
+            // eight numbers announced one after another after a badge that
+            // already said "Present" is noise rather than information.
+            aria-hidden="true"
+            className={cn(
+              "grid size-5 place-items-center text-[0.625rem] font-medium tabular-nums",
+              periodBoxClass(unrecorded, isMissed)
+            )}
+            key={period.periodNumber}
+            title={periodTitle(period, unrecorded, isMissed)}
+          >
+            {period.periodNumber}
+          </span>
+        );
+      })}
+      <span className="text-muted-foreground text-xs">{summary}</span>
+    </div>
+  );
 };
 
 const columnHelper = createColumnHelper<ListTableFeatures, RegisterRow>();
@@ -130,15 +244,20 @@ export const buildRegisterColumns = (
        * `staff.nic` is unique in the database; an email can be a personal address
        * two teachers sign up with, and a name can repeat outright. It is shown and
        * not hidden behind a tooltip, because an identifier you have to go looking
-       * for does not help when the row above looks identical. A teacher with no NIC
-       * says so in the same place rather than leaving a gap — a blank would read as
-       * "no identifier needed", which is the opposite of what it means.
+       * for does not help when the row above looks identical.
+       *
+       * It is printed bare, and it used to fall back to "No NIC on file" — a
+       * sentence that existed because the column was nullable. It is `NOT NULL`
+       * now, and the type here is `string` rather than `string | null`, so the
+       * fallback could never fire; a `??` in this cell would be a lie told about a
+       * state the database refuses to hold. (The contact line below still has a
+       * real absence to report, which is why its fallback stays.)
        */
       cell: ({ getValue, row }) => (
         <div className="min-w-56">
           <p className="font-medium">{getValue()}</p>
           <p className="text-muted-foreground font-mono text-xs tabular-nums">
-            {row.original.nic ?? "No NIC on file"}
+            {row.original.nic}
           </p>
           <p className="text-muted-foreground truncate text-xs">
             {row.original.email ?? row.original.phone ?? "No contact on file"}
@@ -171,11 +290,6 @@ export const buildRegisterColumns = (
           <div className="min-w-96 space-y-1.5 py-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <StatusBadge status={record.status} />
-              {record.absentPeriods.length > 0 ? (
-                <span className="text-muted-foreground text-xs tabular-nums">
-                  P{record.absentPeriods.join(", P")}
-                </span>
-              ) : null}
               {record.leaveLabel ? (
                 <span className="text-muted-foreground text-xs">
                   {record.leaveLabel}
@@ -193,7 +307,7 @@ export const buildRegisterColumns = (
                 {unmarked ? (
                   <>
                     <Button
-                      aria-label={`Mark ${record.name} present`}
+                      aria-label={`Mark ${record.name} present for all ${CODE_DEFINED_PERIODS.length} periods`}
                       disabled={locked}
                       onClick={() => {
                         // The reason goes with the status: `markAttendance` nulls
@@ -213,7 +327,7 @@ export const buildRegisterColumns = (
                       Present
                     </Button>
                     <Button
-                      aria-label={`Mark ${record.name} absent for the day`}
+                      aria-label={`Mark ${record.name} absent for the day — all ${CODE_DEFINED_PERIODS.length} periods`}
                       disabled={locked}
                       onClick={() => {
                         void page.toggleSchool(record.staffId);
@@ -245,6 +359,29 @@ export const buildRegisterColumns = (
                     </Button>
                   </>
                 ) : null}
+
+                {/* The period control is the one entry that stays in view for a
+                    marked day, and that is the correction this row needed. It used
+                    to live only in the kebab, so the answer to "which periods?" was
+                    two clicks away and, once a day was marked, the cell printed
+                    nothing about the periods at all — a present day and a day with no
+                    period record looked identical. The three day-level buttons move
+                    into the kebab once the day is marked because the badge already
+                    answers "what is this day?"; the period strip below answers "which
+                    periods?", and that question is still open on a marked day. */}
+                <Button
+                  aria-label={`Pick the periods missed by ${record.name}`}
+                  disabled={locked}
+                  onClick={() => {
+                    onPeriods(record);
+                  }}
+                  size="xs"
+                  type="button"
+                  variant="outline"
+                >
+                  <IconListCheck data-icon="inline-start" />
+                  Periods
+                </Button>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -353,6 +490,19 @@ export const buildRegisterColumns = (
                 {record.remark}
               </p>
             )}
+
+            {/*
+              The strip sits under the controls rather than beside the badge,
+              because it is the widest thing in the cell and the badge line is
+              where the three day-level buttons live — putting eight boxes in that
+              line would push the buttons off the row on a narrow screen and undo
+              the "identity on the left, act on the right" arrangement this file's
+              own comment describes.
+            */}
+            <PeriodStrip
+              absentPeriods={record.absentPeriods}
+              status={record.status}
+            />
           </div>
         );
       },

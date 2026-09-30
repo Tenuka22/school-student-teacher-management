@@ -10,9 +10,9 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
-export const listPositions = adminProcedure
+export const listPositions = academicProcedure
   .input(
     v.optional(
       v.object({

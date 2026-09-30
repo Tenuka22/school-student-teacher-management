@@ -176,6 +176,43 @@ export const inventoryAdmin = ac.newRole({
   inventory: ["create", "read", "update", "delete", "approve", "acknowledge"],
 });
 
+/**
+ * Academic Administrator \u2014 the seeded academic desk (see
+ * `packages/auth/src/admin.ts`): the teacher register, class and period
+ * assignment, attendance, academic years, teacher requests and the accounts
+ * list. Its own workspace at `/academic-admin/$year`, deliberately separate
+ * from `/admin/$year` so the seat cannot wander into the register or the
+ * top-administrator-only screens.
+ *
+ * **`...adminAc.statements` is the accounts grant, and it is deliberate.**
+ * The users page drives ban/unban/session-revocation through better-auth's
+ * admin plugin (`authClient.admin.*`), which consults these `user`/`session`
+ * statements rather than a role name. Without them the seat reaches
+ * `/academic-admin/$year/users` and every button on it fails. It buys account
+ * administration and nothing else: the role-transition hook in
+ * `packages/auth/src/index.ts` still refuses every role change except to
+ * `teacher` or `user`, and the seeded institutional accounts are protected
+ * from both ban and role change by `isSeededAccount`.
+ *
+ * **No `inventory`, `file`, `student`, `mark` or `exam` grant.** The register
+ * is the Inventory Administrator's desk, and `requirePermission` in
+ * `packages/api/src/index.ts` does not bypass this role the way it bypasses
+ * `ADMIN_ROLES` \u2014 so the grants below are the whole of what this seat can
+ * reach through the permission-checked procedures (staff CRUD, class/period
+ * assignment, qualifications). The `adminProcedure`-family reads the academic
+ * pages need sit on the separate role-list tiers in `packages/api/src/index.ts`
+ * (`academicProcedure`, `adminOrAcademicProcedure`).
+ *
+ * Not in `ADMIN_ROLES`: leadership leave review, position appointment and the
+ * inventory overseer tiers must not follow from this seat.
+ */
+export const academicAdmin = ac.newRole({
+  ...adminAc.statements,
+  staff: ["create", "read", "update", "delete"],
+  assignment: ["create", "read", "update", "delete"],
+  qualification: ["create", "read", "approve"],
+});
+
 // Role names and guards live in `./roles` so isomorphic code (routes,
 // components) can import them without pulling this package's server-only
 // bootstrap code into the client bundle. Re-exported here for server callers.
@@ -269,12 +306,24 @@ export const user = ac.newRole({
  * `requireAssignmentPermission("read")` that returns those rows **without** a
  * class check in its own handler is a data leak, not a style choice.
  *
- * `inventory: ["read", "take", "manageOwn"]` is the entire inventory surface of
- * this role, and it is three grants that together reach **nine procedures and
- * nothing else** — five on `read`, two on `take`, two on `manageOwn`. The three
- * numbers are written out rather than left to arithmetic because this comment is
- * the security contract, and a count that has to be recomputed in the reader's
- * head is a count that silently stops being checked.
+ * `inventory: ["read", "acknowledge"]` is the entire inventory surface of this
+ * role, and it is **two grants**. This paragraph used to describe three of them
+ * and a round trip — `read`, `take` and `manageOwn`, "see what is on the shelf,
+ * take one, hand it back, call it back" — and it was left behind when the role was
+ * narrowed, which is the exact failure this file is written to prevent: a comment
+ * that reads as a specification of what a teacher can do and is not one.
+ *
+ * **Why the round trip is gone.** Custody in this school is set from the seeded
+ * Inventory Administrator's seat, not by whoever opens a row. The three
+ * self-service verbs (`takeItem` and `releaseCustody` on `take`,
+ * `transferOwnership` and `reclaimCustody` on `manageOwn`) are still written,
+ * still tested, and still reachable — by the three leadership seats, which hold
+ * both grants. They are not reachable by a teacher, and the affordances that
+ * would have offered them were removed with the grant: the teacher's own page
+ * reads `myItems`, `lent` and `history` and offers nothing else, and the
+ * register's row menu draws its self-service pair only for a role that holds
+ * `take` (`canSelfServeInventory` in `roles.ts`). So the seat that could not
+ * press the buttons is not shown them.
  *
  * **`read` reaches exactly five procedures, and no more:**
  *
@@ -308,6 +357,12 @@ export const user = ac.newRole({
  *   who is answerable for an item and nobody who is carrying one. Its filters
  *   are `takeItem`'s own guards, so it also cannot offer something the write
  *   would refuse.
+ *   **It is on `read` and therefore still reachable by this role, and nothing in
+ *   the teacher page calls it** — a catalogue for an act the caller cannot
+ *   perform. That is left in place rather than re-gated because it discloses no
+ *   person and narrowing it would mean a second, bespoke guard for a procedure
+ *   with no caller; the line to remember is that a `read` grant here is about
+ *   disclosure, not about whether the act behind it is available.
  *
  * It reaches **no** school-wide register, no ledger, no movement list and no
  * write-off list. `listItems`, `getItem`, `listUnits`, `listAssignableStaff`,
@@ -317,69 +372,49 @@ export const user = ac.newRole({
  * it" while a *catalogue* answers "what is free right now" — and only the second
  * question is one a teacher has any business asking.
  *
- * **`take` reaches exactly two procedures:**
+ * **`take` and `manageOwn` are not granted to this role at all**, and the two
+ * paragraphs that used to count their procedures are gone with the grants. For
+ * the record, and because a future editor widening this role will want to know
+ * what they are picking up:
  *
- * - `takeItem` — claiming an available item, narrowed to the caller's own staff
- *   row. `newCustodianStaffId` is not an input.
- * - `releaseCustody` — handing one back, narrowed to the item the caller
- *   already holds (plus the three leadership roles, so an administrator can
- *   clear a pointer after a departure).
+ * - `take` reaches exactly two procedures: `takeItem`, narrowed to the caller's
+ *   own staff row with `newCustodianStaffId` not an input; and `releaseCustody`,
+ *   which is now **required to name a successor** (`custodian_staff_id` is
+ *   `NOT NULL`) and is narrowed to the item the caller already holds.
+ * - `manageOwn` reaches exactly two: `transferOwnership` (required, non-nullable
+ *   `newOwnerStaffId`) and `reclaimCustody` (the owner calling an item back from
+ *   a colleague; it requires a reason and lands the item with the person in
+ *   charge). Both narrow in-handler to items the caller manages.
  *
- * **`manageOwn` reaches exactly two procedures, and they are the owner's own
- * authority over the caller's own items:**
+ * **Re-granting either one is a product decision, not a bug fix**, and it would
+ * need the two things the narrowing removed alongside it: the round trip in the
+ * teacher's own page, and a reason to believe a teacher is the right person to
+ * decide who holds school property.
  *
- * - `transferOwnership` — handing the item the caller is in charge of to another
- *   teacher, permanently. `newOwnerStaffId` is **required and non-nullable**, so
- *   this verb can only ever move accountability to a person; leaving an item with
- *   nobody in charge of it is `assignManager({ newManagerStaffId: null })`, which
- *   is `update` and therefore administrator-only. Two verbs, one column, on
- *   purpose: one says "somebody different is answerable" and the other says
- *   "nobody is", and a single nullable input could not tell a caller which a
- *   `null` was going to do.
- * - `reclaimCustody` — demanding back an item the caller is in charge of that a
- *   colleague is holding. This is **not** `releaseCustody` and must not be
- *   confused with it: `releaseCustody` is the holder's own voluntary hand-back
- *   and sits on `take`, while this is the owner reaching into a colleague's hands
- *   — a different act, which is why it is a different verb, and why its `reason`
- *   is required and lands in the permanent trail. It clears `custodianStaffId`
- *   only; `managerStaffId` is untouched, because reclaiming custody is not
- *   transferring ownership.
- *
- * Both narrow themselves in the handler to items the caller is the manager of,
- * or that one of the three leadership seats is acting on an owner's behalf. **So
- * a teacher who is not in charge of an item cannot transfer it, cannot reclaim
- * it, and cannot use either verb to learn anything about it** — `manageOwn` is a
- * grant to the owner, not a promotion. What it adds is not authority over other
- * people's property; it is the ability to stop being the answerable party for
- * one's own, which until this action existed required an administrator's desk.
- *
- * A teacher still therefore cannot move property to an arbitrary third party
- * (`transferCustody` is `update`), cannot appoint or clear a manager for anything
- * (`assignManager` is `update`), and cannot sign off a write-off (`approve`).
- * What they *can* do is the whole round trip on their own equipment: see what is
- * on the shelf, take one, hand it back, and — when they are the owner in charge
- * of it — see what is out with other people, call it back, or pass the whole
- * responsibility on.
+ * A teacher therefore cannot move property to an arbitrary third party
+ * (`transferCustody` is `update`), cannot appoint an owner for anything
+ * (`assignManager` is `update`), cannot claim or hand back anything
+ * (`take` is absent), and cannot sign off a write-off (`approve`). What they
+ * *can* do is see: what they hold, what they are answerable for that is out with
+ * somebody else, the trail of either, and the handover notices addressed to them
+ * — which they acknowledge or dispute, their own read receipt on somebody else's
+ * change.
  *
  * **The scoping is enforced in the procedures, not by the permission.** That is
  * the invariant a future editor will break: `requirePermission` in
  * `packages/api/src/index.ts` short-circuits only the `ADMIN_ROLES` seats and
  * otherwise consults this statement, so a grant here says *which procedures may
- * run*, never *which rows they may return* — or, for `manageOwn`, which rows they
- * may **write**. Of the five procedures on `read`, three carry item rows and scope
- * them in their own queries (`listMyItems`, `listCustodyHistory`,
- * `listLentByMe`), one (`listCategories`) carries no item and no person at all,
- * and the fifth (`listTakeableItems`) carries item rows the caller has no
- * relationship with and is narrowed by **projection** instead of by predicate,
- * because what it withholds is a column rather than a row. Both of those are the
- * same obligation, and both procedures on `manageOwn` narrow their **write** to
- * items the caller manages. A permission that says "you may act on things you
- * own" and a handler that checks "you do own this" are two different claims, and
- * only the second is a security control: `manageOwn`'s name names a scope that an
- * access-control statement cannot express, so the narrowing **must** live in the
- * handler. Adding a sixth procedure on `requireInventoryPermission("read")`,
- * `("take")` or `("manageOwn")` without one of those narrowings is a data leak or
- * an over-grant, not a style choice.
+ * run*, never *which rows they may return*. Of the five procedures on `read`,
+ * three carry item rows and scope them in their own queries (`listMyItems`,
+ * `listCustodyHistory`, `listLentByMe`), one (`listCategories`) carries no item
+ * and no person at all, and the fifth (`listTakeableItems`) carries item rows the
+ * caller has no relationship with and is narrowed by **projection** instead of by
+ * predicate, because what it withholds is a column rather than a row. Both of
+ * those are the same obligation. `acknowledge` is the narrowest grant in the
+ * statement: it reaches exactly `acknowledgeCustodyNotice` and
+ * `disputeCustodyNotice`, each scoped in-handler to the caller's own recipient
+ * row. Adding a sixth procedure on `requireInventoryPermission("read")` without
+ * one of those narrowings is a data leak, not a style choice.
  */
 export const teacher = ac.newRole({
   student: ["read"],

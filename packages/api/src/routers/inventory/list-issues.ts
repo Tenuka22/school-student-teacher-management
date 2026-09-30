@@ -12,7 +12,6 @@
  *    issue is terminal and this list must not pretend otherwise.
  */
 import { ORPCError } from "@orpc/server";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryIssue,
   inventoryIssueUnit,
@@ -21,6 +20,7 @@ import {
   inventoryUnit,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -256,7 +256,7 @@ export const listIssues = inventoryOverseerProcedure
           expectedReturnDate: inventoryIssue.expectedReturnDate,
           note: inventoryIssue.note,
           issuedByStaffId: inventoryIssue.issuedByStaffId,
-          issuedByName: user.name,
+          issuedByName: staff.name,
           issuedAt: inventoryIssue.issuedAt,
         })
         .from(inventoryIssue)
@@ -268,7 +268,7 @@ export const listIssues = inventoryOverseerProcedure
         // inner join here would silently delete every historic issue whose
         // storekeeper has since left the school — the rows an audit is most
         // likely to ask about.
-        .leftJoin(user, eq(inventoryIssue.issuedByStaffId, user.id))
+        .leftJoin(staff, eq(inventoryIssue.issuedByStaffId, staff.id))
         .where(where)
         // `id` breaks ties so the order is total. Two hand-overs recorded in
         // the same transaction share a `defaultNow()` `issuedAt`, and an

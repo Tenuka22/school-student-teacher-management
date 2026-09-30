@@ -133,14 +133,13 @@ export const deleteStaff = requireStaffPermission("delete")
       // So every inventory probe is here to refuse the delete and name the way
       // out: hand the item to another teacher, or terminate the record.
       //
-      // Every one of these columns now stores a `user.id`, not a `staff.id`
-      // (see `packages/db/src/schema/inventory.ts`'s `userIdSchema` doc
-      // comment) — identity for custody and management moved to the login.
-      // So every probe below matches against `existing.userId`, the specific
-      // login this staff record is bound to, not `input.id`. A staff record
-      // with no linked login (`existing.userId` is null) cannot be named by
-      // any of these columns — there is no login for them to point at — so
-      // the whole group is skipped rather than run against a `null` value.
+      // Every one of these columns stores a `staff.id` — custody and management
+      // identity is the staff record, the same id the rest of the feature
+      // writes (see `packages/db/src/schema/inventory.ts`'s `staffRefSchema`
+      // doc comment). So every probe below matches against `existing.id`, the
+      // staff record being deleted itself, and the whole group runs
+      // unconditionally: a staff row always exists at this point (`NOT_FOUND`
+      // above), so there is no state in which the probes could be skipped.
       //
       // Deliberately NOT probed: `inventoryTransaction.actorStaffId` and
       // `inventoryAuditLog.actorStaffId`. Those two denormalise the actor's name
@@ -153,73 +152,50 @@ export const deleteStaff = requireStaffPermission("delete")
       // staff deletion working. A missing actor on a ledger row is a fact about
       // a departed person; a missing ledger row is a hole in the school's
       // accounts. Do not "fix" this by adding the two probes back.
-      ...(existing.userId
-        ? [
-            context.db
-              .select({ id: inventoryItem.id })
-              .from(inventoryItem)
-              .where(
-                or(
-                  eq(inventoryItem.managerStaffId, existing.userId),
-                  eq(inventoryItem.custodianStaffId, existing.userId),
-                  eq(inventoryItem.voidedByStaffId, existing.userId)
-                )
-              )
-              .limit(1),
-            context.db
-              .select({ id: inventoryCustodyHistory.id })
-              .from(inventoryCustodyHistory)
-              .where(
-                or(
-                  eq(
-                    inventoryCustodyHistory.previousCustodianStaffId,
-                    existing.userId
-                  ),
-                  eq(
-                    inventoryCustodyHistory.newCustodianStaffId,
-                    existing.userId
-                  ),
-                  eq(
-                    inventoryCustodyHistory.previousManagerStaffId,
-                    existing.userId
-                  ),
-                  eq(
-                    inventoryCustodyHistory.newManagerStaffId,
-                    existing.userId
-                  ),
-                  eq(inventoryCustodyHistory.changedByStaffId, existing.userId)
-                )
-              )
-              .limit(1),
-            context.db
-              .select({ id: inventoryBorrow.id })
-              .from(inventoryBorrow)
-              .where(eq(inventoryBorrow.borrowerStaffId, existing.userId))
-              .limit(1),
-            // A notice recipient row is evidence that this person was told
-            // about a custody change, same reasoning as the history row
-            // itself: `set null` on `staffId` is the schema's answer to "a
-            // person may leave", not permission for a delete to blank out
-            // who was notified.
-            context.db
-              .select({ id: inventoryCustodyNoticeRecipient.id })
-              .from(inventoryCustodyNoticeRecipient)
-              .where(
-                eq(inventoryCustodyNoticeRecipient.staffId, existing.userId)
-              )
-              .limit(1),
-            context.db
-              .select({ id: inventoryDisposalStatusHistory.id })
-              .from(inventoryDisposalStatusHistory)
-              .where(
-                eq(
-                  inventoryDisposalStatusHistory.changedByStaffId,
-                  existing.userId
-                )
-              )
-              .limit(1),
-          ]
-        : []),
+      context.db
+        .select({ id: inventoryItem.id })
+        .from(inventoryItem)
+        .where(
+          or(
+            eq(inventoryItem.managerStaffId, existing.id),
+            eq(inventoryItem.custodianStaffId, existing.id),
+            eq(inventoryItem.voidedByStaffId, existing.id)
+          )
+        )
+        .limit(1),
+      context.db
+        .select({ id: inventoryCustodyHistory.id })
+        .from(inventoryCustodyHistory)
+        .where(
+          or(
+            eq(inventoryCustodyHistory.previousCustodianStaffId, existing.id),
+            eq(inventoryCustodyHistory.newCustodianStaffId, existing.id),
+            eq(inventoryCustodyHistory.previousManagerStaffId, existing.id),
+            eq(inventoryCustodyHistory.newManagerStaffId, existing.id),
+            eq(inventoryCustodyHistory.changedByStaffId, existing.id)
+          )
+        )
+        .limit(1),
+      context.db
+        .select({ id: inventoryBorrow.id })
+        .from(inventoryBorrow)
+        .where(eq(inventoryBorrow.borrowerStaffId, existing.id))
+        .limit(1),
+      // A notice recipient row is evidence that this person was told
+      // about a custody change, same reasoning as the history row
+      // itself: `set null` on `staffId` is the schema's answer to "a
+      // person may leave", not permission for a delete to blank out
+      // who was notified.
+      context.db
+        .select({ id: inventoryCustodyNoticeRecipient.id })
+        .from(inventoryCustodyNoticeRecipient)
+        .where(eq(inventoryCustodyNoticeRecipient.staffId, existing.id))
+        .limit(1),
+      context.db
+        .select({ id: inventoryDisposalStatusHistory.id })
+        .from(inventoryDisposalStatusHistory)
+        .where(eq(inventoryDisposalStatusHistory.changedByStaffId, existing.id))
+        .limit(1),
     ]);
 
     if (historyChecks.some((rows) => rows.length > 0)) {

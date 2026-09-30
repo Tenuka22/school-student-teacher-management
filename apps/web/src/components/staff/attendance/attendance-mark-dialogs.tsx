@@ -1,4 +1,13 @@
+import {
+  ATTENDANCE_PERIOD_REASON_KEYS,
+  attendanceReasonLabel,
+  composeAttendanceReason,
+  OTHER_ATTENDANCE_REASON,
+  parseAttendanceReason,
+} from "@school-student-teacher-management/db/constants/attendance";
+import type { AttendancePeriodReason } from "@school-student-teacher-management/db/constants/attendance";
 import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
+import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import { Checkbox } from "@school-student-teacher-management/ui/components/checkbox";
 import {
@@ -14,7 +23,34 @@ import {
   FieldLabel,
 } from "@school-student-teacher-management/ui/components/field";
 import { Input } from "@school-student-teacher-management/ui/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@school-student-teacher-management/ui/components/select";
 import { useState } from "react";
+
+import {
+  describePeriodRecord,
+  missedPeriodNumbers,
+  presentPeriodNumbers,
+} from "./period-record";
+
+/**
+ * What the periods dialog holds for one missed period: a category from
+ * `ATTENDANCE_PERIOD_REASONS` and whatever text was typed alongside it.
+ *
+ * The two are separate because the stored value is one sentence built from them
+ * (`composeAttendanceReason`) and the form is two controls: re-opening a day
+ * needs the category back, not the sentence, so a saved "Sick — came back at
+ * noon" can be re-shown as Sick with the remainder still in the box.
+ */
+interface ReasonDraft {
+  key: AttendancePeriodReason;
+  otherText: string;
+}
 
 /**
  * The three things a row can be told without changing its mark.
@@ -219,25 +255,6 @@ export const ArrivalDialog = ({
 };
 
 /**
- * The three-way rule the dialog exists to make visible, said in words.
- *
- * Worth a named function rather than a chain in the body: this is the decision
- * about *what the day will become*, it is the thing a reader is checking against
- * the ticks, and an early return reads as a rule where a nested ternary reads as
- * a lookup.
- */
-const describePeriodOutcome = (selected: Set<number>): string => {
-  if (selected.size === 0) {
-    return "Present";
-  }
-  if (selected.size >= CODE_DEFINED_PERIODS.length) {
-    return "Absent for the day";
-  }
-  const missed = [...selected].toSorted((a, b) => a - b);
-  return `Part absent — P${missed.join(", P")}`;
-};
-
-/**
  * Which periods of the day are being missed.
  *
  * The matrix this register replaced had a tickable box per period, which made it
@@ -247,8 +264,24 @@ const describePeriodOutcome = (selected: Set<number>): string => {
  * transaction — one tick per request would be eight round trips and eight
  * chances to half-mark the day.
  *
- * The three outcomes are stated rather than left to be inferred from how many
- * boxes are ticked, because that rule is the whole reason the dialog exists.
+ * ## A tick means **present**, and that is the correction this dialog needed
+ *
+ * It used to mean *missed*, with "nothing ticked is a present day" stated in the
+ * description. The rule was right and the encoding was wrong, because the same
+ * day's periods are shown elsewhere as a strip where the *present* ones are
+ * marked. A teacher marked present for the day opened this dialog to see what the
+ * register already said, found eight empty boxes, and had no way to tell whether
+ * that meant "present" or "nothing recorded" — the two are opposite answers and
+ * the dialog's own description is three lines of prose.
+ *
+ * So the boxes now carry the day's state directly: an all-present teacher opens
+ * with **eight ticked boxes**, a part-absent day opens with the missed ones
+ * unticked, and the sentence under the list is the register's own. The write is
+ * unchanged — `onSave` still receives the *absent* periods — because the
+ * inversion is in what the box means, not in what is stored.
+ *
+ * The three outcomes are still stated rather than left to be inferred from how
+ * many boxes are ticked, because that rule is the whole reason the dialog exists.
  */
 export const PeriodsDialog = ({
   absent,
@@ -261,14 +294,52 @@ export const PeriodsDialog = ({
   absent: Map<number, string>;
   onSave: (absentPeriods: Map<number, string>) => Promise<boolean>;
 }) => {
-  const [selected, setSelected] = useState<Set<number>>(
-    () => new Set(absent.keys())
+  /**
+   * The periods ticked as **present**, seeded as every period the row is not
+   * recorded absent for.
+   *
+   * A *missing* seed is the failure mode worth naming: an empty set would open a
+   * present teacher as an absent one, and saving without a further thought would
+   * write eight absences. It is built as the complement of `absent` for that
+   * reason — the tick set is the day, and the absences are the exception.
+   */
+  const [presentPeriods, setPresentPeriods] = useState<Set<number>>(
+    () => new Set(presentPeriodNumbers(new Set(absent.keys())))
   );
   const [isSaving, setIsSaving] = useState(false);
   const [failed, setFailed] = useState(false);
 
+  /**
+   * The reason each missed period carries, seeded by reading the stored sentence
+   * back into a category and any typed remainder.
+   *
+   * **The reason is per period, not per day, and the column already says so.**
+   * `teacher_period_absence.reason` is one row per missed period, and
+   * `saveReason(staffId, periodNumber, reason)` has always taken the period
+   * number — so a part-absent day could always hold eight different reasons, and
+   * there was no way to *give* one. A day where Period 3 is "not timetabled" and
+   * Period 6 is "sick" is two facts, and asking for them at the day level would
+   * have flattened one of them.
+   *
+   * The seed parses what is already stored rather than resetting it, so opening
+   * the dialog on a day marked by hand last week shows the same category it was
+   * written as — and an unrecognised sentence comes back as Other with the whole
+   * sentence intact, so nothing typed by a person is lost by opening the form.
+   */
+  const [reasons, setReasons] = useState<Map<number, ReasonDraft>>(() => {
+    const seeded = new Map<number, ReasonDraft>();
+    for (const [periodNumber, stored] of absent) {
+      const parsed = parseAttendanceReason(stored);
+      seeded.set(periodNumber, {
+        key: parsed.key,
+        otherText: parsed.otherText,
+      });
+    }
+    return seeded;
+  });
+
   const toggle = (periodNumber: number) => {
-    setSelected((previous) => {
+    setPresentPeriods((previous) => {
       const next = new Set(previous);
       if (next.has(periodNumber)) {
         next.delete(periodNumber);
@@ -279,7 +350,17 @@ export const PeriodsDialog = ({
     });
   };
 
-  const outcome = describePeriodOutcome(selected);
+  /**
+   * The periods the save will write as missed: every one not ticked, each with
+   * the sentence its reason composes to.
+   */
+  const missedPeriods = missedPeriodNumbers(presentPeriods);
+
+  const setReason = (periodNumber: number, next: ReasonDraft) => {
+    setReasons((previous) => new Map([...previous, [periodNumber, next]]));
+  };
+
+  const outcome = describePeriodRecord(missedPeriods, true);
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -287,7 +368,8 @@ export const PeriodsDialog = ({
         <DialogHeader>
           <DialogTitle>Periods for {teacherName}</DialogTitle>
           <DialogDescription>
-            Tick every period missed. Nothing ticked is a present day, all eight
+            Ticked means the teacher was there. Un-tick every period missed and
+            say why on each one — all eight ticked is a present day, none ticked
             is an absence, and anything between is part absent.
           </DialogDescription>
         </DialogHeader>
@@ -300,15 +382,18 @@ export const PeriodsDialog = ({
             setIsSaving(true);
             setFailed(false);
             const next = new Map<number, string>();
-            for (const period of CODE_DEFINED_PERIODS) {
-              if (selected.has(period.periodNumber)) {
-                // The reason travels with the tick, so re-saving a day does not
-                // drop the note a period already carried.
-                next.set(
-                  period.periodNumber,
-                  absent.get(period.periodNumber) ?? ""
-                );
-              }
+            for (const periodNumber of missedPeriods) {
+              const draft = reasons.get(periodNumber);
+              // A missed period with no draft still gets a sentence: the store
+              // holds a reason for every absence, and an empty string here would
+              // write a marked absence that cannot be explained later.
+              next.set(
+                periodNumber,
+                composeAttendanceReason(
+                  draft?.key ?? "other",
+                  draft?.otherText ?? absent.get(periodNumber) ?? ""
+                )
+              );
             }
             const saved = await onSave(next);
             setIsSaving(false);
@@ -322,6 +407,11 @@ export const PeriodsDialog = ({
           <ul className="divide-border/60 border-border/60 divide-y rounded-md border">
             {CODE_DEFINED_PERIODS.map((period) => {
               const id = `period-${period.periodNumber}`;
+              const isPresent = presentPeriods.has(period.periodNumber);
+              const reason = reasons.get(period.periodNumber);
+              const reasonId = `${id}-reason`;
+              const otherId = `${id}-reason-other`;
+
               return (
                 <li key={period.periodNumber}>
                   <label
@@ -329,19 +419,87 @@ export const PeriodsDialog = ({
                     htmlFor={id}
                   >
                     <Checkbox
-                      checked={selected.has(period.periodNumber)}
+                      checked={isPresent}
                       id={id}
                       onCheckedChange={() => {
                         toggle(period.periodNumber);
                       }}
                     />
-                    <span className="font-medium tabular-nums">
+                    <span
+                      className={
+                        // The mark a reader looks for: a missed period's name is
+                        // struck through and tinted, so the list reads as a set of
+                        // marks rather than as eight tick boxes with two of them
+                        // off. The strike is not decoration — it is the same
+                        // information the `Missed P…` sentence below carries, said
+                        // where the reader is looking.
+                        isPresent
+                          ? "font-medium tabular-nums"
+                          : "text-destructive font-medium tabular-nums line-through"
+                      }
+                    >
                       Period {period.periodNumber}
                     </span>
                     <span className="text-muted-foreground ml-auto text-xs tabular-nums">
                       {period.startTime}–{period.endTime}
                     </span>
+                    {isPresent ? null : <Badge variant="outline">Missed</Badge>}
                   </label>
+                  {isPresent ? null : (
+                    <div className="bg-muted/40 flex flex-col gap-2 px-3 pb-3">
+                      <Field>
+                        <FieldLabel htmlFor={reasonId}>
+                          Why {period.periodNumber} was missed
+                        </FieldLabel>
+                        <Select
+                          onValueChange={(value) => {
+                            setReason(period.periodNumber, {
+                              key: (value ?? "other") as AttendancePeriodReason,
+                              otherText: reason?.otherText ?? "",
+                            });
+                          }}
+                          value={reason?.key ?? "other"}
+                        >
+                          <SelectTrigger id={reasonId}>
+                            <SelectValue placeholder="Choose a reason" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ATTENDANCE_PERIOD_REASON_KEYS.map((key) => (
+                              <SelectItem key={key} value={key}>
+                                {attendanceReasonLabel(key)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      {/*
+                        The free text appears only for "Other", and it is optional
+                        there: `composeAttendanceReason` falls back to the label
+                        rather than writing an empty string, so a missed period can
+                        never be saved with a blank reason. For a chosen category the
+                        text is still accepted and is appended, which is how a clerk
+                        who typed first and then picked "Sick" keeps what they typed.
+                      */}
+                      {reason?.key === OTHER_ATTENDANCE_REASON || !reason ? (
+                        <Field>
+                          <FieldLabel htmlFor={otherId}>
+                            Anything to add (optional)
+                          </FieldLabel>
+                          <Input
+                            id={otherId}
+                            onChange={(event) => {
+                              setReason(period.periodNumber, {
+                                key: reason?.key ?? OTHER_ATTENDANCE_REASON,
+                                otherText: event.target.value,
+                              });
+                            }}
+                            placeholder="Anything the reason above does not say"
+                            value={reason?.otherText ?? ""}
+                          />
+                        </Field>
+                      ) : null}
+                    </div>
+                  )}
                 </li>
               );
             })}

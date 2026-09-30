@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../../index";
+import { academicProcedure } from "../../../index";
 import { readExcelRows } from "../../../lib/excel-import";
 
 /**
@@ -20,7 +20,7 @@ import { readExcelRows } from "../../../lib/excel-import";
  */
 const MAX_BASE64_LENGTH = 6_000_000;
 
-export const parseExcel = adminProcedure
+export const parseExcel = academicProcedure
   .input(
     v.object({
       base64: v.pipe(

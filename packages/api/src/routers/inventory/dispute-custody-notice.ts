@@ -73,7 +73,7 @@ export const disputeCustodyNotice = requireInventoryPermission("acknowledge")
       throw new ORPCError("NOT_FOUND", { message: "Notice not found" });
     }
 
-    const isRecipient = row.staffId === actor.userId;
+    const isRecipient = row.staffId === actor.staffId;
 
     if (!isRecipient && !isLeadership) {
       throw new ORPCError("FORBIDDEN", {

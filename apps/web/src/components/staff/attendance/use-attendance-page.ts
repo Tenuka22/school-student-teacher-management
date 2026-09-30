@@ -35,12 +35,14 @@ export interface AttendanceTeacher {
   /**
    * The NIC, and the reason two rows are two people.
    *
-   * `staff.nic` is unique at the database level. It is nullable, so a missing one
-   * is a real state the register has to display rather than an error — and a
-   * teacher with no NIC has not been identified by their number, only by their
-   * name.
+   * `staff.nic` is unique at the database level, and it is now `NOT NULL` too —
+   * it is the identity a person is keyed on, so a member of staff always has one
+   * and the register's `?? "—"` fallback is unreachable. It was worth saying which
+   * of the two properties is doing the work here: uniqueness is what makes the
+   * number the thing that separates two rows, and `NOT NULL` is what means the
+   * cell can be printed without an absence in it.
    */
-  nic: string | null;
+  nic: string;
   gradeLevels: number[];
   /** The credential this teacher is grouped under — the highest they hold. */
   highestQualification: QualificationLevel | null;
@@ -1150,9 +1152,50 @@ export const useAttendancePage = (
   );
 
   /**
+   * Mirrors a write into `draft`, which is the state the register's **rows** read
+   * from.
+   *
+   * This is declared above `saveTeacherDay` for a reason that is not tidiness: it
+   * is called from that callback, and a `const` referenced in an earlier
+   * `useCallback`'s dependency array is evaluated while the earlier one is being
+   * defined — which is a temporal-dead-zone crash rather than a bug report.
+   *
+   * The three cases mirror what the server holds: no missed periods is a present
+   * day (the entry goes, so `rowStatus` falls through to the stored status), all
+   * eight is a whole-day absence, and anything between is partial.
+   */
+  const applyLocalAbsence = useCallback(
+    (staffId: string, absentPeriods: Map<number, string>) => {
+      setDraft((previous) => {
+        const next = new Map(previous);
+        if (absentPeriods.size === 0) {
+          next.delete(staffId);
+        } else if (absentPeriods.size >= CODE_DEFINED_PERIODS.length) {
+          next.set(staffId, { status: "absent", periods: absentPeriods });
+        } else {
+          next.set(staffId, { status: "partial", periods: absentPeriods });
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  /**
    * Writes one teacher's day. Returns whether the server accepted it, so the
    * caller can undo the optimistic change instead of leaving the grid showing a
    * mark the database refused.
+   *
+   * **The draft mirror below is load-bearing, and its absence was a bug worth
+   * naming.** The badge used to update while the periods did not: the badge reads
+   * `rowStatus`, which falls through to `storedStatusByStaff`, and that map was
+   * being written here — but the periods are read from `draft` **only**
+   * (`expandedAbsentPeriods`), and `draftCanLoad` deliberately never re-derives
+   * `draft` for a date it has already read, because a background re-read must not
+   * clobber a write in flight. So the write landed, the query was invalidated,
+   * the refetch came back with the new row, and the refetch was ignored by
+   * design: marking three periods missing saved correctly and displayed nothing.
+   * `performToggleSchool` did the mirror; this path did not.
    */
   const saveTeacherDay = useCallback(
     async (
@@ -1193,6 +1236,10 @@ export const useAttendancePage = (
             input: { academicYearId: yearId, date },
           }).queryKey,
         });
+        // The periods come from `draft`, and nothing else: the refetch above is
+        // deliberately not read back into it. Without this line the badge moves
+        // and the period strip does not.
+        applyLocalAbsence(staffId, absentPeriods);
         // Mirror what the server now holds, so a Principal override stops
         // reading as the half day it replaced without waiting for the refetch.
         setStoredStatusByStaff((previous) => {
@@ -1220,27 +1267,21 @@ export const useAttendancePage = (
           `${message} — nothing was saved, and the mark has been put back`
         );
         announce("failed", `Not saved — ${message}`);
+        // No rollback to make: the draft mirror is applied *after* the server
+        // accepts, so a refused write never reached it. `performToggleSchool` does
+        // need a rollback because it mirrors optimistically, before the write.
         return false;
       }
     },
-    [announce, date, hasYearId, markMutation, queryClient, yearId]
-  );
-
-  const applyLocalAbsence = useCallback(
-    (staffId: string, absentPeriods: Map<number, string>) => {
-      setDraft((previous) => {
-        const next = new Map(previous);
-        if (absentPeriods.size === 0) {
-          next.delete(staffId);
-        } else if (absentPeriods.size >= CODE_DEFINED_PERIODS.length) {
-          next.set(staffId, { status: "absent", periods: absentPeriods });
-        } else {
-          next.set(staffId, { status: "partial", periods: absentPeriods });
-        }
-        return next;
-      });
-    },
-    []
+    [
+      announce,
+      applyLocalAbsence,
+      date,
+      hasYearId,
+      markMutation,
+      queryClient,
+      yearId,
+    ]
   );
 
   /** Every period a teacher is currently marked absent for. */

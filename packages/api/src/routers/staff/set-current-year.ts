@@ -12,7 +12,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../index";
+import { adminOrAcademicProcedure } from "../../index";
 
 /** When a person holds more than one seat, the senior one describes them. */
 const LEADERSHIP_PRECEDENCE = ["principal", "vicePrincipal"] as const;
@@ -121,7 +121,7 @@ export const reconcilePositionDerivedRoles = async (
   await Promise.all(updates);
 };
 
-export const setCurrentYear = adminOnlyProcedure
+export const setCurrentYear = adminOrAcademicProcedure
   .input(v.object({ id: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
     const [existing] = await context.db

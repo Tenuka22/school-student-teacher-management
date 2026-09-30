@@ -20,13 +20,13 @@
  */
 import { ORPCError } from "@orpc/server";
 import { inventoryTransferReasonSchema } from "@school-student-teacher-management/db/constants/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryCustodyHistory,
   inventoryItem,
   inventoryItemIdSchema,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { eq } from "drizzle-orm";
 import { minLength, object, optional, pipe, string } from "valibot";
 
@@ -55,9 +55,9 @@ const resolveStaffName = async (
   staffId: string
 ): Promise<string | null> => {
   const [record] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, staffId))
+    .select({ name: staff.name })
+    .from(staff)
+    .where(eq(staff.id, staffId))
     .limit(1);
 
   return record?.name ?? null;
@@ -67,7 +67,7 @@ export const transferCustody = inventoryManagerProcedure
   .input(
     object({
       itemId: inventoryItemIdSchema,
-      newCustodianStaffId: userIdSchema,
+      newCustodianStaffId: staffRefSchema,
       /**
        * Required unconditionally by this input, which is **stricter** than the
        * database. `inventory_custody_history_reason_required` only demands a
@@ -156,7 +156,7 @@ export const transferCustody = inventoryManagerProcedure
           changeType,
           reason: input.reason,
           note: input.note ?? null,
-          changedByStaffId: actor.userId,
+          changedByStaffId: actor.staffId,
         })
         .returning();
 

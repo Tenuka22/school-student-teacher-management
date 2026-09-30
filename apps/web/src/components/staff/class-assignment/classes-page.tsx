@@ -1,0 +1,75 @@
+import { ClassDialogs } from "@/components/staff/class-assignment/class-dialogs";
+import { ClassExcelImport } from "@/components/staff/class-assignment/class-excel-import";
+import { ClassesTabs } from "@/components/staff/class-assignment/classes-tabs";
+import { useClassesPage } from "@/components/staff/class-assignment/use-classes-page";
+import { PageHeader } from "@/components/ui-patterns/page-header";
+
+/**
+ * The class-assignment page.
+ *
+ * This used to be the body of `routes/_auth/admin/$year/staff/classes.tsx`; it
+ * moved here so `/academic-admin/$year/staff/classes` renders the identical
+ * page. No `base` prop: the page addresses nothing outside itself.
+ */
+export const ClassesPage = () => {
+  const page = useClassesPage();
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        eyebrow="Staff management"
+        title="Class assignment"
+        description={
+          <>Create classes and assign homeroom teachers for the academic year</>
+        }
+        actions={
+          <ClassExcelImport
+            academicYearId={page.currentYear?.id}
+            classes={page.classes}
+            onCreate={page.handleImportCreate}
+            onUpdate={page.handleImportUpdate}
+          />
+        }
+      />
+
+      <ClassesTabs
+        classes={page.classes}
+        staff={page.staffList}
+        isLoading={page.isListLoading}
+        isError={page.isListError}
+        errorMessage={page.listErrorMessage}
+        onRetry={page.handleRetryList}
+        onCreateClick={page.handleCreateClick}
+        onEditClick={page.handleEditClick}
+        onAssignTeacherClick={page.handleAssignTeacherClick}
+        onDeleteClick={page.handleDeleteClick}
+        onExportClick={page.handleExportClick}
+        onSeedClick={page.handleSeedClick}
+        isSeedPending={page.seedMutation.isPending}
+      />
+
+      <ClassDialogs
+        academicYearId={page.currentYear?.id}
+        selectedClass={page.selectedClass}
+        isCreateOpen={page.isCreateDialogOpen}
+        onCreateOpenChange={(open) => page.setIsCreateDialogOpen(open)}
+        isCreatePending={page.createMutation.isPending}
+        onCreateSubmit={page.handleCreateSubmit}
+        isEditOpen={page.isEditDialogOpen}
+        onEditOpenChange={(open) => page.setIsEditDialogOpen(open)}
+        isEditPending={page.updateMutation.isPending}
+        onEditSubmit={page.handleEditSubmit}
+        isAssignTeacherOpen={page.isAssignTeacherDialogOpen}
+        onAssignTeacherOpenChange={(open) =>
+          page.setIsAssignTeacherDialogOpen(open)
+        }
+        isAssignTeacherPending={page.assignTeacherMutation.isPending}
+        onAssignTeacherSubmit={page.handleAssignTeacherSubmit}
+        isDeleteOpen={page.isDeleteDialogOpen}
+        onDeleteOpenChange={(open) => page.setIsDeleteDialogOpen(open)}
+        isDeletePending={page.deleteMutation.isPending}
+        onConfirmDelete={page.handleConfirmDelete}
+      />
+    </div>
+  );
+};

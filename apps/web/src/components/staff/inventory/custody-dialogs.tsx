@@ -45,10 +45,9 @@ import type { CustodyHoldMode } from "@/components/staff/inventory/custody-hold-
  * | --- | --- |
  * | `custody-form.tsx` | The vocabulary, the preview, the schemas and the one dialog frame every verb renders through |
  * | `custody-transfer-dialog.tsx` | Hand an item from one member of staff to another |
- * | `custody-manager-dialog.tsx` | Appoint, replace or remove the person in charge — the three-state field |
- * | `clear-manager-dialog.tsx` | Its own file because the destructive third state is a separate question asked in a separate place |
+ * | `custody-manager-dialog.tsx` | Appoint or replace the person in charge — the two-state field |
  * | `custody-owner-dialogs.tsx` | The two verbs a teacher owns: hand the responsibility on, and call an item back |
- * | `custody-hold-dialog.tsx` | The self-service pair: assign to yourself, return to the store |
+ * | `custody-hold-dialog.tsx` | The self-service pair: assign to yourself, hand it back |
  * | `custody-history-sheet.tsx` | The append-only trail, as a table |
  * | this file | The composition the page mounts, and the re-exports that keep every existing import path working |
  *
@@ -101,7 +100,7 @@ export interface CustodyDialogsProps {
   isManagerPending: boolean;
   onManagerSubmit: (values: {
     itemId: string;
-    newManagerStaffId: string | null;
+    newManagerStaffId: string;
     reason: string;
     note?: string;
   }) => Promise<void>;
@@ -109,7 +108,13 @@ export interface CustodyDialogsProps {
   isHoldOpen: boolean;
   onHoldOpenChange: (open: boolean) => void;
   isHoldPending: boolean;
-  onHoldSubmit: (values: { itemId: string; note?: string }) => Promise<void>;
+  /** Carries `newCustodianStaffId` only in release mode — see
+   *  `TakeOrReleaseDialogProps`. */
+  onHoldSubmit: (values: {
+    itemId: string;
+    note?: string;
+    newCustodianStaffId?: string;
+  }) => Promise<void>;
   isHistoryOpen: boolean;
   onHistoryOpenChange: (open: boolean) => void;
 }

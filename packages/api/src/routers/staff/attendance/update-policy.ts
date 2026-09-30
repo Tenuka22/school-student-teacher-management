@@ -8,7 +8,7 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminOnlyProcedure } from "../../../index";
+import { adminOrAcademicProcedure } from "../../../index";
 import { requireAttendanceAcademicYear } from "./academic-year";
 
 const boundedPeriodSchema = v.pipe(
@@ -24,7 +24,7 @@ const resolvePolicyValue = <T>(
   fallback: T
 ) => input ?? existing ?? fallback;
 
-export const updatePolicy = adminOnlyProcedure
+export const updatePolicy = adminOrAcademicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

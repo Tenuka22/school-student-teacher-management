@@ -466,11 +466,12 @@ export const CustodyHistorySheet = ({
    *
    * `item` is the register's **snapshot** of the row, taken when the sheet was
    * opened, and a snapshot is stale the moment a write lands: without this the panel
-   * would keep offering to call back an item that is already in the store, and the
-   * hand-on dialog would keep telling a storekeeper that the previous owner is still
-   * the owner. It is cleared when the panel closes, because a fresh open hands over a
-   * freshly fetched row and an override from the last visit would then be masking
-   * somebody else's change rather than this panel's own.
+   * would keep offering to call back an item whose holder is already the person in
+   * charge — the reclaim the previous write just performed, refused as a no-op —
+   * and the hand-on dialog would keep telling a storekeeper that the previous
+   * owner is still the owner. It is cleared when the panel closes, because a fresh
+   * open hands over a freshly fetched row and an override from the last visit
+   * would then be masking somebody else's change rather than this panel's own.
    *
    * `useMemo` rather than a `useEffect` that copies `item` into state: the value is
    * *derived* from the prop plus the override, so deriving it during render is the
@@ -643,17 +644,19 @@ export const CustodyHistorySheet = ({
         item={view}
         onRecorded={(owner) => {
           /*
-           * The holder is cleared in the same transaction as the hand-on, so this is
-           * two columns rather than one. Reading that off `transfer-ownership.ts`
-           * rather than leaving the panel to refetch is what stops it offering a
-           * reclaim against a holder the write has already released.
+           * The holder moves onto the successor in the same transaction as the
+           * hand-on, so this is two columns rather than one — and both land on
+           * the same person, which is why the owner payload is enough for each.
+           * Reading that off `transfer-ownership.ts` rather than leaving the panel
+           * to refetch is what stops it offering a reclaim from a holder the write
+           * has already moved on.
            */
           setWritten({
             itemId,
             managerStaffId: owner.staffId,
             managerName: owner.name,
-            custodianStaffId: null,
-            custodianName: null,
+            custodianStaffId: owner.staffId,
+            custodianName: owner.name,
           });
         }}
       />
@@ -662,32 +665,28 @@ export const CustodyHistorySheet = ({
         open={isReclaimOpen}
         onOpenChange={setIsReclaimOpen}
         item={view}
-        onRecorded={() => {
+        onRecorded={(holder) => {
           /*
-           * **The name is deliberately dropped, and the server drops it too.**
-           * `reclaim-custody.ts` returns `custodianStaffId: null` *and*
-           * `custodianName: null`; the previous holder's name is in the toast and in
-           * the trail. Carrying it onto the view would put a name beside a null
-           * pointer, and this folder has spent a great deal of argument establishing
-           * that a name with no pointer behind it is a *different* fact from a
-           * departed staff record — the one `PartyName` strikes through. Here it would
-           * simply be a lie in the badge: the hand-on dialog's own "this also clears
-           * the current holder" notice reads `custodianStaffId`, and its preview reads
-           * `custodianName`, so a carried-over name would have the register claiming
-           * the previous holder still has the item on the one screen that knows they do
-           * not.
+           * The new holder, straight from the server's own row: a reclaim sets
+           * `custodianStaffId` to the person in charge, so this pair is the
+           * register's answer rather than a guess. Carrying the *previous*
+           * holder's name onto the view would be the lie this folder spends a
+           * great deal of argument on — a name beside a pointer that no longer
+           * says what the name says — which is why the dialog reports the new
+           * pair and the toast carries the old name.
            *
-           * The owner is read back off `view` rather than restated, because a reclaim
-           * does not touch it: the whole point of the dialog is that calling something
-           * back is not a hand-on, and an override that restated the manager column
-           * would be the code disagreeing with the copy.
+           * The owner is read back off `view` rather than restated, because a
+           * reclaim does not touch it: the whole point of the dialog is that
+           * calling something back is not a hand-on, and an override that
+           * restated the manager column would be the code disagreeing with the
+           * copy.
            */
           setWritten({
             itemId,
             managerStaffId: view?.managerStaffId ?? null,
             managerName: view?.managerName ?? null,
-            custodianStaffId: null,
-            custodianName: null,
+            custodianStaffId: holder.staffId,
+            custodianName: holder.name,
           });
         }}
       />

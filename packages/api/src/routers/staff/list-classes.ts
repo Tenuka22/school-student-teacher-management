@@ -6,9 +6,9 @@ import { academicYearIdSchema } from "@school-student-teacher-management/db/sche
 import { eq, and } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
-export const listClasses = adminProcedure
+export const listClasses = academicProcedure
   .input(
     v.object({
       academicYearId: academicYearIdSchema,

@@ -174,7 +174,7 @@ export const inventoryRouter = {
     create: createBorrow,
     return: returnBorrow,
     /** A borrower's punctuality score, computed live from their loan history —
-     *  see `get-punctuality-score.ts`. `userId` optional, defaults to the caller. */
+     *  see `get-punctuality-score.ts`. `staffId` optional, defaults to the caller. */
     punctualityScore: getPunctualityScore,
   },
   disposals: {

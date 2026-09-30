@@ -19,14 +19,14 @@ import {
   inventoryActionSchema,
 } from "@school-student-teacher-management/db/constants/inventory";
 import type { InventoryAction } from "@school-student-teacher-management/db/constants/inventory";
-import { user } from "@school-student-teacher-management/db/schema/auth";
 import {
   inventoryItem,
   inventoryItemIdSchema,
   inventoryTransaction,
-  userIdSchema,
+  staffRefSchema,
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
+import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { and, count, desc, eq, gte, ilike, lt, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -122,7 +122,7 @@ const ledgerSelection = {
   actorStaffId: inventoryTransaction.actorStaffId,
   itemName: inventoryItem.name,
   itemSku: inventoryItem.sku,
-  actorName: user.name,
+  actorName: staff.name,
 } as const;
 
 const ledgerQuery = (db: Executor) =>
@@ -130,7 +130,7 @@ const ledgerQuery = (db: Executor) =>
     .select(ledgerSelection)
     .from(inventoryTransaction)
     .innerJoin(inventoryItem, eq(inventoryTransaction.itemId, inventoryItem.id))
-    .leftJoin(user, eq(inventoryTransaction.actorStaffId, user.id));
+    .leftJoin(staff, eq(inventoryTransaction.actorStaffId, staff.id));
 
 type LedgerRow = Awaited<ReturnType<typeof ledgerQuery>>[number];
 
@@ -214,7 +214,7 @@ export const listTransactions = inventoryOverseerProcedure
     object({
       itemId: optional(inventoryItemIdSchema),
       action: optional(inventoryActionSchema),
-      actorStaffId: optional(userIdSchema),
+      actorStaffId: optional(staffRefSchema),
       search: optional(pipe(string(), maxLength(120))),
       from: optional(isoDateSchema),
       to: optional(isoDateSchema),
@@ -283,7 +283,7 @@ export const listTransactions = inventoryOverseerProcedure
           inventoryItem,
           eq(inventoryTransaction.itemId, inventoryItem.id)
         )
-        .leftJoin(user, eq(inventoryTransaction.actorStaffId, user.id))
+        .leftJoin(staff, eq(inventoryTransaction.actorStaffId, staff.id))
         .where(where),
     ]);
 

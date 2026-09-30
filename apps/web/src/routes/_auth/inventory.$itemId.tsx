@@ -1,26 +1,13 @@
-import {
-  ITEM_CONDITIONS,
-  itemConditionLabel,
-} from "@school-student-teacher-management/db/constants/inventory";
 import { Button } from "@school-student-teacher-management/ui/components/button";
-import {
-  Field,
-  FieldLabel,
-} from "@school-student-teacher-management/ui/components/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@school-student-teacher-management/ui/components/select";
-import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
-import { IconArrowBack, IconPackageExport } from "@tabler/icons-react";
+import { IconPackageExport } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 
+import {
+  HandBackPanel,
+  RequestPanel,
+} from "@/components/staff/inventory/scan-item-panels";
 import {
   ConditionBadge,
   CustodyBadge,
@@ -43,15 +30,22 @@ import { orpc } from "@/utils/orpc";
  * neither the item's manager nor its holder nor eligible to take it gets a
  * `FORBIDDEN` from the query, rendered here as a plain refusal rather than
  * the whole register.
+ *
+ * ## What is in this file, and what is not
+ *
+ * The three writes, their toasts and their invalidation — because that is what
+ * a route file is for, and because a toast that fires on success and a toast
+ * that fires on the server's own sentence are the same decision. The two
+ * dialog-shaped forms are in `scan-item-panels.tsx`; they used to be
+ * `renderHandBack()` and `renderRequest()` closures here, which is what took this
+ * file past `react-doctor`'s `no-giant-component` line. Which of them is offered
+ * at all is **not** decided here either: `getForScan` returns `canTake`,
+ * `canHandBack` and `canRequest` per caller, and this page renders what it is
+ * told.
  */
 const RouteComponent = () => {
   const { itemId } = Route.useParams();
   const queryClient = useQueryClient();
-  const [isHandBackOpen, setIsHandBackOpen] = useState(false);
-  const [handBackNote, setHandBackNote] = useState("");
-  const [handBackCondition, setHandBackCondition] = useState<string>("");
-  const [isRequestOpen, setIsRequestOpen] = useState(false);
-  const [requestNote, setRequestNote] = useState("");
 
   const itemQuery = useQuery(
     orpc.inventory.items.getForScan.queryOptions({ input: { itemId } })
@@ -77,10 +71,7 @@ const RouteComponent = () => {
   const releaseMutation = useMutation(
     orpc.inventory.custody.release.mutationOptions({
       onSuccess: async () => {
-        toast.success("Handed back to the store");
-        setIsHandBackOpen(false);
-        setHandBackNote("");
-        setHandBackCondition("");
+        toast.success("Handed back — the register records who takes it now");
         await invalidate();
       },
       onError: (error) => {
@@ -95,8 +86,6 @@ const RouteComponent = () => {
     orpc.inventory.custody.requests.create.mutationOptions({
       onSuccess: async () => {
         toast.success("Request sent — you'll be notified when it's decided");
-        setIsRequestOpen(false);
-        setRequestNote("");
         await queryClient.invalidateQueries({
           queryKey: orpc.inventory.items.getForScan.queryOptions({
             input: { itemId },
@@ -118,23 +107,17 @@ const RouteComponent = () => {
   }
 
   if (itemQuery.isError) {
+    // A `FORBIDDEN` here is the ordinary case for a reader with no relationship
+    // to the item, and it is a refusal rather than a failure: the label scanned
+    // fine, and the answer is that this person may not do anything with it.
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="font-heading text-2xl font-semibold">
-          This item is not one you can act on
-        </h1>
-        <p className="text-muted-foreground max-w-prose text-sm">
+        <p className="text-muted-foreground text-sm">
           {formatApiErrorMessage(
             itemQuery.error,
-            "You can only scan an item that is available to take, or one you already hold or are in charge of."
+            "This item could not be read"
           )}
         </p>
-        <Link
-          to="/account"
-          className="border-primary text-primary hover:bg-primary hover:text-primary-foreground inline-block w-fit border px-5 py-2.5 text-xs font-extrabold tracking-[0.04em] transition-colors"
-        >
-          Back to your account
-        </Link>
       </div>
     );
   }
@@ -144,156 +127,6 @@ const RouteComponent = () => {
   if (!item) {
     return null;
   }
-
-  /**
-   * The hand-back affordance, as a function with two early returns rather than
-   * a nested conditional: whether the reader may hand this back at all
-   * (`item.canHandBack`) and whether the form is open are two different
-   * questions, and folding them into one expression buried the "may they?"
-   * answer under the shape of the form.
-   */
-  const renderHandBack = () => {
-    if (!item.canHandBack) {
-      return null;
-    }
-
-    if (!isHandBackOpen) {
-      return (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setIsHandBackOpen(true)}
-          data-icon="inline-start"
-        >
-          <IconArrowBack data-icon="inline-start" />
-          Hand this back to the store
-        </Button>
-      );
-    }
-
-    return (
-      <div className="border-primary/14 flex flex-col gap-3 border p-4">
-        <Field>
-          <FieldLabel htmlFor="scan-hand-back-condition">
-            Condition (optional)
-          </FieldLabel>
-          <Select
-            value={handBackCondition}
-            onValueChange={(value) => setHandBackCondition(value ?? "")}
-          >
-            <SelectTrigger id="scan-hand-back-condition">
-              <SelectValue placeholder="Leave unchanged" />
-            </SelectTrigger>
-            <SelectContent>
-              {ITEM_CONDITIONS.map((condition) => (
-                <SelectItem key={condition} value={condition}>
-                  {itemConditionLabel(condition)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="scan-hand-back-note">
-            Add a note (optional)
-          </FieldLabel>
-          <Textarea
-            id="scan-hand-back-note"
-            rows={2}
-            value={handBackNote}
-            onChange={(event) => setHandBackNote(event.target.value)}
-            placeholder="Where it is going back to, or anything the next person should know."
-          />
-        </Field>
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setIsHandBackOpen(false)}
-            disabled={releaseMutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() =>
-              releaseMutation.mutate({
-                itemId: item.id,
-                note: handBackNote || undefined,
-                condition: (handBackCondition as never) || undefined,
-              })
-            }
-            disabled={releaseMutation.isPending}
-          >
-            {releaseMutation.isPending ? "Handing back…" : "Confirm hand-back"}
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
-  /**
-   * The request affordance, mirroring `renderHandBack`'s shape: whether the
-   * reader may request this item at all (`item.canRequest`) and whether the
-   * note form is open are two different questions.
-   */
-  const renderRequest = () => {
-    if (!item.canRequest) {
-      return null;
-    }
-
-    if (!isRequestOpen) {
-      return (
-        <Button
-          data-icon="inline-start"
-          onClick={() => setIsRequestOpen(true)}
-          type="button"
-        >
-          <IconPackageExport data-icon="inline-start" />
-          Request this item from {item.custodianName ?? "its holder"}
-        </Button>
-      );
-    }
-
-    return (
-      <div className="border-primary/14 flex flex-col gap-3 border p-4">
-        <Field>
-          <FieldLabel htmlFor="scan-request-note">
-            Note to {item.custodianName ?? "the holder"} (optional)
-          </FieldLabel>
-          <Textarea
-            id="scan-request-note"
-            onChange={(event) => setRequestNote(event.target.value)}
-            placeholder="Need it for period 3 on Thursday"
-            rows={2}
-            value={requestNote}
-          />
-        </Field>
-        <div className="flex justify-end gap-2">
-          <Button
-            disabled={requestMutation.isPending}
-            onClick={() => setIsRequestOpen(false)}
-            type="button"
-            variant="ghost"
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={requestMutation.isPending}
-            onClick={() =>
-              requestMutation.mutate({
-                itemId: item.id,
-                note: requestNote || undefined,
-              })
-            }
-            type="button"
-          >
-            {requestMutation.isPending ? "Sending…" : "Send request"}
-          </Button>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">
@@ -310,8 +143,8 @@ const RouteComponent = () => {
       </div>
 
       <CustodyBadge
-        managerName={item.managerName}
         custodianName={item.custodianName}
+        managerName={item.managerName}
       />
 
       {item.description ? (
@@ -337,19 +170,39 @@ const RouteComponent = () => {
 
       {item.canTake ? (
         <Button
-          type="button"
-          onClick={() => takeMutation.mutate({ itemId: item.id })}
-          disabled={takeMutation.isPending}
           data-icon="inline-start"
+          disabled={takeMutation.isPending}
+          onClick={() => {
+            takeMutation.mutate({ itemId: item.id });
+          }}
+          type="button"
         >
           <IconPackageExport data-icon="inline-start" />
           {takeMutation.isPending ? "Borrowing…" : "Borrow this item"}
         </Button>
       ) : null}
 
-      {renderHandBack()}
+      {item.canHandBack ? (
+        <HandBackPanel
+          isPending={releaseMutation.isPending}
+          managerName={item.managerName}
+          managerStaffId={item.managerStaffId}
+          onConfirm={(input) => {
+            releaseMutation.mutate({ itemId: item.id, ...input });
+          }}
+        />
+      ) : null}
 
-      {renderRequest()}
+      {item.canRequest ? (
+        <RequestPanel
+          custodianName={item.custodianName}
+          isPending={requestMutation.isPending}
+          itemId={item.id}
+          onConfirm={(input) => {
+            requestMutation.mutate(input);
+          }}
+        />
+      ) : null}
 
       {!item.canTake && !item.canHandBack && !item.canRequest ? (
         <p className="text-muted-foreground text-sm">

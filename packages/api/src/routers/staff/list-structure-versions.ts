@@ -1,8 +1,8 @@
 import { STRUCTURE_VERSIONS } from "@school-student-teacher-management/db/constants/structureVersions/index";
 
-import { adminProcedure } from "../../index";
+import { academicProcedure } from "../../index";
 
-export const listStructureVersions = adminProcedure.handler(() =>
+export const listStructureVersions = academicProcedure.handler(() =>
   Object.values(STRUCTURE_VERSIONS).map((version) => ({
     key: version.key,
     description: version.description,

@@ -1,78 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ClassDialogs } from "@/components/staff/class-assignment/class-dialogs";
-import { ClassExcelImport } from "@/components/staff/class-assignment/class-excel-import";
-import { ClassesTabs } from "@/components/staff/class-assignment/classes-tabs";
-import { useClassesPage } from "@/components/staff/class-assignment/use-classes-page";
-import { PageHeader } from "@/components/ui-patterns/page-header";
+import { ClassesPage } from "@/components/staff/class-assignment/classes-page";
 import { pageHead } from "@/lib/page-title";
 import { orpc } from "@/utils/orpc";
 
-const RouteComponent = () => {
-  const page = useClassesPage();
-
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        eyebrow="Staff management"
-        title="Class assignment"
-        description={
-          <>Create classes and assign homeroom teachers for the academic year</>
-        }
-        actions={
-          <ClassExcelImport
-            academicYearId={page.currentYear?.id}
-            classes={page.classes}
-            onCreate={page.handleImportCreate}
-            onUpdate={page.handleImportUpdate}
-          />
-        }
-      />
-
-      <ClassesTabs
-        classes={page.classes}
-        staff={page.staffList}
-        isLoading={page.isListLoading}
-        isError={page.isListError}
-        errorMessage={page.listErrorMessage}
-        onRetry={page.handleRetryList}
-        onCreateClick={page.handleCreateClick}
-        onEditClick={page.handleEditClick}
-        onAssignTeacherClick={page.handleAssignTeacherClick}
-        onDeleteClick={page.handleDeleteClick}
-        onExportClick={page.handleExportClick}
-        onSeedClick={page.handleSeedClick}
-        isSeedPending={page.seedMutation.isPending}
-      />
-
-      <ClassDialogs
-        academicYearId={page.currentYear?.id}
-        selectedClass={page.selectedClass}
-        isCreateOpen={page.isCreateDialogOpen}
-        onCreateOpenChange={(open) => page.setIsCreateDialogOpen(open)}
-        isCreatePending={page.createMutation.isPending}
-        onCreateSubmit={page.handleCreateSubmit}
-        isEditOpen={page.isEditDialogOpen}
-        onEditOpenChange={(open) => page.setIsEditDialogOpen(open)}
-        isEditPending={page.updateMutation.isPending}
-        onEditSubmit={page.handleEditSubmit}
-        isAssignTeacherOpen={page.isAssignTeacherDialogOpen}
-        onAssignTeacherOpenChange={(open) =>
-          page.setIsAssignTeacherDialogOpen(open)
-        }
-        isAssignTeacherPending={page.assignTeacherMutation.isPending}
-        onAssignTeacherSubmit={page.handleAssignTeacherSubmit}
-        isDeleteOpen={page.isDeleteDialogOpen}
-        onDeleteOpenChange={(open) => page.setIsDeleteDialogOpen(open)}
-        isDeletePending={page.deleteMutation.isPending}
-        onConfirmDelete={page.handleConfirmDelete}
-      />
-    </div>
-  );
-};
-
+/**
+ * The class-assignment page. The body lives in
+ * `components/staff/class-assignment/classes-page.tsx` so
+ * `/academic-admin/$year/staff/classes` renders the identical page; this
+ * route supplies the loader and head.
+ */
 export const Route = createFileRoute("/_auth/admin/$year/staff/classes")({
-  component: RouteComponent,
+  component: ClassesPage,
   loader: async ({ context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(

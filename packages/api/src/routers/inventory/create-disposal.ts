@@ -143,10 +143,13 @@ export const createDisposal = inventoryManagerProcedure
         status: "pending_approval",
         notes: input.notes ?? null,
         estimatedValue: input.estimatedValue ?? null,
-        // Always the caller's login id — identity here is `user.id`, not
-        // `staff.id`, so every authenticated caller including the seeded
-        // admin / principal / deputy-principal seats can request a disposal.
-        requestedByStaffId: actor.userId,
+        // The caller's **staff id**, and it is a staff id: every seat that
+        // reaches this procedure — including the seeded admin / principal /
+        // deputy-principal accounts, which hold their authority with no staff row
+        // of their own — is given a staff row on boot, and `getInventoryActor`
+        // resolves one. That row is what this column names, so the write-off trail
+        // reads in the same key as the custody trail beside it.
+        requestedByStaffId: actor.staffId,
         requestedAt,
       });
 

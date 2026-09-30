@@ -48,11 +48,14 @@ const DEBOUNCE_MS = 250;
  *
  * Built as a **whole** `AssignableStaffOption` — no cast, no partial — so it
  * cannot drift away from the router's projection the way a partial object with an
- * `as` would. It is also, now, *two fields*: `orpc.inventory.options.assignableStaff`
- * selects `id` and `name` off the `user` table and nothing else, so an option has
- * no room for anything else and this object has nothing to invent.
+ * `as` would. That projection is five fields off the `staff` table (`id`, `name`,
+ * `staffCategory`, `employmentStatus`, `serviceNo`, `currentRole`), and the three
+ * the stand-in cannot know are filled with the values that mean exactly "not
+ * loaded": an employment status of `null` is the same "nobody has confirmed it"
+ * the picker's own predicate treats as assignable, and the badge number and role
+ * are simply absent rather than invented.
  *
- * The name says the two true things and neither of the untrue one: the id is
+ * The name says the two true things and neither of the untrue ones: the id is
  * real, and the name is not loaded. It does not print a plausible colleague's
  * name, and it does not print an empty field.
  */
@@ -61,6 +64,10 @@ const STAND_IN_NAME = "Chosen — not on this page of names";
 const unlistedStaff = (id: string): AssignableStaffOption => ({
   id,
   name: STAND_IN_NAME,
+  staffCategory: "teacher",
+  employmentStatus: null,
+  serviceNo: null,
+  currentRole: null,
 });
 
 /** Whether a name is the stand-in's, which the row styles differently. */
@@ -70,22 +77,21 @@ const isStandInName = (name: string): boolean => name === STAND_IN_NAME;
  * How many of the loaded people answer to one name, for the names more than one
  * answers to.
  *
- * ## This exists because the badge number is not on the wire
+ * ## Why this exists even though the badge number is back on the wire
  *
- * `orpc.inventory.options.assignableStaff` used to project
- * `serviceNo` — the badge number off `staff.teacherServiceNo` — and these rows
- * printed it precisely because a school reliably has several staff with similar
- * names: "Mrs. Perera" is not a disambiguator when there are three of them, and
- * `EMP-0417` is. **The commit that moved inventory identity from `staff` rows to
- * `user` login rows dropped it from the projection**, and it is no longer on the
- * response: the procedure selects `id` and `name` off `user` and returns.
+ * `orpc.inventory.options.assignableStaff` projects `serviceNo` — the badge
+ * number off `staff.teacherServiceNo` — again: the projection is the `staff`
+ * table, which is where identity for custody and management lives. A school
+ * reliably has several staff with similar names: "Mrs. Perera" is not a
+ * disambiguator when there are three of them, and `EMP-0417` is.
  *
- * So the disambiguation the badge number used to carry has to come from the two
- * fields that *are* on the wire. Counting the loaded options by name gives the
- * one answer that is both true and useful — **"three people on this list answer
- * to this name"** — and, unlike a hardcoded placeholder value, it is a fact
- * about the response in front of the user rather than a guess about the column
- * the response used to have.
+ * The badge is on the response rather than on the row: the second line printed
+ * here is the count, which covers the case the badge cannot — **a person with no
+ * badge number on record**, or a list where some of the namesakes have one and
+ * some do not. It is a fact about the response in front of the user — "three
+ * people on this list answer to this name" — rather than a guess about a column,
+ * and unlike a hardcoded placeholder it cannot print a number the row does not
+ * have.
  *
  * Normalized on `trim().toLowerCase()` because the same person is written
  * "Perera" and "perera" in two places in a school's data, and a collision count
@@ -230,30 +236,33 @@ export const PickerListStatus: React.FC<{
  * `orpc.inventory.options.assignableStaff` is a **security surface, not a display
  * filter** — it is the source for every manager, custodian and borrower field in
  * the feature, so its rows are exactly the staff a procedure would accept. The
- * gate is `adminProcedure` and the predicate is the one `assertStaffIsAssignable`
- * enforces on the write path, so the two cannot offer and accept different sets.
+ * gate is `inventoryOverseerProcedure` (the register's read tier) and the
+ * predicate is the one `assertStaffIsAssignable` enforces on the write path, so
+ * the two cannot offer and accept different sets.
  *
- * ## It is an identity list, and the row is `{ id, name }`
+ * ## It is a staff list, and the row is five fields
  *
- * It used to be a *staff* list — joined to `staff`, carrying `staffCategory`,
- * `employmentStatus`, `serviceNo` and the login `currentRole`, and filtered on
- * employment. It is now a list of **login accounts** off the `user` table: the
- * four `*_staff_id` columns on the inventory tables hold a `user.id`, the
- * procedures take a `userId`, and the write guard (`assertStaffIsAssignable`)
- * reads `user` too. Two fields come back, and the components in this folder read
- * both of them.
+ * Identity for custody and management is the `staff` row — the four `*_staff_id`
+ * columns on the inventory tables hold a `staff.id`, the procedures take a
+ * `staffRefSchema` value, and the write guard reads `staff` too — so the
+ * projection is the `staff` table: `id`, `name`, `staffCategory`,
+ * `employmentStatus`, `serviceNo` and the login's `currentRole` (joined only to
+ * say whether the person behind a staff row is the admin seat, which the
+ * predicate excludes). Employment `active` or unconfirmed is the predicate,
+ * matching the write path; a departure therefore drops off this list as soon as
+ * their status says so.
  *
- * The consequence a reader of this folder should hold onto: **`name` is the only
- * thing that distinguishes two people on this list**, because the badge number
- * is not on the response any more. `nameCollisions` above is what stands in its
- * place.
+ * The consequence a reader of this folder should hold onto: **`name` plus the
+ * badge number is what distinguishes two people on this list**, and the badge is
+ * on the response — `nameCollisions` above covers the names where it is not
+ * enough or not present.
  *
  * ## `isLoading` versus `isFetching`, and both against `error`
  *
  * All three are handed back because the three states are not the same state:
  * `isLoading` is the first page, `isFetching` is *any* request including the one
- * behind the next keystroke, and `error` is the one that must never be allowed
- * to render as "no members of staff found". `error` is truthy only until a
+ * behind the next keystroke, and `error` is the one that must never be allowed to
+ * render as "no members of staff found". `error` is truthy only until a
  * successful refetch replaces it, which is what `refetch` is for.
  *
  * The query is left enabled for an empty search so the combobox opens with the
@@ -404,10 +413,10 @@ export const StaffComboboxField: React.FC<{
         isItemEqualToValue={(a, b) => a?.id === b?.id}
         /*
          * Filtering is the server's job, and the reason it matters is the LIKE
-         * escape: `options.assignableStaff` matches `user.name` case-insensitively
-         * with `%` and `_` escaped, so a storekeeper typing an underscore into a
-         * name is not shown the whole establishment. A client-side filter over the
-         * current page would not do that.
+         * escape: `options.assignableStaff` matches the `staff` name
+         * case-insensitively with `%` and `_` escaped, so a storekeeper typing an
+         * underscore into a name is not shown the whole establishment. A
+         * client-side filter over the current page would not do that.
          */
         filter={null}
       >
@@ -461,15 +470,15 @@ export const StaffComboboxField: React.FC<{
         </ComboboxContent>
       </Combobox>
       {/*
-        "None selected" is a *chosen state*, not an absence of one.
-        `assignManager` takes `newManagerStaffId: null` and that clears the
-        manager, which is a real and audited change; a field that simply looked
-        blank would make the difference between "leave it alone" and "remove the
-        current manager" invisible, and the form could not tell which one the
-        user meant. So the cleared state is stated on the face of the field — and
-        it is a live region, because a cleared field is a change the user made
-        with the mouse and is otherwise the one edit on this control that is
-        never spoken.
+        "None selected" states the cleared state on the face of the field
+        rather than leaving the control silently blank. The write that used to
+        make this badge an audited decision — `assignManager` taking
+        `newManagerStaffId: null` — went with the owner column's NOT NULL, so
+        what remains under `allowClear` is a filter going back to "anybody" or
+        a form field going back to unchosen, and neither is visible once the
+        trigger's own text is gone. It stays a live region because clearing is
+        a change the user made with the mouse and is otherwise the one edit on
+        this control that is never spoken.
       */}
       {allowClear && !value ? (
         <Badge

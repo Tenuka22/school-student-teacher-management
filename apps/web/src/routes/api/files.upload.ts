@@ -42,8 +42,17 @@ const ALLOWED_TYPES = new Set([
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "inventory");
 
-/** Only the leadership tier that manages the register may attach a photo to it — the same `adminOnlyProcedure` gate `createItem`/`updateItem` sit behind. */
-const isAllowedRole = (role: string | undefined): boolean => role === "admin";
+/**
+ * Who may attach a photo to an item: `admin` and `inventoryAdmin` — the two
+ * roles the register's writes accept (`inventoryManagerProcedure` in
+ * `packages/api/src/index.ts`). The comment this replaces claimed the gate
+ * matched `adminOnlyProcedure`, which was both wrong and too narrow: the
+ * seeded Inventory Administrator could edit an item but never attach its
+ * picture. `academicAdmin` is deliberately absent — the register is not its
+ * desk.
+ */
+const isAllowedRole = (role: string | undefined): boolean =>
+  role === "admin" || role === "inventoryAdmin";
 
 const handleUpload = async ({ request }: { request: Request }) => {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -51,7 +60,10 @@ const handleUpload = async ({ request }: { request: Request }) => {
 
   if (!session || !isAllowedRole(role)) {
     return Response.json(
-      { message: "Only an administrator may upload an item photo" },
+      {
+        message:
+          "Only the administrator or Inventory Administrator may upload an item photo",
+      },
       { status: 403 }
     );
   }
