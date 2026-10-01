@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { LeaveEntitlementsCard } from "@/components/staff/leave-management/leave-entitlements-card";
 import { LeaveRequestsContent } from "@/components/staff/leave-management/leave-requests-content";
 import {
   toLeaveLedgerInput,
@@ -23,10 +24,15 @@ import { orpc } from "@/utils/orpc";
  * reasoning; duplicated here only because feature folders in this codebase
  * are deliberately self-contained (see `AGENTS.md`).
  */
+// The quota editor sits under the ledger: both seats that may read this page
+// (`admin`, `leaveAdmin`) are the two `leaveManagerProcedure` admits.
 const LeaveRequestsRoute = () => (
-  <LeaveRequestsContent
-    search={validateLeaveRequestsSearch(Route.useSearch())}
-  />
+  <div className="flex flex-col gap-6">
+    <LeaveRequestsContent
+      search={validateLeaveRequestsSearch(Route.useSearch())}
+    />
+    <LeaveEntitlementsCard year={Number(Route.useParams().year)} />
+  </div>
 );
 
 export const Route = createFileRoute("/_auth/leave-admin/$year/staff/leaves")({

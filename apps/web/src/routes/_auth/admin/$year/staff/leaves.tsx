@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { LeaveEntitlementsCard } from "@/components/staff/leave-management/leave-entitlements-card";
 import { LeaveRequestsContent } from "@/components/staff/leave-management/leave-requests-content";
 import {
   toLeaveLedgerInput,
@@ -38,10 +39,15 @@ import { orpc } from "@/utils/orpc";
  * it is the same `{year, queue: "all"}` key the sidebar uses, so an
  * administrator who has already seen the sidebar badge arrives with the data.
  */
+// The quota editor sits under the ledger: both seats that may read this page
+// (`admin`, `leaveAdmin`) are the two `leaveManagerProcedure` admits.
 const LeaveRequestsRoute = () => (
-  <LeaveRequestsContent
-    search={validateLeaveRequestsSearch(Route.useSearch())}
-  />
+  <div className="flex flex-col gap-6">
+    <LeaveRequestsContent
+      search={validateLeaveRequestsSearch(Route.useSearch())}
+    />
+    <LeaveEntitlementsCard year={Number(Route.useParams().year)} />
+  </div>
 );
 
 export const Route = createFileRoute("/_auth/admin/$year/staff/leaves")({

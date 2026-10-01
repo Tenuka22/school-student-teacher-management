@@ -1,5 +1,6 @@
 import { humanizeKey } from "@school-student-teacher-management/db/constants/display";
 import { countWorkingDays } from "@school-student-teacher-management/db/constants/leave";
+import { isCalendarDate } from "@school-student-teacher-management/db/dates";
 import type { LeaveDayPart } from "@school-student-teacher-management/db/schema/leaves";
 
 /**
@@ -56,6 +57,11 @@ export const describeLeaveDays = (
 ): string => {
   if (dayPart !== "full") {
     return PARTIAL_DAY_LABELS[dayPart];
+  }
+
+  // A row stored before dates were calendar-checked must still render.
+  if (!(isCalendarDate(startDate) && isCalendarDate(endDate))) {
+    return "Invalid dates";
   }
 
   const days = countWorkingDays(startDate, endDate);
