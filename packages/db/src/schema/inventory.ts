@@ -31,6 +31,7 @@ import {
   INVENTORY_TRANSACTION_ACTIONS,
   INVENTORY_TRANSFER_REASON_KEYS,
   ITEM_CONDITIONS,
+  LEGACY_INVENTORY_TRANSACTION_ACTIONS,
   UNIT_STATUSES,
   custodyChangeTypeSchema,
   custodyNoticeRecipientRoleSchema,
@@ -1184,7 +1185,12 @@ export const inventoryTransaction = pgTable(
     index("inventory_transaction_created_at_idx").on(table.createdAt),
     check(
       "inventory_transaction_action_check",
-      sqlIn(table.action, INVENTORY_TRANSACTION_ACTIONS)
+      // Legacy loan actions stay legal history; see
+      // `LEGACY_INVENTORY_TRANSACTION_ACTIONS`.
+      sqlIn(table.action, [
+        ...INVENTORY_TRANSACTION_ACTIONS,
+        ...LEGACY_INVENTORY_TRANSACTION_ACTIONS,
+      ])
     ),
     check(
       "inventory_transaction_counters_nonneg",

@@ -1,5 +1,7 @@
 import * as v from "valibot";
 
+import { isCalendarDate } from "../dates";
+
 /**
  * Reusable Valibot field types, shared across every table's generated
  * insert/update schema so a format rule (phone, NIC, email, ...) is
@@ -80,12 +82,33 @@ export const nicSchema = v.pipe(
 /** ISO date string, YYYY-MM-DD. */
 export const isoDateSchema = v.pipe(
   v.string(),
-  v.regex(ISO_DATE_RE, "Date must be in YYYY-MM-DD format")
+  v.regex(ISO_DATE_RE, "Date must be in YYYY-MM-DD format"),
+  // The regex accepts 2026-02-30 and 2026-13-45; see `dates.ts` (F-21).
+  v.check(isCalendarDate, "Date is not a real calendar date")
 );
 
 export const postalCodeSchema = v.pipe(
   v.string(),
   v.regex(POSTAL_CODE_RE, "Invalid postal code")
+);
+
+/**
+ * Minimum length for a password a person chooses for themselves (self-service
+ * sign-up). Length, not composition rules — NIST SP 800-63B — and the same
+ * floor the seeded seats are held to. It was 8 (forensic audit F-19).
+ */
+export const ACCOUNT_PASSWORD_MIN_LENGTH = 12;
+
+/** Upper bound, so a password cannot be used to make the server hash megabytes. */
+export const ACCOUNT_PASSWORD_MAX_LENGTH = 128;
+
+export const accountPasswordSchema = v.pipe(
+  v.string(),
+  v.minLength(
+    ACCOUNT_PASSWORD_MIN_LENGTH,
+    `Password must be at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`
+  ),
+  v.maxLength(ACCOUNT_PASSWORD_MAX_LENGTH)
 );
 
 export const strongPasswordSchema = v.pipe(

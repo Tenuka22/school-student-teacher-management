@@ -1,4 +1,7 @@
+import { sql } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   pgTable,
@@ -23,6 +26,10 @@ import {
   staff,
   staffIdSchema,
 } from "./staff";
+
+/** `column in ('a', 'b')` for a CHECK. Values are code constants, never input. */
+const sqlInList = (column: SQLWrapper, values: readonly string[]): SQL =>
+  sql`${column} in (${sql.raw(values.map((value) => `'${value}'`).join(", "))})`;
 
 export type LeaveRequestId = Brand<string, "LeaveRequestId">;
 export const leaveRequestIdSchema = v.pipe(
@@ -146,6 +153,42 @@ export const leaveRequest = pgTable(
     index("leave_request_final_status_idx").on(table.finalStatus),
     index("leave_request_start_date_idx").on(table.startDate),
     index("leave_request_year_idx").on(table.academicYearId),
+    // The quota and overlap checks filter on exactly this pair (F-24/F-35).
+    index("leave_request_staff_year_idx").on(
+      table.staffId,
+      table.academicYearId
+    ),
+    // The state machine was enforced only in handlers, over three free-text
+    // status columns (F-31). These make an unknown state unrepresentable;
+    // which transitions are legal stays the handlers' job.
+    check(
+      "leave_request_status_check",
+      sqlInList(table.status, leaveStatusSchema.options)
+    ),
+    check(
+      "leave_request_deputy_status_check",
+      sqlInList(table.deputyStatus, deputyStatusSchema.options)
+    ),
+    check(
+      "leave_request_final_status_check",
+      sqlInList(table.finalStatus, finalStatusSchema.options)
+    ),
+    check(
+      "leave_request_day_part_check",
+      sqlInList(table.dayPart, LEAVE_DAY_PARTS)
+    ),
+    check(
+      "leave_request_payment_status_check",
+      sqlInList(table.paymentStatus, LEAVE_PAYMENT_STATUSES)
+    ),
+    check(
+      "leave_request_type_check",
+      sqlInList(table.type, leaveTypeSchema.options)
+    ),
+    check(
+      "leave_request_date_order",
+      sql`${table.startDate} <= ${table.endDate}`
+    ),
   ]
 );
 

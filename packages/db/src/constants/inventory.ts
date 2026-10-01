@@ -306,7 +306,22 @@ export const INVENTORY_TRANSACTION_ACTIONS = [
 ] as const;
 export type InventoryAction = (typeof INVENTORY_TRANSACTION_ACTIONS)[number];
 
+/**
+ * Actions the ledger once recorded and the app no longer writes. Dated loans
+ * were removed in migration 0008, but a ledger is history: rows written while
+ * loans existed stay true, so the database CHECK still admits these two values
+ * while `InventoryAction` (what code may insert) does not. Dropping them from
+ * the CHECK would make every database with loan history fail to upgrade, or
+ * force its ledger rows to be deleted.
+ */
+export const LEGACY_INVENTORY_TRANSACTION_ACTIONS = [
+  "borrowed",
+  "returned",
+] as const;
+
 export const INVENTORY_ACTION_LABELS: Record<string, string> = {
+  borrowed: "Borrowed (legacy loan)",
+  returned: "Returned (legacy loan)",
   created: "Item created",
   edited: "Item edited",
   deleted: "Item deleted",

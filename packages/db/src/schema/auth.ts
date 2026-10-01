@@ -93,6 +93,36 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)]
 );
 
+/**
+ * Every call to better-auth's admin plugin (`/api/auth/admin/*`) — ban, unban,
+ * session revocation, and any attempt at the verbs no role holds — with who
+ * made it, against whom, and whether it was allowed.
+ *
+ * Account administration is the operation a takeover goes through (forensic
+ * audit F-01), and before this table it left no trace beyond the end state.
+ * The user ids are deliberately **not** foreign keys: the record of who
+ * banned whom must survive either account being deleted.
+ */
+export const accountAuditLog = pgTable(
+  "account_audit_log",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id"),
+    actorRole: text("actor_role"),
+    /** The admin-plugin path, e.g. `/admin/ban-user`. */
+    action: text("action").notNull(),
+    targetUserId: text("target_user_id"),
+    /** `allowed` (the endpoint succeeded) or `denied` (and why, in `detail`). */
+    outcome: text("outcome").notNull(),
+    detail: text("detail"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("account_audit_log_created_at_idx").on(table.createdAt),
+    index("account_audit_log_target_idx").on(table.targetUserId),
+  ]
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),

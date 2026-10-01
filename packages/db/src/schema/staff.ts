@@ -6,6 +6,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   integer,
   boolean,
 } from "drizzle-orm/pg-core";
@@ -203,40 +204,61 @@ export const staff = pgTable(
 );
 
 /** Academic year entity with explicit date range. */
-export const academicYear = pgTable("academic_year", {
-  id: text("id").primaryKey(),
-  year: integer("year").notNull().unique(),
-  /** ISO date string — start of academic year (e.g. "2027-01-01") */
-  startDate: text("start_date"),
-  /** ISO date string — end of academic year (e.g. "2027-12-31") */
-  endDate: text("end_date"),
-  /**
-   * Key of the `StructureVersion` (see `constants/structureVersions`) this
-   * academic year's `gradeSubjectConfig` rows were materialized from.
-   * Nullable at the DB level only to keep pre-existing rows migratable;
-   * required and validated against the code registry at the API layer for
-   * every new academic year.
-   */
-  structureVersionKey: text("structure_version_key"),
-  /**
-   * Subversion number within the structure version (e.g. 1 = v1.1, 2 = v1.2).
-   * Combined with `structureVersionKey`, pins the exact curriculum snapshot
-   * that was materialized into `gradeSubjectConfig`.
-   */
-  structureSubversionKey: integer("structure_subversion_key"),
-  isCurrent: boolean("is_current").default(false).notNull(),
-  /**
-   * Soft delete. A year is retired rather than destroyed: every table that
-   * references `academicYearId` cascades on a hard delete, and a year old
-   * enough to have nothing attached to it (the one case `deleteAcademicYear`
-   * still requires) is still a real year the school existed in — removing
-   * the row would remove the fact that 2019 happened, not just the records
-   * inside it. `listAcademicYears` excludes a retired year unless asked for
-   * one explicitly, and `restoreAcademicYear` is the way back.
-   */
-  deletedAt: timestamp("deleted_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const academicYear = pgTable(
+  "academic_year",
+  {
+    id: text("id").primaryKey(),
+    year: integer("year").notNull().unique(),
+    /** ISO date string — start of academic year (e.g. "2027-01-01") */
+    startDate: text("start_date"),
+    /** ISO date string — end of academic year (e.g. "2027-12-31") */
+    endDate: text("end_date"),
+    /**
+     * Key of the `StructureVersion` (see `constants/structureVersions`) this
+     * academic year's `gradeSubjectConfig` rows were materialized from.
+     * Nullable at the DB level only to keep pre-existing rows migratable;
+     * required and validated against the code registry at the API layer for
+     * every new academic year.
+     */
+    structureVersionKey: text("structure_version_key"),
+    /**
+     * Subversion number within the structure version (e.g. 1 = v1.1, 2 = v1.2).
+     * Combined with `structureVersionKey`, pins the exact curriculum snapshot
+     * that was materialized into `gradeSubjectConfig`.
+     */
+    structureSubversionKey: integer("structure_subversion_key"),
+    isCurrent: boolean("is_current").default(false).notNull(),
+    /**
+     * Soft delete. A year is retired rather than destroyed: every table that
+     * references `academicYearId` cascades on a hard delete, and a year old
+     * enough to have nothing attached to it (the one case `deleteAcademicYear`
+     * still requires) is still a real year the school existed in — removing
+     * the row would remove the fact that 2019 happened, not just the records
+     * inside it. `listAcademicYears` excludes a retired year unless asked for
+     * one explicitly, and `restoreAcademicYear` is the way back.
+     */
+    deletedAt: timestamp("deleted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    /**
+     * At most one current year, enforced by the database (forensic audit F-09).
+     * Every "current year" read is `where is_current limit 1`, so two current
+     * rows made each of them pick one arbitrarily — and `setCurrentYear` cleared
+     * then set in two statements with nothing stopping two administrators from
+     * interleaving. A partial unique index admits any number of `false` rows
+     * and exactly one `true`.
+     */
+    uniqueIndex("academic_year_single_current")
+      .on(table.isCurrent)
+      .where(sql`${table.isCurrent}`),
+    /** A retired year cannot be the year the school is running in. */
+    check(
+      "academic_year_current_not_deleted",
+      sql`not (${table.isCurrent} and ${table.deletedAt} is not null)`
+    ),
+  ]
+);
 
 /**
  * Staff role assignment for a given academic year.

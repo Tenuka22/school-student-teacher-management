@@ -1,3 +1,5 @@
+import { assertCalendarDate } from "../dates";
+
 /**
  * Default per-year leave quota, seeded for every new academic year.
  *
@@ -66,30 +68,40 @@ export const LEAVE_PAYMENT_LABELS: Record<LeavePaymentStatus, string> = {
 
 const dateAtUtcMidnight = (date: string) => new Date(`${date}T00:00:00Z`);
 
-export const countWorkingDays = (startDate: string, endDate: string) => {
-  const start = dateAtUtcMidnight(startDate);
-  const end = dateAtUtcMidnight(endDate);
-  const dayMs = 24 * 60 * 60 * 1000;
-  const dayCount = Math.max(
-    0,
-    Math.floor((end.getTime() - start.getTime()) / dayMs) + 1
-  );
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SUNDAY = 0;
+const SATURDAY = 6;
 
-  const dates = Array.from({ length: dayCount }, (_, index) => {
-    const date = new Date(start);
-    date.setUTCDate(start.getUTCDate() + index);
-    return date;
-  });
-  let count = 0;
-  for (const date of dates) {
+/**
+ * Every Monday–Friday from `startDate` to `endDate` inclusive, as
+ * `YYYY-MM-DD`. Empty when the range is reversed.
+ *
+ * Throws a `RangeError` on anything that is not a real calendar date: this
+ * used to roll `2026-02-30` into March (one day) and turn `2026-13-45` into
+ * **zero** days, which let an invalid request through the quota (F-21).
+ */
+export const listWorkingDates = (
+  startDate: string,
+  endDate: string
+): string[] => {
+  assertCalendarDate(startDate);
+  assertCalendarDate(endDate);
+  const start = dateAtUtcMidnight(startDate).getTime();
+  const end = dateAtUtcMidnight(endDate).getTime();
+
+  const dates: string[] = [];
+  for (let time = start; time <= end; time += DAY_MS) {
+    const date = new Date(time);
     const day = date.getUTCDay();
-    if (day !== 0 && day !== 6) {
-      count += 1;
+    if (day !== SUNDAY && day !== SATURDAY) {
+      dates.push(date.toISOString().slice(0, 10));
     }
   }
-
-  return count;
+  return dates;
 };
+
+export const countWorkingDays = (startDate: string, endDate: string) =>
+  listWorkingDates(startDate, endDate).length;
 
 export const calculateLeaveDays = (
   startDate: string,
@@ -100,5 +112,7 @@ export const calculateLeaveDays = (
     return countWorkingDays(startDate, endDate);
   }
 
+  assertCalendarDate(startDate);
+  assertCalendarDate(endDate);
   return startDate === endDate ? 0.5 : 0;
 };

@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   pgTable,
   text,
@@ -100,6 +102,16 @@ export const classPeriodSubject = pgTable(
     index("class_period_subject_year_idx").on(table.academicYearId),
     index("class_period_subject_class_idx").on(table.classId),
     index("class_period_subject_subject_idx").on(table.subjectKey),
+    // The valibot ranges above, made unskippable (F-31): a slot outside
+    // Monday–Friday or the code-defined bell schedule renders nowhere.
+    check(
+      "class_period_subject_day_range",
+      sql`${table.dayOfWeek} between 1 and 5`
+    ),
+    check(
+      "class_period_subject_period_range",
+      sql`${table.periodNumber} between 1 and ${sql.raw(String(CODE_DEFINED_PERIODS.length))}`
+    ),
   ]
 );
 
