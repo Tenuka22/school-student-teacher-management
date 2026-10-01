@@ -1,9 +1,6 @@
 # SYSTEM FORENSIC AUDIT REPORT
 
-**System:** St. Aloysius' College — School Management System (`Tenuka22/school-student-teacher-management`)
-**Audited revision:** local `master` at `1f2c705` ("Small changes") + one uncommitted file (`apps/web/src/components/admin/admin-users-content.tsx`)
-**Audit date:** 1 October 2026
-**Method:** static reading of the repository, plus targeted runtime verification against a throwaway PostgreSQL database that was created and dropped for this audit. The existing databases were not modified.
+**System:** St. Aloysius' College — School Management System (`Tenuka22/school-student-teacher-management`) **Audited revision:** local `master` at `1f2c705` ("Small changes") + one uncommitted file (`apps/web/src/components/admin/admin-users-content.tsx`) **Audit date:** 1 October 2026 **Method:** static reading of the repository, plus targeted runtime verification against a throwaway PostgreSQL database that was created and dropped for this audit. The existing databases were not modified.
 
 ---
 
@@ -12,7 +9,7 @@
 Every material claim carries an evidence grade:
 
 | Grade | Meaning |
-|---|---|
+| --- | --- |
 | **VERIFIED** | Reproduced by executing code or SQL during this audit, or proven by a direct, unambiguous reading of the code path end to end |
 | **STRONGLY INDICATED** | The code path is clear, but it was not executed end to end |
 | **LIKELY** | Inferred from configuration, library defaults or partial evidence |
@@ -24,7 +21,7 @@ Severity uses the requested model: **P0** (data loss, security breach, system-wi
 ### What was actually executed during this audit
 
 | Check | Result |
-|---|---|
+| --- | --- |
 | Applied migrations `0000`–`0007` statement by statement to an empty scratch database | **`0007` fails at statement #1.** With the 25 failing `DROP`s skipped, the 25 `ADD CONSTRAINT`s also fail ("already exists") |
 | Ran `drizzle-kit generate` against a temporary copy of the migrations | "No schema changes" — `schema/*.ts` matches the `0007` snapshot |
 | Compared FK names across snapshots | `0006_snapshot.json` records 50 references to `*_staff_id_user_id_fk`; the SQL never created them |
@@ -68,7 +65,7 @@ The rest of the system is materially weaker, and several of its strongest claims
 ## 2. Current System Situation
 
 | Aspect | Observed state | Grade |
-|---|---|---|
+| --- | --- | --- |
 | Branch | Local `master` = `origin/master` as last fetched (`1f2c705`). A dry-run fetch shows remote `master` has moved to `28327c2` (contents not inspected) | VERIFIED |
 | Uncommitted work | Duplicate React key fix in `admin-users-content.tsx`; untracked `TECHNICAL_REPORT.md` | VERIFIED |
 | `develop` branch | Already merged into `master` (`e62ed14 "Merge develop: resolve conflicts (functional=ours, UI=theirs)…"`). `develop` is 0 ahead, 39 behind | VERIFIED; **contradicts** TECHNICAL_REPORT §1/§3/§6 #6 |
@@ -110,6 +107,7 @@ PostgreSQL 18 (docker-compose, host port 3000)
 **Authorization flow:** `requireRole(...)` tiers compare `session.user.role` to a hard-coded list (`packages/api/src/index.ts`). `requirePermission(resource, action)` bypasses `admin|principal|vicePrincipal` and asks better-auth's `userHasPermission` for every other role. Row-level scoping is done inside handlers.
 
 **Startup side effects** (`apps/web/src/services.server.ts`, top-level `await`):
+
 - `ensureBootstrapUsers` creates the 5 seeded accounts, their staff rows and the inventory categories;
 - `purgeUnverifiedAccounts` deletes unverified users older than 7 days.
 
@@ -122,18 +120,18 @@ PostgreSQL 18 (docker-compose, host port 3000)
 ## 4. Technology Stack
 
 | Layer | Technology (declared) | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Runtime / package manager | Bun (`packageManager: bun@1.4.0`), Node 24 in Docker runner | Local Bun is **1.3.13**; `bun.lock` is lockfileVersion 2 (VERIFIED) |
-| Monorepo | Bun workspaces + Nx 23 | |
-| Frontend | React 19.2, TanStack Router 1.170 / Start 1.168 / Query 5 / Table 9, Tailwind 4, base-ui, shadcn | |
-| API | oRPC 1.15 (RPC + OpenAPI handlers) | |
+| Monorepo | Bun workspaces + Nx 23 |  |
+| Frontend | React 19.2, TanStack Router 1.170 / Start 1.168 / Query 5 / Table 9, Tailwind 4, base-ui, shadcn |  |
+| API | oRPC 1.15 (RPC + OpenAPI handlers) |  |
 | Validation | **valibot** (178 files) and **zod** (declared, 0 imports) | Two libraries; the OpenAPI converter is zod-only (F-41) |
-| Auth | better-auth **1.7.5** (pinned) | |
-| ORM / DB | drizzle-orm 0.45.3, drizzle-kit 0.31, `pg` 8.23, PostgreSQL 18 | |
-| Documents | exceljs 4.4, pdfmake 0.3, qrcode 1.5, qr-scanner (browser) | |
+| Auth | better-auth **1.7.5** (pinned) |  |
+| ORM / DB | drizzle-orm 0.45.3, drizzle-kit 0.31, `pg` 8.23, PostgreSQL 18 |  |
+| Documents | exceljs 4.4, pdfmake 0.3, qrcode 1.5, qr-scanner (browser) |  |
 | Env | varlock 1.18 (schema + codegen) | `scripts/seed.ts` uses `dotenv`, which is not declared (F-11) |
-| Lint/format | Ultracite 7.12 (oxlint + oxfmt), husky + lint-staged | |
-| CI | GitHub Actions: lint only (+ auto-fix push) | |
+| Lint/format | Ultracite 7.12 (oxlint + oxfmt), husky + lint-staged |  |
+| CI | GitHub Actions: lint only (+ auto-fix push) |  |
 
 ---
 
@@ -142,7 +140,7 @@ PostgreSQL 18 (docker-compose, host port 3000)
 Status legend: **OK** works as designed on reading; **PARTIAL** works with defects; **BROKEN** cannot complete its workflow; **API-ONLY** backend exists, no UI.
 
 | Module | Frontend | Backend | Database | Auth guard | Tests | Status |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | Authentication (login, OTP, multi-session) | login-form, verify, account | better-auth | user/session/account/verification | better-auth | none | PARTIAL: no prod mail transport (F-12) |
 | Sign-up / teacher approval | signup-form, teacher-requests | `signupStaff` (public), `approveTeacherRequest` | user + staff | public / academicProcedure | none | PARTIAL (F-12, F-18, F-19) |
 | Accounts admin (ban, purge, list) | users-* (server-side table) | `listAccounts`, better-auth admin plugin | user/session | academicProcedure + adminAc | none | **Security defect (F-01)** |
@@ -203,7 +201,7 @@ Key modelling choices:
 ### 7.1 Table-level findings
 
 | Table | Finding | Grade | Issue |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `academic_year` | No partial unique index on `is_current = true`; nothing in the DB prevents two current years | VERIFIED | F-09 |
 | `academic_year` | `year` is `UNIQUE` including soft-deleted rows, so a closed year blocks re-creating that year (and the resulting violation surfaces as a 500, F-06) | STRONGLY INDICATED | F-08 |
 | `staff` | `nic` `NOT NULL UNIQUE` + CHECK `staff_nic_format`; good. A redundant plain index `staff_nic_idx` duplicates the unique index; same for `teacher_service_no` | VERIFIED | F-31 |
@@ -268,12 +266,12 @@ dev:web fails
 
 - Any database with a staff row whose NIC is NULL, or an inventory item with no manager or custodian, fails at those statements.
 - Any database with a NIC in the "three seeded rows were carrying 10-digit values" state that AGENTS.md describes fails at the CHECK.
-- AGENTS.md states: *"rows created before the column became NOT NULL are backfilled by migration `0007`"*. **CONTRADICTED**: 0007 contains no UPDATE of `staff.nic`, `manager_staff_id` or `custodian_staff_id`.
+- AGENTS.md states: _"rows created before the column became NOT NULL are backfilled by migration `0007`"_. **CONTRADICTED**: 0007 contains no UPDATE of `staff.nic`, `manager_staff_id` or `custodian_staff_id`.
 
 ### 8.3 Other migration observations
 
 | Item | Observation | Grade |
-|---|---|---|
+| --- | --- | --- |
 | `0006` | `DROP TABLE "class_period_assignment" CASCADE`: destructive, and there is no data migration into the new `class_period_subject`/`class_period_teacher` pair. Any timetable in an upgraded DB is lost | VERIFIED (SQL) |
 | `0006` vs AGENTS.md | AGENTS.md still describes `class_period_assignment` as the core timetable table and cites `0002_eager_kinsey_walden.sql` / `0004_silly_punisher.sql`, which do not exist | CONTRADICTED |
 | Transactions | drizzle-kit applies each migration in a transaction (LIKELY, library behaviour). The `0007` comment relies on this for rollback | LIKELY |
@@ -295,13 +293,13 @@ Two initialization paths exist, and they disagree.
 - Creates 5 seeded users, credential accounts, an `officeStaff` row each (with placeholder NICs `000000000001`–`5`) and the default inventory categories.
 - Uses `Promise.all` over 5 independent `ensureBootstrapAccount` calls, with no transaction.
 - **Does not re-sync passwords for existing users.** It inserts a credential account only when none exists (`admin.ts:416`). The code comment at `services.server.ts` ("their credentials stay in sync with the environment"), `roles.ts` ("Their password is re-synced from server env on every boot") and AGENTS.md ("re-syncs them on boot") are all **CONTRADICTED** (F-04).
-- If a seeded *user* is deleted (possible via F-01 / F-15), the next boot creates a new user and then inserts `seed-staff-<username>` with `onConflictDoNothing({ target: staff.userId })`. The surviving staff row would make the insert conflict on the primary key / NIC instead, which is not covered by that target, so **boot would throw**. This only applies if the staff row survived; `deleteStaff` deletes both. STRONGLY INDICATED (F-15).
+- If a seeded _user_ is deleted (possible via F-01 / F-15), the next boot creates a new user and then inserts `seed-staff-<username>` with `onConflictDoNothing({ target: staff.userId })`. The surviving staff row would make the insert conflict on the primary key / NIC instead, which is not covered by that target, so **boot would throw**. This only applies if the staff row survived; `deleteStaff` deletes both. STRONGLY INDICATED (F-15).
 - Runs `purgeUnverifiedAccounts` at every boot (and daily via Nitro task).
 
 **B. `scripts/seed.ts`:**
 
 | Scenario | Outcome | Grade |
-|---|---|---|
+| --- | --- | --- |
 | Fresh DB → seed | Inserts academic year (no policy, entitlements, curriculum, `structure_version_key`) with `isCurrent: true`, then categories, demo teachers, then **fails** on `inventory_item` insert (no `manager_staff_id`, now NOT NULL) | VERIFIED (code + TECHNICAL_REPORT observation) |
 | Seed → seed again | Year skipped (exists); teachers skipped by NIC; still fails at equipment | STRONGLY INDICATED |
 | Partial failure | Leaves a "current" year that breaks attendance and leave pages (`PRECONDITION_FAILED: Attendance policy is not configured`) | VERIFIED (reported runtime error matches code) |
@@ -317,7 +315,7 @@ Two initialization paths exist, and they disagree.
 ## 10. Data Structures Audit
 
 | Location | Structure | Purpose | Complexity | Assessment |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `list-period-conflicts.ts` | `Map<string, Row[]>` keyed `staffId-day-period` | Group assignments by teacher-slot | O(n) build, O(1) avg lookup | **Appropriate.** Linear in assignments for one year (≈ classes × 40 slots × teachers) |
 | `teacher-requests.ts` | `Map<userId, Session[]>`, `Map<userId, Staff>` | Join sessions/staff to requesters | O(n + m) | Appropriate |
 | `set-current-year.ts` (`reconcilePositionDerivedRoles`) | `Map<userId, expected>` | Derive roles from positions | O(p) | Structure fine; **logic incomplete** (F-10) |
@@ -335,29 +333,35 @@ No inappropriate data structure was found that would matter at school scale. The
 ## 11. Algorithm Audit
 
 **Algorithm: teacher double-booking detection** (`listPeriodConflicts`)
+
 - **Input:** all `class_period_teacher ⨝ class_period_subject` rows for a year. **Output:** ids of unmarked overlapping rows.
 - **Correctness:** groups by (staff, day, period) and reports unmarked rows in any group of 2 or more. One known limitation: a group where all rows are marked `isCombinedSession` is never reported, even when the classes are unrelated. This is by design.
 - **Time:** O(n). **Space:** O(n). **Worst case:** same. **Deterministic:** yes (Map insertion order).
 - **Failure:** detection only; writes are not blocked (documented). **Risk:** low.
 
 **Algorithm: working-day leave count** (`countWorkingDays`, `calculateLeaveDays`)
+
 - **Input:** two `YYYY-MM-DD` strings and a day part. **Output:** number of weekdays (0.5 for a same-day half-day).
 - **Correctness:** excludes Saturday/Sunday only (no public or school holidays), so holidays consume leave. **Invalid dates are not rejected** (VERIFIED): `2026-02-30` → 1 (rolls into March), `2026-13-45` → 0 (`NaN` length → empty array).
 - **Time:** O(days). **Space:** O(days), allocating an array of `Date` per call. Called once per consumed request in `applyLeave`, so O(Σ days).
 - **Risk:** **P1** via quota bypass (F-07, F-21).
 
 **Algorithm: leave quota check** (`applyLeave`)
+
 - **Correctness:** counts only `status = "approved"`, ignores `pending`/`recommended`, and is not repeated at `finalizeLeave`. **Incorrect** for the documented rule "quota is enforced at applyLeave" (F-07).
 - **Concurrency:** check-then-insert with no lock or constraint (F-17).
 
 **Algorithm: role reconciliation** (`reconcilePositionDerivedRoles`)
+
 - **Input:** positions of the newly current year. **Output:** role updates.
-- **Correctness:** only users *with a position in the new year* are considered. A user who was principal last year and has no position this year is never demoted. **Incorrect** (F-10).
+- **Correctness:** only users _with a position in the new year_ are considered. A user who was principal last year and has no position this year is never demoted. **Incorrect** (F-10).
 
 **Algorithm: OTP exponential backoff** (`otp-throttle.ts`)
+
 - `cooldown = 30s × 2^(count-1)`, capped at 300s. Correct and terminating. Per-process (F-27).
 
 **Algorithm: inventory availability and custody** (`inventory-calculations.ts`, `inventory-database.ts`)
+
 - Counter arithmetic under `FOR UPDATE`; DB CHECKs as the last line of defence. Appears correct on reading. Not executed.
 
 **Timetable generation:** there is **no generation algorithm**. Timetables are entered manually slot by slot. No search or constraint solver exists, so there is nothing to analyse for exponential complexity.
@@ -367,7 +371,7 @@ No inappropriate data structure was found that would matter at school scale. The
 ## 12. Algorithm Complexity Analysis
 
 | Area | Complexity | Concern |
-|---|---|---|
+| --- | --- | --- |
 | Conflict scan | O(n) | none |
 | Leave quota | O(r · d) where r = approved requests of that type, d = days each | negligible at school scale |
 | Leave approval → attendance | **O(d) sequential DB statements** in one transaction | maternity (84+84 days ⇒ ~120 working days) ⇒ ~400 statements while holding row locks (F-35) |
@@ -404,6 +408,7 @@ No `EXPLAIN` plans were captured; actual query plans are UNVERIFIED.
 ## 14. Transaction & Consistency Audit
 
 **Transactional (good):**
+
 - every inventory write (25+ procedures);
 - `markAttendance`, `recordArrival`, `applyAttendanceImport`;
 - `finalizeLeave`;
@@ -413,7 +418,7 @@ No `EXPLAIN` plans were captured; actual query plans are UNVERIFIED.
 **Non-transactional multi-write operations:**
 
 | Procedure | Writes | What a mid-way failure leaves | Issue |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `createAcademicYear` | year → grade_subject_config → leave_entitlement → attendance_policy | A year with missing curriculum, entitlements or policy. Attendance and leave review then fail with `PRECONDITION_FAILED` (the exact symptom in TECHNICAL_REPORT §5.2) | F-08 |
 | `setCurrentYear` | clear all `is_current` → set one → reconcile roles | Zero current years (all pages that need one fail) or two current years under concurrency; roles half-reconciled | F-09 |
 | `createStaff` | staff → staff_position → user → account → staff.user_id | Compensating deletes instead of a transaction; a crash between steps leaves an orphan staff row holding the NIC, or an orphan user holding the username | F-17 |
@@ -430,7 +435,7 @@ No `EXPLAIN` plans were captured; actual query plans are UNVERIFIED.
 ## 15. Concurrency Audit
 
 | Scenario | Behaviour | Grade |
-|---|---|---|
+| --- | --- | --- |
 | Two administrators switch year simultaneously | Both clear, both set: **two current years** (no DB constraint) | STRONGLY INDICATED (F-09) |
 | Teacher double-clicks "Apply leave" | Both pass the overlap check before either inserts: **duplicate requests** | STRONGLY INDICATED (F-17) |
 | Principal double-submits approval | `finalizeLeave` reads without `FOR UPDATE` and updates without `WHERE finalized_at IS NULL`. Both transactions proceed. The attendance insert or `teacher_period_absence` unique key then either produces a 500 or a double write | STRONGLY INDICATED (F-17) |
@@ -448,7 +453,7 @@ No optimistic locking or version columns exist anywhere. No idempotency keys exi
 ## 16. Business Logic Audit
 
 | Rule | Implementation | DB enforced | Backend | Frontend | Tests | Status |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | One current academic year | `setCurrentYear` | **No** | partial (non-atomic) | switcher | none | **Violable** (F-09) |
 | Closed years are read-only | route guard `loadAcademicYearRoute` | No | **No** | yes | none | **UI-only** (F-22) |
 | Leave quota per type/payment/year | `applyLeave` | No | approved-only, not at approval | yes | none | **Violable** (F-07) |
@@ -470,7 +475,7 @@ No optimistic locking or version columns exist anywhere. No idempotency keys exi
 ## 17. Authentication Audit
 
 | Control | State | Grade |
-|---|---|---|
+| --- | --- | --- |
 | Password hashing | better-auth default (scrypt) | LIKELY (library default) |
 | Session storage | DB `session` table; multiSession, max 5 per browser | VERIFIED (config) |
 | Cookie flags | better-auth defaults: HttpOnly; `SameSite=Lax`; `Secure` when base URL is https | LIKELY (library defaults; not observed on the wire) |
@@ -491,18 +496,18 @@ No optimistic locking or version columns exist anywhere. No idempotency keys exi
 ### 18.1 Role → capability map (from code)
 
 | Role | Tiers admitted | better-auth statements | Notable |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `admin` | all | adminAc + all app resources | top seat |
 | `principal`, `vicePrincipal` | admin, academic, teacher, overseer | **adminAc** + staff/assignment/qualification/file/inventory incl. take/manageOwn | bypass `requirePermission` |
 | `academicAdmin` | academic, adminOrAcademic | **adminAc** + staff/assignment/qualification | not in `ADMIN_ROLES` |
 | `inventoryAdmin` | overseer, manager | inventory (no take/manageOwn) | upload route allowed |
 | `teacher` | teacher | student:read, mark:*, exam:read, assignment:read, inventory:read/acknowledge | **no `qualification`** |
-| `teacher-requester`, `user` | — | qualification create/read | |
+| `teacher-requester`, `user` | — | qualification create/read |  |
 
 ### 18.2 Conceptual attack results
 
 | Attack | Result | Grade |
-|---|---|---|
+| --- | --- | --- |
 | Unauthenticated → protected procedure | `UNAUTHORIZED` | VERIFIED (middleware) |
 | Unauthenticated → `signupStaff` | Allowed by design; creates accounts with no rate limit (F-19) | VERIFIED |
 | Teacher → admin procedures | Role tiers refuse | VERIFIED (code) |
@@ -527,7 +532,7 @@ No optimistic locking or version columns exist anywhere. No idempotency keys exi
 ## 19. Security Audit
 
 | Attack surface | Entry point | Missing control | Impact | Evidence | Recommended control | Verification |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | Account administration | `/api/auth/admin/*` | Role scoping on create/set-password/remove/impersonate | Full takeover (F-01) | `permissions.ts:94,122,140,210`; `index.ts:177-235` (update hook only) | Give non-admin seats only `user:[list,get,ban]`, `session:[list,revoke]`; add `databaseHooks.user.create.before` refusing non-`teacher`/`user` roles; add `adminRoles: ["admin","principal","vicePrincipal","academicAdmin","inventoryAdmin"]` | Integration test per endpoint × role |
 | File upload | `/api/files/upload` | Extension bound to verified type; content sniffing; `nosniff`; separate origin | Stored XSS → admin session (F-05) | `files.upload.ts:43,78,96` | Derive extension from an allow-listed MIME map; verify magic bytes; serve via a handler with `Content-Type` from DB, `X-Content-Type-Options: nosniff`, `Content-Disposition` | Upload `x.html` with `image/png`; expect rejection |
 | Secrets | `apps/web/.env.example` | Placeholders only | Credential disclosure (F-03) | Hash comparison (this audit) | Replace example values with empty strings; rotate the Academic Admin password; refuse boot if a seeded password equals the example | Boot check test |
@@ -597,7 +602,7 @@ No optimistic locking or version columns exist anywhere. No idempotency keys exi
 Order-of-magnitude reasoning only; no benchmarks were run.
 
 | Users | Expected behaviour | Limiting factor |
-|---|---|---|
+| --- | --- | --- |
 | 10–100 | Fine | — |
 | 500 (all staff + office) | Fine for reads. Exports and QR sheets can stall the single Node process for seconds | CPU-bound generation on the request path |
 | 1,000–5,000 (if students or parents were ever given accounts) | Pool of 10 connections; unbounded lists; in-memory rate limits | pg pool, unbounded queries, single process |
@@ -612,7 +617,7 @@ At its realistic scale (one school: ~150–250 staff, ~3,000 students) the archi
 **There are no test files in the repository** (`find -name "*.test.*" -o -name "*.spec.*"` returns nothing outside `node_modules`). `jsdom` and `@testing-library/react` are installed but unused. CI runs only `ultracite check`.
 
 | Module | Unit | Integration | API | E2E | Security | Edge cases | Status |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | All modules | 0 | 0 | 0 | 0 | 0 | 0 | **Untested** |
 
 The only behavioural evidence available is the Playwright page-load crawl described in TECHNICAL_REPORT §5. That shows routes render. It does not show that mutations, authorization, transactions, exports or uploads work (see §67 of the brief).
@@ -647,7 +652,7 @@ There are **no backups, no restore procedure and no runbook** in the repository 
 ## 28. Observability Audit
 
 | Capability | Present |
-|---|---|
+| --- | --- |
 | Structured logs / request IDs | No |
 | Error IDs returned to users | No |
 | Domain audit log | **Inventory only** (`inventory_audit_log`, `inventory_transaction`, custody history); homeroom history (`class_teacher_assignment_history`) |
@@ -663,7 +668,7 @@ Missing: an audit trail for the exact operations F-01 exploits.
 ## 29. DevOps / Deployment Audit
 
 | Item | Finding | Grade |
-|---|---|---|
+| --- | --- | --- |
 | CI | Lint only; no `tsc`, build, migrations-from-scratch, seed or tests | VERIFIED (F-29) |
 | CI status | `ultracite check` currently fails on 4 `react(purity)` errors (`academic-year-bootstrap.tsx:54`, `academic-year-switcher.tsx:241`, `academic-years-page.tsx:296`, `use-attendance-page.ts:763`) | VERIFIED |
 | CI auto-fix | Push job with `contents: write` runs `bun run fix` and **pushes commits to any branch**, including `master`, on every push | VERIFIED (F-29) |
@@ -691,7 +696,7 @@ Missing: an audit trail for the exact operations F-01 exploits.
 ## 31. Dependency Audit
 
 | Finding | Evidence | Severity |
-|---|---|---|
+| --- | --- | --- |
 | `dotenv` used by `scripts/seed.ts` but undeclared (phantom dependency) | `node_modules/dotenv` 16.4.7 present transitively | P2 |
 | Declared but never imported: `@fontsource-variable/{figtree,inter,roboto}`, `cmdk`, `next-themes`, `@tanstack/react-form`, `web-vitals`, `zod` (root + web + api + auth), `@orpc/valibot` | grep over `apps/web/src` and `packages/*/src`: 0 references | P3 |
 | `cn` declared `^0.3.0` in web and `^0.2.5` in ui; hoisted copy is 0.2.6 | `node_modules/cn/package.json` | P3 |
@@ -718,7 +723,7 @@ Missing: an audit trail for the exact operations F-01 exploits.
 ## 33. Technical Debt Audit
 
 | Debt | Class | Reason |
-|---|---|---|
+| --- | --- | --- |
 | Migration history inconsistent with snapshots | **Critical** | Blocks every new environment; can corrupt an upgrade |
 | Authorization defined by library defaults (`adminAc`) | **Critical** | Silent privilege grants |
 | No tests | **High** | Every finding in this report would have been caught by a basic integration test |
@@ -756,7 +761,7 @@ Not verified, and not to be treated as healthy:
 ## 35. Complete Issue Register
 
 | ID | Category | Location | Issue | Evidence | Impact | Sev. | Root cause | Recommended fix |
-|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | F-01 | SECURITY, ARCHITECTURE | `packages/auth/src/permissions.ts:94,122,140,210`; `packages/auth/src/index.ts:177-235` | principal/vicePrincipal/academicAdmin hold full `adminAc` (`user:create, set-role, set-password, delete, impersonate, set-email, update`, `session:*`); only `user.update` is hooked | better-auth `routes.mjs:133-200` (create-user), `802-830` (set-user-password), `585-592` (impersonation guard = `adminRoles`, default `["admin"]`) | Mint admin users, reset the admin password, impersonate leadership, delete accounts | **P0** | Authorization delegated to library defaults; hook covers one verb | Narrow statements to what the users page needs; add `user.create`/`delete` hooks and an account-update hook protecting seeded/admin targets; set `adminRoles` to every privileged role; audit-log admin-plugin calls |
 | F-02 | DATABASE, DEVOPS | `packages/db/src/migrations/0007_quiet_mother_askani.sql`, `meta/0006_snapshot.json` | Fresh install fails; 25 drops + 25 adds invalid | Executed on scratch DB (this audit) | No new environment, CI DB or production deploy can be built from migrations | **P0** | Snapshot generated from a reverted schema; no migrate-from-zero check | Rewrite 0007 with `DROP CONSTRAINT IF EXISTS` for both name variants before `ADD`; correct the 0006 snapshot; add a CI job: empty DB → migrate → `drizzle-kit generate` must report no changes |
 | F-03 | SECURITY, CONFIGURATION | `apps/web/.env.example` | Live `ACADEMIC_ADMIN_PASSWORD` equals the committed example | SHA-256 comparison (this audit) | Anyone reading the repo can sign in as Academic Admin; with F-01, as admin | **P0** (this env) | Example file holds real-looking values; no boot-time check | Blank all secret values in `.env.example`; rotate now; refuse boot when a seeded password equals the example or is shorter than 12 chars |
@@ -900,6 +905,7 @@ Must be resolved before any real deployment:
 ### Fix strategy for P0/P1 items
 
 **F-01 — Account-administration privilege escalation**
+
 - **Root cause:** `...adminAc.statements` grants every user-management verb; the protective hook covers `user.update` only.
 - **Affected files:** `packages/auth/src/permissions.ts`, `packages/auth/src/index.ts`.
 - **Affected tables:** `user`, `account`, `session`.
@@ -912,6 +918,7 @@ Must be resolved before any real deployment:
 - **Rollback:** revert the permissions file. No data change is involved.
 
 **F-02 / F-14 — Migrations**
+
 - **Root cause:** corrupted `0006` snapshot; no backfill.
 - **Affected files:** `0007_quiet_mother_askani.sql`, `meta/0006_snapshot.json`, `meta/0007_snapshot.json`.
 - **Affected tables:** 11 inventory tables, `staff`.
@@ -920,22 +927,26 @@ Must be resolved before any real deployment:
 - **Rollback:** restore from the pre-migration snapshot or backup. This is mandatory before running on any real DB.
 
 **F-03 / F-04 — Credentials**
+
 - **Solution:** rotate; blank example values; boot check; decide and implement the sync policy.
 - **Migration:** none.
 - **Rollback:** not applicable.
 
 **F-05 — Uploads**
+
 - **Solution:** allow-list map `{image/png: .png, …}`; validate the file signature; store under a non-public directory; `GET /api/files/:id` serving `Content-Type` from DB with `nosniff` and `Content-Disposition: inline`.
 - **Migration:** rewrite `files.key` values from `/uploads/inventory/x` to `/api/files/<id>` (data-only).
 - **Testing:** HTML/SVG polyglot rejected; valid images served; non-inventory roles refused.
 - **Rollback:** keep the old path readable until data is migrated.
 
 **F-06 — Constraint mapping**
+
 - **Solution:** one helper returning `{code, constraint}` from `error` or `error.cause`.
 - **Testing:** one test per mapped constraint expecting `CONFLICT`.
 - **Rollback:** trivial.
 
 **F-07 / F-21 — Leave**
+
 - **Migration (optional):** CHECK `start_date <= end_date` and status enums, after validating existing rows.
 - **Testing:**
   - two pending requests exceeding quota → second refused;
@@ -946,6 +957,7 @@ Must be resolved before any real deployment:
 - **Rollback:** code revert. If CHECKs were added, drop them.
 
 **F-08 / F-09 — Academic years**
+
 - **Migration:** partial unique index. Pre-flight: `SELECT count(*) FROM academic_year WHERE is_current` must be ≤ 1; repair first if not.
 - **Testing:**
   - concurrent `setCurrentYear` → exactly one current;
@@ -954,22 +966,27 @@ Must be resolved before any real deployment:
 - **Rollback:** drop the index.
 
 **F-10 — Role reconciliation**
+
 - **Testing:** principal in year A without a position in year B → after switching to B, role is `teacher` or `user`; seeded and admin accounts are untouched.
 - **Rollback:** code revert; roles can be re-derived by running the reconciliation for the current year.
 
 **F-11 — Seed**
+
 - **Solution:** reuse the year-creation function; managers/custodians set; production refusal.
 - **Testing:** CI runs seed twice on an empty DB.
 
 **F-12 — Mail**
+
 - **Solution:** provider integration behind `sendAuthEmail`.
 - **Testing:** contract test with a fake transport; production smoke test.
 
 **F-13 — Unreachable workflows**
+
 - **Solution:** decide per feature (build or remove).
 - **Testing:** E2E for custody request → decide.
 
 **F-15 — Deletes**
+
 - **Solution:**
   - delete auto-created entitlements/policy/curriculum with the year inside one transaction when nothing else exists;
   - ignore the auto-created `teacher` position;
@@ -985,7 +1002,7 @@ Must be resolved before any real deployment:
 Change only where the evidence requires it.
 
 | Concern | Current | Target |
-|---|---|---|
+| --- | --- | --- |
 | Frontend | TanStack Start, role workspaces | Keep. Add route error boundaries; split god components when touched |
 | API | oRPC procedures with inline logic | Keep oRPC. Introduce a thin domain/service layer for staff/academic/leave mirroring `inventory-database.ts` (transactions, locks, shared error mapping) |
 | Business logic | Split between handlers and comments | Invariants in the DB (CHECK, partial unique, RESTRICT) plus conditional updates |
@@ -1006,6 +1023,7 @@ Change only where the evidence requires it.
 **Harness:** Bun test runner (or Vitest) with a disposable PostgreSQL per run (`CREATE DATABASE test_<uuid>` → migrate → test → drop), exactly as this audit's `verify.mjs` did. Call procedures through `createRouterClient(appRouter, { context })` with synthetic sessions per role, so authorization is exercised without HTTP.
 
 **CI pipeline (in order):**
+
 1. `bun install --frozen-lockfile`
 2. `ultracite check`
 3. `tsc` (api, web)
@@ -1018,7 +1036,7 @@ Change only where the evidence requires it.
 **Minimum test inventory (one per finding):**
 
 | Area | Tests |
-|---|---|
+| --- | --- |
 | Authorization | role × procedure-tier matrix; role × better-auth admin endpoint matrix (F-01); seeded seat protection (F-15) |
 | Migrations | empty-DB build; drift check; upgrade from a fixture DB containing NULL NIC / missing manager (F-02, F-14) |
 | Academic year | atomic create; single current under parallel switch; deleted year cannot be current; delete of an empty year succeeds (F-08, F-09, F-15) |
@@ -1155,7 +1173,7 @@ These can wait until after launch because none of them causes data loss, a breac
 ### Appendix A — Documentation claims checked (§64 cross-module consistency)
 
 | Claim | Source | Verdict |
-|---|---|---|
+| --- | --- | --- |
 | Seeded passwords are re-synced on boot | AGENTS.md, `services.server.ts`, `roles.ts` | **CONTRADICTED** (`admin.ts:416`) |
 | `0007` backfills pre-NOT-NULL rows | AGENTS.md | **CONTRADICTED** |
 | `class_period_assignment` is the core timetable table; migrations `0002_eager_kinsey_walden`, `0004_silly_punisher` | AGENTS.md | **CONTRADICTED** (dropped in `0006`; files do not exist) |
