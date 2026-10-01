@@ -11,6 +11,7 @@ import type {
 } from "@/components/signup/signup-schema";
 import {
   EMPTY_FORM,
+  PASSWORD_MIN_LENGTH,
   toSignupPayload,
   validateSignup,
 } from "@/components/signup/signup-schema";
@@ -418,7 +419,7 @@ export const SignupForm = () => {
               value={form.password}
               onChange={(value) => setField("password", value)}
               error={errors.password}
-              hint="At least 8 characters."
+              hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
               autoComplete="new-password"
               showToggle
               showPassword={showPassword}

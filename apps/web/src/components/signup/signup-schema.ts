@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_PASSWORD_MIN_LENGTH,
   NIC_FORMAT_MESSAGE,
   isValidNicFormat,
 } from "@school-student-teacher-management/db/schema/primitives";
@@ -46,8 +47,8 @@ export const EMPTY_FORM: FormState = {
 
 const EMAIL_SCHEMA = v.pipe(v.string(), v.email());
 
-/** 8 characters minimum, matching what the server will accept. */
-export const PASSWORD_MIN_LENGTH = 8;
+/** The server's own minimum, imported so the two cannot drift apart. */
+export const PASSWORD_MIN_LENGTH = ACCOUNT_PASSWORD_MIN_LENGTH;
 
 /**
  * Client-side mirror of the server schema. Kept in one place so both account

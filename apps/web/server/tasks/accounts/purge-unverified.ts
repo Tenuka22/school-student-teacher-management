@@ -16,6 +16,17 @@ import { ENV } from "../../../src/env.server";
  * which makes it impossible for this to touch a real member or one of the
  * seeded institutional accounts.
  */
+/**
+ * One pool for the life of the process. This used to call `createDb` on
+ * every run — a new ten-connection pool each night, never closed (F-40).
+ * Created lazily so importing the task opens no connection.
+ */
+let database: ReturnType<typeof createDb> | undefined;
+const getDatabase = () => {
+  database ??= createDb(ENV);
+  return database;
+};
+
 export default defineTask({
   meta: {
     name: "accounts:purge-unverified",
@@ -29,9 +40,8 @@ export default defineTask({
       ? olderThanDays * 24 * 60 * 60 * 1000
       : undefined;
 
-    const database = createDb(ENV);
     const { removed } = await purgeUnverifiedAccounts(
-      database,
+      getDatabase(),
       olderThanMs ? { olderThanMs } : {}
     );
 
