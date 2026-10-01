@@ -64,6 +64,20 @@
       "when": 1790779529423,
       "tag": "0008_organic_daimon_hellstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790836266024,
+      "tag": "0009_harden_invariants",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790836829980,
+      "tag": "0010_closed_year_read_only",
+      "breakpoints": true
     }
   ]
 }

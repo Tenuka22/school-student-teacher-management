@@ -1,6 +1,6 @@
 {
-  "id": "307f63cd-af25-4337-a8be-430f227875a7",
-  "prevId": "912d8247-d141-4c90-92c8-cc4b8a976853",
+  "id": "df656b3c-b3a8-43b2-889e-58cac691b1a5",
+  "prevId": "307f63cd-af25-4337-a8be-430f227875a7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1074,6 +1074,99 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.account_audit_log": {
+      "name": "account_audit_log",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_role": {
+          "name": "actor_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_user_id": {
+          "name": "target_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "account_audit_log_created_at_idx": {
+          "name": "account_audit_log_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "account_audit_log_target_idx": {
+          "name": "account_audit_log_target_idx",
+          "columns": [
+            {
+              "expression": "target_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.session": {
       "name": "session",
       "schema": "",
@@ -1589,7 +1682,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "class_period_subject_day_range": {
+          "name": "class_period_subject_day_range",
+          "value": "\"class_period_subject\".\"day_of_week\" between 1 and 5"
+        },
+        "class_period_subject_period_range": {
+          "name": "class_period_subject_period_range",
+          "value": "\"class_period_subject\".\"period_number\" between 1 and 8"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.class_period_teacher": {
@@ -2055,6 +2157,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "leave_request_staff_year_idx": {
+          "name": "leave_request_staff_year_idx",
+          "columns": [
+            {
+              "expression": "staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "academic_year_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2127,7 +2250,36 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "leave_request_status_check": {
+          "name": "leave_request_status_check",
+          "value": "\"leave_request\".\"status\" in ('pending', 'recommended', 'approved', 'rejected', 'cancelled')"
+        },
+        "leave_request_deputy_status_check": {
+          "name": "leave_request_deputy_status_check",
+          "value": "\"leave_request\".\"deputy_status\" in ('pending', 'recommended', 'rejected')"
+        },
+        "leave_request_final_status_check": {
+          "name": "leave_request_final_status_check",
+          "value": "\"leave_request\".\"final_status\" in ('pending', 'approved', 'rejected')"
+        },
+        "leave_request_day_part_check": {
+          "name": "leave_request_day_part_check",
+          "value": "\"leave_request\".\"day_part\" in ('full', 'morning', 'afternoon')"
+        },
+        "leave_request_payment_status_check": {
+          "name": "leave_request_payment_status_check",
+          "value": "\"leave_request\".\"payment_status\" in ('notApplicable', 'paid', 'halfPay', 'unpaid')"
+        },
+        "leave_request_type_check": {
+          "name": "leave_request_type_check",
+          "value": "\"leave_request\".\"type\" in ('annual', 'casual', 'medical', 'maternity', 'duty', 'other')"
+        },
+        "leave_request_date_order": {
+          "name": "leave_request_date_order",
+          "value": "\"leave_request\".\"start_date\" <= \"leave_request\".\"end_date\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.exam_type": {
@@ -3219,7 +3371,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "academic_year_single_current": {
+          "name": "academic_year_single_current",
+          "columns": [
+            {
+              "expression": "is_current",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"academic_year\".\"is_current\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
@@ -3232,7 +3401,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "academic_year_current_not_deleted": {
+          "name": "academic_year_current_not_deleted",
+          "value": "not (\"academic_year\".\"is_current\" and \"academic_year\".\"deleted_at\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.staff": {

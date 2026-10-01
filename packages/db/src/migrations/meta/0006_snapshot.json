@@ -4366,10 +4366,10 @@
         }
       },
       "foreignKeys": {
-        "inventory_audit_log_actor_staff_id_user_id_fk": {
-          "name": "inventory_audit_log_actor_staff_id_user_id_fk",
+        "inventory_audit_log_actor_staff_id_staff_id_fk": {
+          "name": "inventory_audit_log_actor_staff_id_staff_id_fk",
           "tableFrom": "inventory_audit_log",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "actor_staff_id"
           ],
@@ -4594,19 +4594,6 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_borrow_borrower_staff_id_user_id_fk": {
-          "name": "inventory_borrow_borrower_staff_id_user_id_fk",
-          "tableFrom": "inventory_borrow",
-          "tableTo": "user",
-          "columnsFrom": [
-            "borrower_staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "inventory_borrow_borrower_student_id_student_id_fk": {
           "name": "inventory_borrow_borrower_student_id_student_id_fk",
           "tableFrom": "inventory_borrow",
@@ -4620,10 +4607,23 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_borrow_borrowed_by_staff_id_user_id_fk": {
-          "name": "inventory_borrow_borrowed_by_staff_id_user_id_fk",
+        "inventory_borrow_borrower_staff_id_staff_id_fk": {
+          "name": "inventory_borrow_borrower_staff_id_staff_id_fk",
           "tableFrom": "inventory_borrow",
-          "tableTo": "user",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "borrower_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_borrow_borrowed_by_staff_id_staff_id_fk": {
+          "name": "inventory_borrow_borrowed_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_borrow",
+          "tableTo": "staff",
           "columnsFrom": [
             "borrowed_by_staff_id"
           ],
@@ -4633,10 +4633,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_borrow_returned_by_staff_id_user_id_fk": {
-          "name": "inventory_borrow_returned_by_staff_id_user_id_fk",
+        "inventory_borrow_returned_by_staff_id_staff_id_fk": {
+          "name": "inventory_borrow_returned_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_borrow",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "returned_by_staff_id"
           ],
@@ -4974,10 +4974,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_custody_history_previous_custodian_staff_id_user_id_fk": {
-          "name": "inventory_custody_history_previous_custodian_staff_id_user_id_fk",
+        "inventory_custody_history_previous_custodian_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_previous_custodian_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_history",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "previous_custodian_staff_id"
           ],
@@ -4987,10 +4987,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_custody_history_new_custodian_staff_id_user_id_fk": {
-          "name": "inventory_custody_history_new_custodian_staff_id_user_id_fk",
+        "inventory_custody_history_new_custodian_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_new_custodian_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_history",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "new_custodian_staff_id"
           ],
@@ -5000,10 +5000,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_custody_history_previous_manager_staff_id_user_id_fk": {
-          "name": "inventory_custody_history_previous_manager_staff_id_user_id_fk",
+        "inventory_custody_history_previous_manager_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_previous_manager_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_history",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "previous_manager_staff_id"
           ],
@@ -5013,10 +5013,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_custody_history_new_manager_staff_id_user_id_fk": {
-          "name": "inventory_custody_history_new_manager_staff_id_user_id_fk",
+        "inventory_custody_history_new_manager_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_new_manager_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_history",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "new_manager_staff_id"
           ],
@@ -5026,10 +5026,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_custody_history_changed_by_staff_id_user_id_fk": {
-          "name": "inventory_custody_history_changed_by_staff_id_user_id_fk",
+        "inventory_custody_history_changed_by_staff_id_staff_id_fk": {
+          "name": "inventory_custody_history_changed_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_history",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "changed_by_staff_id"
           ],
@@ -5191,10 +5191,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_custody_notice_recipient_staff_id_user_id_fk": {
-          "name": "inventory_custody_notice_recipient_staff_id_user_id_fk",
+        "inventory_custody_notice_recipient_staff_id_staff_id_fk": {
+          "name": "inventory_custody_notice_recipient_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_notice_recipient",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "staff_id"
           ],
@@ -5381,10 +5381,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_custody_request_requester_staff_id_user_id_fk": {
-          "name": "inventory_custody_request_requester_staff_id_user_id_fk",
+        "inventory_custody_request_requester_staff_id_staff_id_fk": {
+          "name": "inventory_custody_request_requester_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_request",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "requester_staff_id"
           ],
@@ -5394,10 +5394,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_custody_request_custodian_staff_id_user_id_fk": {
-          "name": "inventory_custody_request_custodian_staff_id_user_id_fk",
+        "inventory_custody_request_custodian_staff_id_staff_id_fk": {
+          "name": "inventory_custody_request_custodian_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_request",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "custodian_staff_id"
           ],
@@ -5407,10 +5407,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_custody_request_decided_by_staff_id_user_id_fk": {
-          "name": "inventory_custody_request_decided_by_staff_id_user_id_fk",
+        "inventory_custody_request_decided_by_staff_id_staff_id_fk": {
+          "name": "inventory_custody_request_decided_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_custody_request",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "decided_by_staff_id"
           ],
@@ -5634,10 +5634,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_disposal_requested_by_staff_id_user_id_fk": {
-          "name": "inventory_disposal_requested_by_staff_id_user_id_fk",
+        "inventory_disposal_requested_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_requested_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_disposal",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "requested_by_staff_id"
           ],
@@ -5647,10 +5647,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_disposal_approved_by_staff_id_user_id_fk": {
-          "name": "inventory_disposal_approved_by_staff_id_user_id_fk",
+        "inventory_disposal_approved_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_approved_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_disposal",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "approved_by_staff_id"
           ],
@@ -5660,10 +5660,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_disposal_finalized_by_staff_id_user_id_fk": {
-          "name": "inventory_disposal_finalized_by_staff_id_user_id_fk",
+        "inventory_disposal_finalized_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_finalized_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_disposal",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "finalized_by_staff_id"
           ],
@@ -5673,10 +5673,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_disposal_cancelled_by_staff_id_user_id_fk": {
-          "name": "inventory_disposal_cancelled_by_staff_id_user_id_fk",
+        "inventory_disposal_cancelled_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_cancelled_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_disposal",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "cancelled_by_staff_id"
           ],
@@ -5820,10 +5820,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_disposal_status_history_changed_by_staff_id_user_id_fk": {
-          "name": "inventory_disposal_status_history_changed_by_staff_id_user_id_fk",
+        "inventory_disposal_status_history_changed_by_staff_id_staff_id_fk": {
+          "name": "inventory_disposal_status_history_changed_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_disposal_status_history",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "changed_by_staff_id"
           ],
@@ -6078,10 +6078,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_issue_issued_by_staff_id_user_id_fk": {
-          "name": "inventory_issue_issued_by_staff_id_user_id_fk",
+        "inventory_issue_issued_by_staff_id_staff_id_fk": {
+          "name": "inventory_issue_issued_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_issue",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "issued_by_staff_id"
           ],
@@ -6456,45 +6456,6 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_item_created_by_staff_id_user_id_fk": {
-          "name": "inventory_item_created_by_staff_id_user_id_fk",
-          "tableFrom": "inventory_item",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by_staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "inventory_item_manager_staff_id_user_id_fk": {
-          "name": "inventory_item_manager_staff_id_user_id_fk",
-          "tableFrom": "inventory_item",
-          "tableTo": "user",
-          "columnsFrom": [
-            "manager_staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "inventory_item_custodian_staff_id_user_id_fk": {
-          "name": "inventory_item_custodian_staff_id_user_id_fk",
-          "tableFrom": "inventory_item",
-          "tableTo": "user",
-          "columnsFrom": [
-            "custodian_staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
         "inventory_item_image_file_id_files_id_fk": {
           "name": "inventory_item_image_file_id_files_id_fk",
           "tableFrom": "inventory_item",
@@ -6508,10 +6469,49 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "inventory_item_voided_by_staff_id_user_id_fk": {
-          "name": "inventory_item_voided_by_staff_id_user_id_fk",
+        "inventory_item_created_by_staff_id_staff_id_fk": {
+          "name": "inventory_item_created_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_item",
-          "tableTo": "user",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "created_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_item_manager_staff_id_staff_id_fk": {
+          "name": "inventory_item_manager_staff_id_staff_id_fk",
+          "tableFrom": "inventory_item",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "manager_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_item_custodian_staff_id_staff_id_fk": {
+          "name": "inventory_item_custodian_staff_id_staff_id_fk",
+          "tableFrom": "inventory_item",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "custodian_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "inventory_item_voided_by_staff_id_staff_id_fk": {
+          "name": "inventory_item_voided_by_staff_id_staff_id_fk",
+          "tableFrom": "inventory_item",
+          "tableTo": "staff",
           "columnsFrom": [
             "voided_by_staff_id"
           ],
@@ -6703,10 +6703,10 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "inventory_item_replacement_created_by_staff_id_user_id_fk": {
-          "name": "inventory_item_replacement_created_by_staff_id_user_id_fk",
+        "inventory_item_replacement_created_by_staff_id_staff_id_fk": {
+          "name": "inventory_item_replacement_created_by_staff_id_staff_id_fk",
           "tableFrom": "inventory_item_replacement",
-          "tableTo": "user",
+          "tableTo": "staff",
           "columnsFrom": [
             "created_by_staff_id"
           ],
@@ -6855,19 +6855,6 @@
         }
       },
       "foreignKeys": {
-        "inventory_transaction_actor_staff_id_user_id_fk": {
-          "name": "inventory_transaction_actor_staff_id_user_id_fk",
-          "tableFrom": "inventory_transaction",
-          "tableTo": "user",
-          "columnsFrom": [
-            "actor_staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
         "inventory_transaction_item_id_inventory_item_id_fk": {
           "name": "inventory_transaction_item_id_inventory_item_id_fk",
           "tableFrom": "inventory_transaction",
@@ -6879,6 +6866,19 @@
             "id"
           ],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_transaction_actor_staff_id_staff_id_fk": {
+          "name": "inventory_transaction_actor_staff_id_staff_id_fk",
+          "tableFrom": "inventory_transaction",
+          "tableTo": "staff",
+          "columnsFrom": [
+            "actor_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

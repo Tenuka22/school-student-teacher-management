@@ -1,52 +1,116 @@
-ALTER TABLE "inventory_audit_log" DROP CONSTRAINT "inventory_audit_log_actor_staff_id_user_id_fk";
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Repaired 2026-10-01 (forensic audit F-02 / F-14). As generated, this file
+-- dropped twenty-five `*_user_id_fk` constraints that 0000–0006 never created
+-- (they existed only in a corrupted 0006 snapshot, taken from the reverted
+-- 6f6e38b schema) and re-added twenty-five `*_staff_id_fk` constraints that
+-- 0000 had already created — so it failed on every fresh database. Every drop
+-- below is now `IF EXISTS` for both name variants, which makes the file correct
+-- on all three databases it can meet: a fresh one (staff FKs from 0000), one
+-- built on the reverted branch (user FKs) and one where it was hand-applied.
+--
+-- Editing an applied migration is safe here because drizzle's migrator only
+-- runs files whose journal timestamp is newer than the last recorded one: a
+-- database that already recorded 0007 never re-reads it.
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE "inventory_audit_log" DROP CONSTRAINT IF EXISTS "inventory_audit_log_actor_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_borrow" DROP CONSTRAINT "inventory_borrow_borrower_staff_id_user_id_fk";
+ALTER TABLE "inventory_audit_log" DROP CONSTRAINT IF EXISTS "inventory_audit_log_actor_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_borrow" DROP CONSTRAINT "inventory_borrow_borrowed_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_borrow" DROP CONSTRAINT IF EXISTS "inventory_borrow_borrower_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_borrow" DROP CONSTRAINT "inventory_borrow_returned_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_borrow" DROP CONSTRAINT IF EXISTS "inventory_borrow_borrower_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_history" DROP CONSTRAINT "inventory_custody_history_previous_custodian_staff_id_user_id_fk";
+ALTER TABLE "inventory_borrow" DROP CONSTRAINT IF EXISTS "inventory_borrow_borrowed_by_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_history" DROP CONSTRAINT "inventory_custody_history_new_custodian_staff_id_user_id_fk";
+ALTER TABLE "inventory_borrow" DROP CONSTRAINT IF EXISTS "inventory_borrow_borrowed_by_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_history" DROP CONSTRAINT "inventory_custody_history_previous_manager_staff_id_user_id_fk";
+ALTER TABLE "inventory_borrow" DROP CONSTRAINT IF EXISTS "inventory_borrow_returned_by_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_history" DROP CONSTRAINT "inventory_custody_history_new_manager_staff_id_user_id_fk";
+ALTER TABLE "inventory_borrow" DROP CONSTRAINT IF EXISTS "inventory_borrow_returned_by_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_history" DROP CONSTRAINT "inventory_custody_history_changed_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_previous_custodian_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_notice_recipient" DROP CONSTRAINT "inventory_custody_notice_recipient_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_previous_custodian_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_request" DROP CONSTRAINT "inventory_custody_request_requester_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_new_custodian_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_request" DROP CONSTRAINT "inventory_custody_request_custodian_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_new_custodian_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_custody_request" DROP CONSTRAINT "inventory_custody_request_decided_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_previous_manager_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_disposal" DROP CONSTRAINT "inventory_disposal_requested_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_previous_manager_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_disposal" DROP CONSTRAINT "inventory_disposal_approved_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_new_manager_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_disposal" DROP CONSTRAINT "inventory_disposal_finalized_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_new_manager_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_disposal" DROP CONSTRAINT "inventory_disposal_cancelled_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_changed_by_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_disposal_status_history" DROP CONSTRAINT "inventory_disposal_status_history_changed_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_history" DROP CONSTRAINT IF EXISTS "inventory_custody_history_changed_by_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_issue" DROP CONSTRAINT "inventory_issue_issued_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_notice_recipient" DROP CONSTRAINT IF EXISTS "inventory_custody_notice_recipient_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_item" DROP CONSTRAINT "inventory_item_created_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_notice_recipient" DROP CONSTRAINT IF EXISTS "inventory_custody_notice_recipient_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_item" DROP CONSTRAINT "inventory_item_manager_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_request" DROP CONSTRAINT IF EXISTS "inventory_custody_request_requester_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_item" DROP CONSTRAINT "inventory_item_custodian_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_request" DROP CONSTRAINT IF EXISTS "inventory_custody_request_requester_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_item" DROP CONSTRAINT "inventory_item_voided_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_request" DROP CONSTRAINT IF EXISTS "inventory_custody_request_custodian_staff_id_user_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_item_replacement" DROP CONSTRAINT "inventory_item_replacement_created_by_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_request" DROP CONSTRAINT IF EXISTS "inventory_custody_request_custodian_staff_id_staff_id_fk";
 --> statement-breakpoint
-ALTER TABLE "inventory_transaction" DROP CONSTRAINT "inventory_transaction_actor_staff_id_user_id_fk";
+ALTER TABLE "inventory_custody_request" DROP CONSTRAINT IF EXISTS "inventory_custody_request_decided_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_custody_request" DROP CONSTRAINT IF EXISTS "inventory_custody_request_decided_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_requested_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_requested_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_approved_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_approved_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_finalized_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_finalized_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_cancelled_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal" DROP CONSTRAINT IF EXISTS "inventory_disposal_cancelled_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal_status_history" DROP CONSTRAINT IF EXISTS "inventory_disposal_status_history_changed_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_disposal_status_history" DROP CONSTRAINT IF EXISTS "inventory_disposal_status_history_changed_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_issue" DROP CONSTRAINT IF EXISTS "inventory_issue_issued_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_issue" DROP CONSTRAINT IF EXISTS "inventory_issue_issued_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_created_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_created_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_manager_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_manager_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_custodian_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_custodian_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_voided_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item" DROP CONSTRAINT IF EXISTS "inventory_item_voided_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item_replacement" DROP CONSTRAINT IF EXISTS "inventory_item_replacement_created_by_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_item_replacement" DROP CONSTRAINT IF EXISTS "inventory_item_replacement_created_by_staff_id_staff_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_transaction" DROP CONSTRAINT IF EXISTS "inventory_transaction_actor_staff_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "inventory_transaction" DROP CONSTRAINT IF EXISTS "inventory_transaction_actor_staff_id_staff_id_fk";
 --> statement-breakpoint
 -- ─────────────────────────────────────────────────────────────────────────────
 -- The data remap, and why this file is not only constraint surgery.
@@ -139,6 +203,60 @@ BEGIN
   END IF;
 END
 $remap$;
+--> statement-breakpoint
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Backfill and pre-flight for the three SET NOT NULLs and the NIC CHECK below.
+-- AGENTS.md always said this file backfilled pre-NOT-NULL rows; until the
+-- repair it did not. Only the rows that have one defensible value are filled:
+--
+-- * a seeded seat's staff row (`seed-staff-<username>`) gets the placeholder
+--   NIC `SEEDED_PLACEHOLDER_NIC` gives it in packages/auth/src/admin.ts;
+-- * an item with nobody in charge of it, or nobody holding it, goes to the
+--   seeded Inventory Administrator — the store, which is where custody is set
+--   from in this school.
+--
+-- Anything else (a real person with no NIC, a NIC in no Sri Lankan format) is
+-- not something a migration may invent, so it stops with the count and
+-- changes nothing.
+-- ─────────────────────────────────────────────────────────────────────────────
+UPDATE "staff" SET "nic" = CASE "id"
+    WHEN 'seed-staff-admin' THEN '000000000001'
+    WHEN 'seed-staff-principal' THEN '000000000002'
+    WHEN 'seed-staff-deputy-principal' THEN '000000000003'
+    WHEN 'seed-staff-inventory-admin' THEN '000000000004'
+    WHEN 'seed-staff-academic-admin' THEN '000000000005'
+    WHEN 'seed-staff-leave-admin' THEN '000000000006'
+  END
+  WHERE "nic" IS NULL AND "id" LIKE 'seed-staff-%';--> statement-breakpoint
+DO $backfill$
+DECLARE
+  store_keeper text;
+  unowned bigint;
+  missing_nic bigint;
+  malformed_nic bigint;
+BEGIN
+  SELECT count(*) INTO missing_nic FROM "staff" WHERE "nic" IS NULL;
+  SELECT count(*) INTO malformed_nic FROM "staff"
+    WHERE "nic" IS NOT NULL AND NOT ("nic" ~ '^[0-9]{9}[vVxX]$' OR "nic" ~ '^[0-9]{12}$');
+  IF missing_nic + malformed_nic > 0 THEN
+    RAISE EXCEPTION 'migration 0007 refused: % staff row(s) have no NIC and % have a NIC in neither Sri Lankan format. Correct them by hand; nothing has been changed.',
+      missing_nic, malformed_nic;
+  END IF;
+
+  SELECT count(*) INTO unowned FROM "inventory_item"
+    WHERE "manager_staff_id" IS NULL OR "custodian_staff_id" IS NULL;
+  IF unowned > 0 THEN
+    SELECT "id" INTO store_keeper FROM "staff" WHERE "id" = 'seed-staff-inventory-admin';
+    IF store_keeper IS NULL THEN
+      RAISE EXCEPTION 'migration 0007 refused: % inventory item(s) have no manager or custodian and the seeded Inventory Administrator staff row does not exist to receive them. Boot the app once on the previous release, or assign them by hand.',
+        unowned;
+    END IF;
+    UPDATE "inventory_item" SET "manager_staff_id" = store_keeper WHERE "manager_staff_id" IS NULL;
+    UPDATE "inventory_item" SET "custodian_staff_id" = store_keeper WHERE "custodian_staff_id" IS NULL;
+    RAISE NOTICE 'migration 0007: % inventory item(s) assigned to the Inventory Administrator', unowned;
+  END IF;
+END
+$backfill$;
 --> statement-breakpoint
 ALTER TABLE "staff" ALTER COLUMN "nic" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "inventory_item" ALTER COLUMN "manager_staff_id" SET NOT NULL;--> statement-breakpoint
