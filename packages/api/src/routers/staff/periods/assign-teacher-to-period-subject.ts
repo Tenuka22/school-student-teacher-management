@@ -9,6 +9,7 @@ import { pick } from "valibot";
 import * as v from "valibot";
 
 import { requireAssignmentPermission } from "../../../index";
+import { isUniqueViolation } from "../../../lib/db-errors";
 import {
   assertTeacherEligibleForYear,
   getClassForAcademicYear,
@@ -87,8 +88,7 @@ export const assignTeacherToPeriodSubject = requireAssignmentPermission(
       };
     } catch (error) {
       if (
-        error instanceof Error &&
-        error.message.includes("class_period_teacher_subject_staff_unique")
+        isUniqueViolation(error, "class_period_teacher_subject_staff_unique")
       ) {
         throw new ORPCError("CONFLICT", {
           message: "This teacher is already assigned to this subject here",

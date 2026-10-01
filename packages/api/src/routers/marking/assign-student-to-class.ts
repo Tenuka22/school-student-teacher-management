@@ -26,39 +26,42 @@ export const assignStudentToClass = requireAssignmentPermission("create")
     ])
   )
   .handler(async ({ input, context }) => {
-    const [priorAssignmentRow] = await context.db
-      .select({ n: count() })
-      .from(studentClassAssignment)
-      .where(eq(studentClassAssignment.studentId, input.studentId));
-    const isFirstAssignment = (priorAssignmentRow?.n ?? 0) === 0;
-
-    const id = crypto.randomUUID();
-
-    const [record] = await context.db
-      .insert(studentClassAssignment)
-      .values({
-        id,
-        studentId: input.studentId,
-        academicYearId: input.academicYearId,
-        classId: input.classId,
-      })
-      .returning();
-
-    if (!record) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
-    }
-
-    if (isFirstAssignment) {
-      const [studentRow] = await context.db
+    // Placement and (first-time) admission as one unit, serialized per
+    // student (F-17): two concurrent first placements both saw zero prior
+    // assignments and both wrote an admission row.
+    const record = await context.db.transaction(async (tx) => {
+      const [studentRow] = await tx
         .select({
           admissionType: student.admissionType,
           birthCertificateNumber: student.birthCertificateNumber,
         })
         .from(student)
-        .where(eq(student.id, input.studentId));
+        .where(eq(student.id, input.studentId))
+        .for("update");
 
-      if (studentRow?.admissionType) {
-        await context.db.insert(studentAdmission).values({
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- the row lock above must be held before this count, which it serializes
+      const [priorAssignmentRow] = await tx
+        .select({ n: count() })
+        .from(studentClassAssignment)
+        .where(eq(studentClassAssignment.studentId, input.studentId));
+      const isFirstAssignment = (priorAssignmentRow?.n ?? 0) === 0;
+
+      const [inserted] = await tx
+        .insert(studentClassAssignment)
+        .values({
+          id: crypto.randomUUID(),
+          studentId: input.studentId,
+          academicYearId: input.academicYearId,
+          classId: input.classId,
+        })
+        .returning();
+
+      if (!inserted) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      if (isFirstAssignment && studentRow?.admissionType) {
+        await tx.insert(studentAdmission).values({
           id: crypto.randomUUID(),
           studentId: input.studentId,
           academicYearId: input.academicYearId,
@@ -66,7 +69,8 @@ export const assignStudentToClass = requireAssignmentPermission("create")
           birthCertificateNumber: studentRow.birthCertificateNumber,
         });
       }
-    }
+      return inserted;
+    });
 
     return {
       id: record.id,

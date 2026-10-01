@@ -5,6 +5,7 @@ import {
   gradeSubjectConfig,
 } from "@school-student-teacher-management/db/schema/academics";
 import {
+  student,
   studentClassAssignment,
   studentSubjectSelection,
   studentSubjectSelectionInsertSchema,
@@ -74,37 +75,48 @@ export const setSubjectSelection = requireStudentPermission("update")
       });
     }
 
-    const [activeSelection] = await context.db
-      .select({ id: studentSubjectSelection.id })
-      .from(studentSubjectSelection)
-      .where(
-        and(
-          eq(studentSubjectSelection.studentId, input.studentId),
-          eq(studentSubjectSelection.academicYearId, input.academicYearId),
-          eq(studentSubjectSelection.basketCategory, input.basketCategory),
-          isNull(studentSubjectSelection.supersededAt)
-        )
-      );
+    // Supersede-then-insert as one unit, serialized per student (F-17): a
+    // failure between the two used to leave the basket with no active
+    // selection, and two concurrent changes left two active ones.
+    const record = await context.db.transaction(async (tx) => {
+      await tx
+        .select({ id: student.id })
+        .from(student)
+        .where(eq(student.id, input.studentId))
+        .for("update");
 
-    if (activeSelection) {
-      await context.db
-        .update(studentSubjectSelection)
-        .set({ supersededAt: new Date() })
-        .where(eq(studentSubjectSelection.id, activeSelection.id));
-    }
+      const [activeSelection] = await tx
+        .select({ id: studentSubjectSelection.id })
+        .from(studentSubjectSelection)
+        .where(
+          and(
+            eq(studentSubjectSelection.studentId, input.studentId),
+            eq(studentSubjectSelection.academicYearId, input.academicYearId),
+            eq(studentSubjectSelection.basketCategory, input.basketCategory),
+            isNull(studentSubjectSelection.supersededAt)
+          )
+        );
 
-    const id = crypto.randomUUID();
-    const [record] = await context.db
-      .insert(studentSubjectSelection)
-      .values({
-        id,
-        studentId: input.studentId,
-        academicYearId: input.academicYearId,
-        basketCategory: input.basketCategory,
-        subjectKey: input.subjectKey,
-        previousSelectionId: activeSelection?.id ?? null,
-      })
-      .returning();
+      if (activeSelection) {
+        await tx
+          .update(studentSubjectSelection)
+          .set({ supersededAt: new Date() })
+          .where(eq(studentSubjectSelection.id, activeSelection.id));
+      }
+
+      const [inserted] = await tx
+        .insert(studentSubjectSelection)
+        .values({
+          id: crypto.randomUUID(),
+          studentId: input.studentId,
+          academicYearId: input.academicYearId,
+          basketCategory: input.basketCategory,
+          subjectKey: input.subjectKey,
+          previousSelectionId: activeSelection?.id ?? null,
+        })
+        .returning();
+      return inserted;
+    });
 
     if (!record) {
       throw new ORPCError("INTERNAL_SERVER_ERROR");

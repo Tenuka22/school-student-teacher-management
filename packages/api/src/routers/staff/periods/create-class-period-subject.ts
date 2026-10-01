@@ -6,6 +6,7 @@ import {
 import { pick } from "valibot";
 
 import { requireAssignmentPermission } from "../../../index";
+import { isUniqueViolation } from "../../../lib/db-errors";
 import { getClassForAcademicYear } from "../teacher-eligibility";
 
 /**
@@ -67,8 +68,7 @@ export const createClassPeriodSubject = requireAssignmentPermission("create")
       };
     } catch (error) {
       if (
-        error instanceof Error &&
-        error.message.includes("class_period_subject_slot_subject_unique")
+        isUniqueViolation(error, "class_period_subject_slot_subject_unique")
       ) {
         throw new ORPCError("CONFLICT", {
           message: "This subject is already on this period for this class",
