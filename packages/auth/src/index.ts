@@ -3,7 +3,7 @@ import * as schema from "@school-student-teacher-management/db/schema/auth";
 import { betterAuth } from "better-auth";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import {
   admin as adminPlugin,
   emailOTP,
@@ -11,9 +11,13 @@ import {
   username,
 } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { eq } from "drizzle-orm";
 
+import {
+  adminEndpointGuard,
+  recordAdminEndpointCall,
+} from "./admin-endpoint-guard";
 import { sendAuthEmail } from "./email";
+import { mailAvailabilityGuard } from "./mail-guard";
 import { assertOtpSendAllowed, recordOtpSend } from "./otp-throttle";
 import {
   academicAdmin,
@@ -28,6 +32,7 @@ import {
   user,
   vicePrincipal,
 } from "./permissions";
+import { PRIVILEGED_ROLES, isPrivilegedRole } from "./roles";
 
 export {
   academicAdmin,
@@ -170,60 +175,81 @@ const buildAuthOptions = (
       },
     },
   },
-  emailAndPassword: { enabled: true },
-  // The institutional logins (admin, Principal, Deputy, Inventory Admin,
-  // Academic Admin) are configuration, not accounts an
-  // administrator may manage: their password is re-applied on every boot, so
-  // banning one would either be silently undone or lock the College out of
-  // its own system. Enforced here rather than in the UI, because the admin
-  // plugin's endpoint is reachable directly and a hidden button is not a
-  // boundary.
+  // Password sign-in only. Self-registration is the app's own `signupStaff`
+  // procedure, which validates NIC and staff details; better-auth's
+  // `/sign-up/email` was a second, unvalidated door that nothing in the UI
+  // used, so it is closed.
+  emailAndPassword: { enabled: true, disableSignUp: true },
+  hooks: {
+    before: createAuthMiddleware((ctx) => {
+      mailAvailabilityGuard(ctx.path);
+      return adminEndpointGuard(ctx, database);
+    }),
+    after: createAuthMiddleware((ctx) =>
+      recordAdminEndpointCall(ctx, database)
+    ),
+  },
+  // The institutional logins (admin, Principal, Inventory Admin, Academic
+  // Admin, Leave Admin) are configuration, not accounts an administrator may
+  // manage: banning one would lock the College out of its own system.
+  // Enforced here rather than in the UI, because the admin plugin's endpoint
+  // is reachable directly and a hidden button is not a boundary.
   databaseHooks: {
     user: {
-      update: {
-        before: async (updated) => {
-          const nextUsername =
-            typeof updated.username === "string" ? updated.username : null;
-
-          if (updated.banned === true && isSeededAccount(nextUsername)) {
-            throw new APIError("FORBIDDEN", {
-              message:
-                "The seeded administrator, leadership and specialist admin accounts cannot be banned",
-            });
-          }
-
-          if (typeof updated.role === "string" && updated.id) {
-            const [current] = await database
-              .select({
-                username: schema.user.username,
-                role: schema.user.role,
-              })
-              .from(schema.user)
-              .where(eq(schema.user.id, updated.id))
-              .limit(1);
-            const protectedAccount = isSeededAccount(
-              nextUsername ?? current?.username
-            );
-
-            if (protectedAccount && updated.role !== current?.role) {
-              throw new APIError("FORBIDDEN", {
+      // Backstop for F-01: nothing in the app creates a privileged account
+      // through better-auth (seats are bootstrapped and staff are issued by
+      // direct writes), so a create that asks for any role but `user` is an
+      // escalation attempt, whichever endpoint it came through.
+      create: {
+        before: (created) => {
+          const role = typeof created.role === "string" ? created.role : "user";
+          if (role !== "user") {
+            return Promise.reject(
+              new APIError("FORBIDDEN", {
                 message:
-                  "The seeded institutional accounts' roles cannot be changed",
-              });
-            }
-
-            if (
-              !protectedAccount &&
-              updated.role !== current?.role &&
-              !["teacher", "user"].includes(updated.role)
-            ) {
-              throw new APIError("FORBIDDEN", {
-                message: "User roles may only be changed to Teacher or User",
-              });
-            }
+                  "Accounts with a role are issued by the school, not created here",
+              })
+            );
           }
-
-          return { data: updated };
+          return Promise.resolve();
+        },
+      },
+      delete: {
+        before: (deleted) => {
+          const deletedUsername =
+            typeof deleted.username === "string" ? deleted.username : null;
+          const role = typeof deleted.role === "string" ? deleted.role : null;
+          if (isSeededAccount(deletedUsername) || isPrivilegedRole(role)) {
+            return Promise.reject(
+              new APIError("FORBIDDEN", {
+                message: "Seeded and administrative accounts cannot be deleted",
+              })
+            );
+          }
+          return Promise.resolve();
+        },
+      },
+      // better-auth calls this hook with only the changed fields — no user
+      // id and no request context — so it cannot know whose row is changing.
+      // The hook it replaces tried to (seeded-seat ban and role protection)
+      // and therefore never fired; that protection now lives in
+      // `adminEndpointGuard`, which sees the target. What this hook *can*
+      // enforce on the data alone, it does: no better-auth path may write a
+      // role other than `teacher` or `user`. Privileged roles are only ever
+      // set by the app's own position and bootstrap code, by direct writes.
+      update: {
+        before: (updated) => {
+          if (
+            typeof updated.role === "string" &&
+            !["teacher", "user"].includes(updated.role)
+          ) {
+            return Promise.reject(
+              new APIError("FORBIDDEN", {
+                message: "User roles may only be changed to Teacher or User",
+              })
+            );
+          }
+          return Promise.resolve({ data: updated });
         },
       },
     },
@@ -233,6 +259,10 @@ const buildAuthOptions = (
   plugins: [
     adminPlugin({
       ac,
+      // The plugin's default is `["admin"]`, which left every other seat
+      // impersonable by anyone holding `user:impersonate`. No role holds that
+      // verb any more; this keeps the plugin's own protection in step anyway.
+      adminRoles: [...PRIVILEGED_ROLES],
       roles: {
         admin,
         principal,

@@ -1,6 +1,6 @@
 import { createAccessControl } from "better-auth/plugins/access";
 import type { AccessControl } from "better-auth/plugins/access";
-import { defaultStatements, adminAc } from "better-auth/plugins/admin/access";
+import { defaultStatements } from "better-auth/plugins/admin/access";
 
 /**
  * Application-wide permission statements. Each key is a resource and the
@@ -77,6 +77,28 @@ export type AppAccessControl = AccessControl<typeof statement>;
 export const ac: AppAccessControl = createAccessControl(statement);
 
 /**
+ * The whole of better-auth's admin-plugin grant in this app: exactly the
+ * verbs the accounts page calls (`authClient.admin.banUser` / `unbanUser` /
+ * `revokeUserSessions`; the list itself is the `listAccounts` procedure).
+ *
+ * Every role used to spread `adminAc.statements` instead, which also carries
+ * `user: create, set-role, set-password, delete, impersonate, set-email,
+ * update`. The only guard was a `user.update` hook, so the Principal, Deputy
+ * and Academic Administrator could `POST /api/auth/admin/create-user` with
+ * `role: "admin"`, or set the top administrator's password (forensic audit
+ * F-01). Accounts are issued by `createStaff`, and passwords change through
+ * the owner's own OTP flow, so no seat needs those verbs at all.
+ *
+ * A grant here says which endpoints may run, not which accounts they may
+ * touch: `adminEndpointGuard` in `index.ts` still refuses a peer seat acting
+ * on a privileged or seeded account.
+ */
+const ACCOUNT_ADMIN_STATEMENTS = {
+  user: ["list", "get", "ban"],
+  session: ["list", "revoke"],
+} as const;
+
+/**
  * Admin – full control over every resource.
  * Spreads the default admin statements so all built-in user/session
  * permissions are preserved.
@@ -91,7 +113,7 @@ export const ac: AppAccessControl = createAccessControl(statement);
  * disagree silently.
  */
 export const admin = ac.newRole({
-  ...adminAc.statements,
+  ...ACCOUNT_ADMIN_STATEMENTS,
   file: ["create", "list", "delete"],
   staff: ["create", "read", "update", "delete"],
   assignment: ["create", "read", "update", "delete"],
@@ -113,13 +135,14 @@ export const admin = ac.newRole({
  * self-describing (visible on `/admin/users`) and the workspace a member
  * lands on follows from the account rather than a second lookup.
  *
- * Both carry the full admin statement set — leadership still needs the
- * whole staff-management surface. The role never grants leave review
+ * Both carry the staff-management resources, but **no** better-auth
+ * `user`/`session` statement: neither workspace has an accounts page, and the
+ * full `adminAc` set they used to hold let either seat mint an `admin` account
+ * (F-01). The role never grants leave review
  * authority: that comes only from a current-year `staff_position` row, and
  * `assignPosition` is what promotes and demotes the role alongside it.
  */
 export const principal = ac.newRole({
-  ...adminAc.statements,
   file: ["create", "list", "delete"],
   staff: ["create", "read", "update", "delete"],
   assignment: ["create", "read", "update", "delete"],
@@ -137,7 +160,6 @@ export const principal = ac.newRole({
 });
 
 export const vicePrincipal = ac.newRole({
-  ...adminAc.statements,
   file: ["create", "list", "delete"],
   staff: ["create", "read", "update", "delete"],
   assignment: ["create", "read", "update", "delete"],
@@ -207,15 +229,19 @@ export const leaveAdmin = ac.newRole({});
  * from `/admin/$year` so the seat cannot wander into the register or the
  * top-administrator-only screens.
  *
- * **`...adminAc.statements` is the accounts grant, and it is deliberate.**
+ * **`ACCOUNT_ADMIN_STATEMENTS` is the accounts grant, and it is deliberate.**
  * The users page drives ban/unban/session-revocation through better-auth's
  * admin plugin (`authClient.admin.*`), which consults these `user`/`session`
  * statements rather than a role name. Without them the seat reaches
- * `/academic-admin/$year/users` and every button on it fails. It buys account
- * administration and nothing else: the role-transition hook in
- * `packages/auth/src/index.ts` still refuses every role change except to
- * `teacher` or `user`, and the seeded institutional accounts are protected
- * from both ban and role change by `isSeededAccount`.
+ * `/academic-admin/$year/users` and every button on it fails.
+ *
+ * This comment used to say the full `adminAc` set "buys account
+ * administration and nothing else". It was false: the role-transition hook
+ * covered `user.update` only, so `create-user`, `set-user-password`,
+ * `remove-user` and `impersonate-user` were open to this seat (F-01). The
+ * grant is now the three verbs the page uses, and `adminEndpointGuard` in
+ * `packages/auth/src/index.ts` refuses any of them against a privileged or
+ * seeded account unless the caller is `admin`.
  *
  * **No `inventory`, `file`, `student`, `mark` or `exam` grant.** The register
  * is the Inventory Administrator's desk, and `requirePermission` in
@@ -234,7 +260,7 @@ export const leaveAdmin = ac.newRole({});
  * review and entitlements belong to `leaveAdmin` (and `ADMIN_ROLES`) now.
  */
 export const academicAdmin = ac.newRole({
-  ...adminAc.statements,
+  ...ACCOUNT_ADMIN_STATEMENTS,
   staff: ["create", "read", "update", "delete"],
   assignment: ["create", "read", "update", "delete"],
   qualification: ["create", "read", "approve"],

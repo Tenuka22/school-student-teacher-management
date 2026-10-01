@@ -67,9 +67,14 @@ export const roleLabel = (value: string | null | undefined): string => {
 };
 
 /**
- * Login usernames of the env-seeded institutional accounts. Their password is
- * re-synced from server env on every boot, so an in-app password change would
- * silently revert on the next restart. See `PasswordDialog`.
+ * Login usernames of the env-seeded institutional accounts.
+ *
+ * **The env password is the initial password only.** `ensureBootstrapAccount`
+ * writes it when the seat has no credential and never again, so a password
+ * changed in-app is kept across restarts, and rotating a seat's password means
+ * changing it in-app (or deleting its credential row so the next boot re-seeds
+ * it) — editing `.env` alone does nothing to an existing seat. This comment
+ * used to say the opposite.
  */
 export const SEEDED_USERNAMES = [
   "admin",
@@ -79,7 +84,31 @@ export const SEEDED_USERNAMES = [
   "leave-admin",
 ] as const;
 
-/** True for the accounts the server reseeds from env on every start. */
+/**
+ * Every role that carries authority over other people's data or accounts.
+ * An account holding one of these is administered only by `admin`, never by a
+ * peer seat through better-auth's admin plugin (see `adminEndpointGuard` in
+ * `index.ts`), and the plugin treats them as admins for impersonation.
+ */
+export const PRIVILEGED_ROLES = [
+  "admin",
+  "principal",
+  "vicePrincipal",
+  "academicAdmin",
+  "inventoryAdmin",
+  "leaveAdmin",
+] as const;
+
+export const isPrivilegedRole = (role: string | null | undefined): boolean =>
+  (role ?? "")
+    .split(",")
+    .some((part) =>
+      PRIVILEGED_ROLES.includes(
+        part.trim() as (typeof PRIVILEGED_ROLES)[number]
+      )
+    );
+
+/** True for the seeded institutional accounts (see `SEEDED_USERNAMES`). */
 export const isSeededAccount = (username: string | null | undefined): boolean =>
   SEEDED_USERNAMES.includes(
     (username ?? "").toLowerCase() as (typeof SEEDED_USERNAMES)[number]

@@ -10,9 +10,10 @@ import {
 import { inventoryCategory } from "@school-student-teacher-management/db/schema/inventory";
 import { staff } from "@school-student-teacher-management/db/schema/staff";
 import { hashPassword } from "better-auth/crypto";
-import { and, eq, inArray, lt, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 
 import type { AuthConfig } from "./index";
+import { assertSeatPasswords } from "./seat-password-policy";
 
 /** Position key for the Principal's own seeded seat. */
 export const PRINCIPAL_POSITION = "principal";
@@ -164,8 +165,16 @@ const assertValidBootstrapUsername = (username: string, label: string) => {
  *
  * Returns the user id and the username (the NIC) for confirmation.
  */
+/**
+ * A pool or an open transaction. `createStaffCredential` writes two rows
+ * (`user`, `account`) and is called from inside the caller's transaction,
+ * so a failure after it rolls both back instead of leaving an orphan login
+ * holding the NIC (F-17).
+ */
+export type CredentialExecutor = Pick<Database, "select" | "insert">;
+
 export const createStaffCredential = async (
-  database: Database,
+  database: CredentialExecutor,
   {
     nic,
     password,
@@ -544,7 +553,26 @@ export const purgeUnverifiedAccounts = async (
   }
 
   const ids = stale.map((row) => row.id);
-  await database.delete(user).where(inArray(user.id, ids));
+
+  // The applicant's staff row goes with the login (F-18). It used to survive
+  // as an unlinked row still holding the NIC, so the real person could never
+  // register again and an administrator's `createStaff` for them collided.
+  // Only rows nobody has activated: an unverified account cannot be approved,
+  // so an `active` record here was made by an administrator and is kept.
+  await database.transaction(async (tx) => {
+    await tx
+      .delete(staff)
+      .where(
+        and(
+          inArray(staff.userId, ids),
+          or(
+            isNull(staff.employmentStatus),
+            ne(staff.employmentStatus, "active")
+          )
+        )
+      );
+    await tx.delete(user).where(inArray(user.id, ids));
+  });
 
   return { removed: ids.length };
 };
@@ -628,6 +656,15 @@ export const ensureBootstrapUsers = async (
   database: Database,
   env: AuthConfig
 ) => {
+  // F-03: a short or published seat password never becomes a login.
+  assertSeatPasswords({
+    ADMIN_PASSWORD: env.ADMIN_PASSWORD,
+    PRINCIPAL_PASSWORD: env.PRINCIPAL_PASSWORD,
+    INVENTORY_ADMIN_PASSWORD: env.INVENTORY_ADMIN_PASSWORD,
+    ACADEMIC_ADMIN_PASSWORD: env.ACADEMIC_ADMIN_PASSWORD,
+    LEAVE_ADMIN_PASSWORD: env.LEAVE_ADMIN_PASSWORD,
+  });
+
   await Promise.all([
     ensureBootstrapAccount(database, {
       username: ADMIN_USERNAME,
