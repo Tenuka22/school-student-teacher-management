@@ -1,9 +1,12 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { files } from "@school-student-teacher-management/db/schema/files";
 import { createFileRoute } from "@tanstack/react-router";
-import sharp from "sharp";
 
 import { ENV } from "@/env.server";
+import {
+  checkDeclaredLength,
+  normaliseUploadedImage,
+} from "@/lib/image-upload";
 import { auth, db, storage } from "@/services.server";
 
 /**
@@ -42,28 +45,6 @@ import { auth, db, storage } from "@/services.server";
  * `multipart/form-data` body, and oRPC's own request/response contract is
  * built around typed JSON in and out, not a raw upload stream.
  */
-/** 8 MiB — a phone photo, not a scan. Checked before decoding, so an
- * oversized upload never reaches `sharp` at all. */
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-const ALLOWED_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-]);
-
-/**
- * The square a stored photo is capped at, in pixels. Large enough to fill the
- * item dialog's own preview at any density this app targets, small enough
- * that a register of a few hundred items stays a few hundred small files
- * rather than a few hundred phone-camera originals.
- */
-const MAX_DIMENSION = 1024;
-
-/** WebP's own quality scale (0–100). 82 is libwebp's frequently-cited "no
- * visible loss on a photo" point; higher rarely earns back the extra bytes. */
-const WEBP_QUALITY = 82;
-
 /**
  * Who may attach a photo to an item: `admin` and `inventoryAdmin` — the two
  * roles the register's writes accept (`inventoryManagerProcedure` in
@@ -90,6 +71,16 @@ const handleUpload = async ({ request }: { request: Request }) => {
     );
   }
 
+  // Size first, from the header, before `formData()` buffers the body: the
+  // file-size check used to run only after the whole request was in memory.
+  const tooLarge = checkDeclaredLength(request.headers.get("content-length"));
+  if (tooLarge && !tooLarge.ok) {
+    return Response.json(
+      { message: tooLarge.message },
+      { status: tooLarge.status }
+    );
+  }
+
   const form = await request.formData();
   const file = form.get("file");
 
@@ -97,42 +88,19 @@ const handleUpload = async ({ request }: { request: Request }) => {
     return Response.json({ message: "No file was sent" }, { status: 400 });
   }
 
-  if (!ALLOWED_TYPES.has(file.type)) {
+  // Declared type, size, decoded format, pixel bound and re-encode — see
+  // `lib/image-upload.ts`. What is stored is always a fresh WebP.
+  const result = await normaliseUploadedImage(
+    new Uint8Array(await file.arrayBuffer()),
+    file.type
+  );
+  if (!result.ok) {
     return Response.json(
-      {
-        message:
-          "Only PNG, JPEG, WEBP or GIF images are accepted for an item photo",
-      },
-      { status: 400 }
+      { message: result.message },
+      { status: result.status }
     );
   }
-
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return Response.json(
-      { message: "That image is larger than 8 MB" },
-      { status: 400 }
-    );
-  }
-
-  const originalBytes = new Uint8Array(await file.arrayBuffer());
-
-  let webpBytes: Buffer;
-  try {
-    webpBytes = await sharp(originalBytes)
-      .rotate()
-      .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: "cover" })
-      .webp({ quality: WEBP_QUALITY })
-      .toBuffer();
-  } catch {
-    // `sharp` refuses whatever this was to decode as an image — a renamed
-    // non-image file, or a truncated upload. The MIME check above only trusts
-    // what the browser claimed; this is the check on what the bytes actually
-    // are.
-    return Response.json(
-      { message: "That file could not be read as an image" },
-      { status: 400 }
-    );
-  }
+  const webpBytes = result.webp;
 
   const id = crypto.randomUUID();
   const objectKey = `inventory/${id}.webp`;
