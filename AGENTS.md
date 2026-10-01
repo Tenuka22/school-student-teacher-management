@@ -270,7 +270,7 @@ All procedures follow the same shape: oRPC handler + valibot input schema + a gu
 
 **Both Sri Lankan formats are accepted on purpose.** The old 9-digit card is a real identity the Department of Issue still recognises, and a registration form refusing a 70-year-old teacher is refusing a person rather than rejecting a typo. The old column accepted any string at all, and three seeded rows were carrying 10-digit values that matched no identity card in the country; the CHECK is the version of the valibot rule that cannot be skipped by a seed script or a hand-run `UPDATE`.
 
-**The five seeded office seats carry a synthetic NIC.** `SEEDED_PLACEHOLDER_NIC` in `packages/auth/src/admin.ts` is `000000000001`–`000000000005` for admin, principal, deputy, inventory-admin and academic-admin: eight leading zeros is a birth year of `00`, which is not a year anybody was issued, so the value satisfies the format while being visibly not a person's. They are **never** a login username — those seats sign in with the fixed usernames above. A seat's row is created with `onConflictDoNothing({ target: staff.userId })`, so the placeholder is written on insert and never overwritten; rows created before the column became `NOT NULL` are backfilled by migration `0007`, not by the seeder, because "only a missing row is repaired" is the same property that stops a school's edits being reverted.
+**The five seeded office seats carry a synthetic NIC.** `SEEDED_PLACEHOLDER_NIC` in `packages/auth/src/admin.ts` is `000000000001`–`000000000005` for admin, principal, deputy, inventory-admin and academic-admin: eight leading zeros is a birth year of `00`, which is not a year anybody was issued, so the value satisfies the format while being visibly not a person's. They are **never** a login username — those seats sign in with the fixed usernames above. A seat's row is created with `onConflictDoNothing({ target: staff.userId })`, so the placeholder is written on insert and never overwritten; rows created before the column became `NOT NULL` are backfilled by migration `0007` (`000000000001`–`000000000006` by seat id; a NULL or malformed NIC on any other row stops the migration with a count rather than being invented — this backfill was claimed here before it existed and was added in the October 2026 repair), not by the seeder, because "only a missing row is repaired" is the same property that stops a school's edits being reverted.
 
 **Period Configuration:**
 
@@ -278,25 +278,26 @@ There is no `period_config` table, and there never has been. Period times live i
 
 A per-year `period_config` table was planned once and never built: a data-driven period editor requires a migration, a version-selection UI, and a decision about what happens to assignments when a period's time changes. None of that is built. If a future year needs different bell times, that is a feature — do not describe it as existing.
 
-**Class Period Assignment:**
+**Timetable tables (subject-first, teacher-later):**
 
-- `class_period_assignment` table: Core timetable table mapping class + day + period → teacher + subject.
-- Columns: `id`, `academicYearId`, `classId`, `dayOfWeek` (1–5, Mon–Fri), `periodNumber` (1–8), `subjectKey`, `staffId`, `isCombinedSession`, timestamps.
-- One unique constraint, enforced at DB level: `(academicYearId, classId, dayOfWeek, periodNumber)` — no duplicate class slots (`class_period_assignment_class_slot_unique`).
-- **There is no unique constraint on teacher double-booking, and there is not meant to be.** `class_period_assignment_teacher_slot_unique` on `(academicYearId, staffId, dayOfWeek, periodNumber)` was created in `0002_eager_kinsey_walden.sql` and dropped in `0004_silly_punisher.sql`. The schema states the reason (`packages/db/src/schema/periods.ts`): a combined session — one Dance/Music teacher running several classes in the same period — is a legitimate, intentional overlap, and a unique index cannot tell it from an accident. So double-booking is enforced in **application code**, not by the database: `periods.listPeriodConflicts` groups a year's assignments by `(staffId, dayOfWeek, periodNumber)` and reports every group containing an unmarked overlap. A conflicting row _can_ be written, so nothing may promise that the stored timetable is double-book-free — only that conflicts are detectable.
-- Indexes: four **single-column** indexes — `class_period_assignment_year_idx` (`academicYearId`), `class_period_assignment_class_idx` (`classId`), `class_period_assignment_staff_idx` (`staffId`), `class_period_assignment_subject_idx` (`subjectKey`). There is no composite index on this table.
-- `isCombinedSession` is how an intentional overlap is recorded. A teacher's legitimate second class in the same slot must set it, or the conflict scan reports it as double-booked.
+The single `class_period_assignment` table this section used to describe was dropped in migration `0006` and replaced by two tables; there is no `0002_eager_kinsey_walden.sql` or `0004_silly_punisher.sql` in the repository.
+
+- `class_period_subject` — _what_ is taught in a (class, day, period) slot: `id`, `academicYearId`, `classId`, `dayOfWeek`, `periodNumber`, `subjectKey`, timestamps. Two subjects may share a slot (a split period), so the unique constraint is `(academicYearId, classId, dayOfWeek, periodNumber, subjectKey)` (`class_period_subject_slot_subject_unique`). `dayOfWeek` is CHECKed to 1–5 and `periodNumber` to 1–8 by the database (`class_period_subject_day_range` / `_period_range`, migration `0009`). Indexes: single-column on `academicYearId`, `classId`, `subjectKey`.
+- `class_period_teacher` — _who_ teaches a `class_period_subject` row: `classPeriodSubjectId`, `staffId`, `isCombinedSession`. Several teachers may co-teach one entry; `(classPeriodSubjectId, staffId)` is unique.
+- **There is no unique constraint on teacher double-booking, and there is not meant to be.** A combined session — one Dance/Music teacher running several classes in the same period — is a legitimate overlap a unique index cannot tell from an accident. Double-booking is _detected_ in application code: `periods.listPeriodConflicts` groups by `(staffId, dayOfWeek, periodNumber)` and reports every group containing an unmarked overlap. A conflicting row _can_ be written; nothing may promise the stored timetable is double-book-free, only that conflicts are detectable. `isCombinedSession` is how an intentional overlap is recorded.
 
 **Valibot & Branding:**
 
-- `packages/db/src/schema/periods.ts` holds `ClassPeriodAssignmentId` and its valibot counterpart. `PeriodConfigId` was never added, because the table it described does not exist.
-- Branded types follow the existing pattern: `export type ClassPeriodAssignmentId = Brand<string, "ClassPeriodAssignmentId">` + `v.pipe(v.string(), brand<...>())`.
+- `packages/db/src/schema/periods.ts` holds `ClassPeriodSubjectId` / `ClassPeriodTeacherId` and their valibot counterparts. `PeriodConfigId` was never added, because the table it described does not exist.
+- Branded types follow the existing pattern: `export type ClassPeriodSubjectId = Brand<string, "ClassPeriodSubjectId">` + `v.pipe(v.string(), brand<...>())`.
 
 **Historical Scope:**
 
 - All assignment tables are `academicYearId`-scoped. Changing years isolates data automatically.
 - No archiving needed; past years are queried with their `academicYearId`. The `academicYear` table already exists and tracks `isCurrent`.
-- Reading a _closed_ year is a route-level decision, not a global one: every year-scoped page is guarded to the current year, and only `/_auth/admin/$year/staff/historical-data` passes `allowAnyYear: true` to `loadAcademicYearRoute`.
+- Reading a _closed_ year is a route-level decision: every year-scoped page is guarded to the current year, and the two historical-data pages (`/_auth/admin/$year/staff/historical-data` and `/_auth/academic-admin/$year/staff/historical-data`) pass `allowAnyYear: true` to `loadAcademicYearRoute`.
+- **Writing to a closed year is refused by the database, not by the route.** A closed year is `academic_year.deleted_at IS NOT NULL`; migration `0010` puts a row trigger (`assert_academic_year_writable`) on every table carrying `academic_year_id`, raising SQLSTATE `YR001`, which the API maps to a 409. Restore the year to change its records. Child rows without their own `academic_year_id` (`teacher_period_absence`, `class_period_teacher`, `subject_mark`) are covered only through their parent.
+- **At most one year is current, enforced by the database** (`academic_year_single_current`, a partial unique index, migration `0009`), and a closed year cannot be current (`academic_year_current_not_deleted`). `setCurrentYear` runs in one transaction under an advisory lock.
 
 The period design is the code: `packages/db/src/schema/periods.ts` for the table, `packages/db/src/periods.ts` for `CODE_DEFINED_PERIODS`, and this section for the reasoning. No period planning document is kept in the repository, so do not cite one.
 
@@ -352,7 +353,15 @@ Six tiers, and the difference between them is a decision, not an accident (Septe
 
 The route guards are the mirror of these tiers: `/admin` admits `admin`, `/academic-admin` admits `academicAdmin` + `admin`, `/inventory-admin` admits `inventoryAdmin` + `admin`, `/leave-admin` admits `leaveAdmin` + `admin`. Each workspace only offers links its seat's procedures accept, so nobody is invited to click something the server will refuse.
 
-The seeded accounts are `admin`, `principal`, `deputy-principal`, `inventory-admin`, `academic-admin` and `leave-admin`; their passwords come from `ACADEMIC_ADMIN_PASSWORD` and friends in `.env.schema`, and `packages/auth/src/admin.ts` re-syncs them on boot.
+The seeded accounts are `admin`, `principal`, `inventory-admin`, `academic-admin` and `leave-admin` (there is no seeded `deputy-principal` any more; a Deputy is a staff member holding a position). Their **initial** passwords come from `ACADEMIC_ADMIN_PASSWORD` and friends in `.env.schema`. `packages/auth/src/admin.ts` creates a missing seat on boot and **never** overwrites an existing seat's password, so editing `.env` does not rotate one: run `bun --env-file=apps/web/.env scripts/rotate-seat-password.ts <username>`. Boot refuses a seat password shorter than 12 characters or equal to any value ever committed to the repository (`packages/auth/src/seat-password-policy.ts`, forensic audit F-03). `.env.example` ships every secret blank.
+
+**better-auth's admin plugin is not an authorization boundary on its own** (forensic audit F-01). It authorizes on the caller's role statements only, and every role used to spread `adminAc.statements`, which let the Principal, Deputy and Academic Administrator create an `admin` account or set the top administrator's password over `/api/auth/admin/*`. Now:
+
+- the only user/session statements any role holds are `ACCOUNT_ADMIN_STATEMENTS` (`user: list, get, ban`; `session: list, revoke`), on `admin` and `academicAdmin` — exactly what the accounts page calls;
+- `adminEndpointGuard` (`packages/auth/src/admin-endpoint-guard.ts`, a better-auth `hooks.before`) refuses the verbs no role is granted, refuses any action on a seeded seat or a privileged-role account unless the caller is `admin`, refuses banning or changing a seeded seat for everyone, and writes every decision to `account_audit_log`;
+- better-auth's `/sign-up/email` is disabled; self-registration is the app's own `signupStaff`.
+
+`databaseHooks.user.update` receives only the changed fields — no user id, no request context — so a hook cannot protect a _particular_ account. The one that claimed to protect seeded seats from bans never fired. Put target checks in `adminEndpointGuard`.
 
 Office staff have no self-service sign-up: their accounts are issued by an administrator, who creates the staff record and hands over the login.
 
@@ -360,7 +369,12 @@ Enforce access control at the API layer (oRPC procedures) using better-auth's `a
 
 ### Leave entitlements
 
-`leave_entitlement` is one row per (academic year, leave type, payment status), and the quota is **enforced** at `applyLeave`: a request that would exceed the remaining days is refused with the remaining figure in the message. Consumption is derived from approved requests, matching the balance a teacher is shown.
+`leave_entitlement` is one row per (academic year, leave type, payment status), and the quota is **enforced twice** (`packages/api/src/routers/staff/leaves/quota.ts`, forensic audit F-07):
+
+- **at `applyLeave`, against pending + recommended + approved days** — filing reserves days, so several pending requests cannot each pass against the same untouched balance;
+- **at `finalizeLeave`, against approved days** — inside the approval's transaction, so a quota lowered after filing, or an overridden request, cannot slip through.
+
+Both lock the teacher's `staff` row `FOR UPDATE`, which serializes concurrent applications and approvals for one person. `getMyLeaveBalance` reports `usedDays` (approved), `pendingDays` and `remainingDays` = max − used − pending, the same number the server checks. Only `pending`/`recommended` requests can be decided; a cancelled or rejected request is closed even with an override reason. `recommendLeave` and `cancelLeave` are conditional updates on the expected state. Dates are validated as real calendar dates (`packages/db/src/dates.ts`); a request containing no working day is refused. The database CHECKs every status column, the leave type, day part, payment status and `start_date <= end_date` (migration `0009`).
 
 Maternity is the College's own rule: **84 days on full pay and a further 84 days at half pay**, per person (`DEFAULT_LEAVE_ENTITLEMENTS` in `packages/db/src/constants/leave.ts`). `halfPay` is a distinct payment status from `unpaid` — the second maternity tier used to be recorded as `unpaid`, which told a teacher the wrong thing about their entitlement.
 
