@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { isSeededAccount } from "@school-student-teacher-management/auth";
 import type { Database } from "@school-student-teacher-management/db";
+import { listWorkingDates } from "@school-student-teacher-management/db/constants/leave";
 import { getDayPartPeriodNumbers } from "@school-student-teacher-management/db/periods";
 import {
   attendancePolicy,
@@ -18,11 +19,17 @@ import {
   staff,
   staffPosition,
 } from "@school-student-teacher-management/db/schema/staff";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import * as v from "valibot";
 
 import type { Context } from "../../../context";
 import { protectedProcedure } from "../../../index";
+import {
+  DECIDABLE_STATUSES,
+  assertWithinQuota,
+  leaveDaysOf,
+  lockStaffForLeave,
+} from "./quota";
 
 type ApiDatabase = Context["db"];
 type DatabaseTransaction = Parameters<
@@ -72,88 +79,94 @@ const recordApprovedLeaveAttendance = async (
     });
   }
 
-  const start = new Date(`${request.startDate}T00:00:00Z`);
-  const end = new Date(`${request.endDate}T00:00:00Z`);
-  const dayMs = 24 * 60 * 60 * 1000;
-  const dayCount = Math.max(
-    0,
-    Math.floor((end.getTime() - start.getTime()) / dayMs) + 1
+  /**
+   * Set-based, not row-at-a-time. This used to issue three or four statements
+   * per working day, fired with `Promise.all` on the transaction's single
+   * connection — about 480 round trips for a 120-day maternity leave while the
+   * request row was locked (F-35). It is now at most five statements for any
+   * length of leave.
+   */
+  let dates: string[];
+  try {
+    dates = listWorkingDates(request.startDate, request.endDate);
+  } catch {
+    throw new ORPCError("PRECONDITION_FAILED", {
+      message: `Leave request ${request.id} has invalid dates and cannot be recorded in the register`,
+    });
+  }
+  if (dates.length === 0) {
+    return;
+  }
+
+  const absencePeriods = getDayPartPeriodNumbers(
+    request.dayPart,
+    {
+      startPeriodNumber: policy.primaryStartPeriodNumber,
+      endPeriodNumber: policy.primaryEndPeriodNumber,
+    },
+    {
+      startPeriodNumber: policy.secondaryStartPeriodNumber,
+      endPeriodNumber: policy.secondaryEndPeriodNumber,
+    }
   );
-  const dates = Array.from({ length: dayCount }, (_, index) => {
-    const date = new Date(start);
-    date.setUTCDate(start.getUTCDate() + index);
-    return date;
-  }).filter((date) => {
-    const day = date.getUTCDay();
-    return day !== 0 && day !== 6;
-  });
+  const status = absencePeriods.length > 0 ? "partial" : "absent";
+  const reason = `Approved ${request.type} leave`;
 
-  await Promise.all(
-    dates.map(async (date) => {
-      const dateString = date.toISOString().slice(0, 10);
-      const [existing] = await tx
-        .select({ id: teacherAttendance.id })
-        .from(teacherAttendance)
-        .where(
-          and(
-            eq(teacherAttendance.staffId, request.staffId),
-            eq(teacherAttendance.academicYearId, request.academicYearId),
-            eq(teacherAttendance.date, dateString)
-          )
-        )
-        .limit(1);
-      const attendanceId = existing?.id ?? crypto.randomUUID();
-      const absencePeriods = getDayPartPeriodNumbers(
-        request.dayPart,
-        {
-          startPeriodNumber: policy.primaryStartPeriodNumber,
-          endPeriodNumber: policy.primaryEndPeriodNumber,
-        },
-        {
-          startPeriodNumber: policy.secondaryStartPeriodNumber,
-          endPeriodNumber: policy.secondaryEndPeriodNumber,
-        }
-      );
-      const status = absencePeriods.length > 0 ? "partial" : "absent";
-      const reason = `Approved ${request.type} leave`;
+  const existing = await tx
+    .select({ id: teacherAttendance.id, date: teacherAttendance.date })
+    .from(teacherAttendance)
+    .where(
+      and(
+        eq(teacherAttendance.staffId, request.staffId),
+        eq(teacherAttendance.academicYearId, request.academicYearId),
+        inArray(teacherAttendance.date, dates)
+      )
+    );
+  const existingIds = existing.map((row) => row.id);
 
-      if (existing) {
-        await tx
-          .update(teacherAttendance)
-          .set({
-            status,
-            reason,
-            leaveRequestId: request.id,
-            markedAt,
-          })
-          .where(eq(teacherAttendance.id, attendanceId));
-        await tx
-          .delete(teacherPeriodAbsence)
-          .where(eq(teacherPeriodAbsence.teacherAttendanceId, attendanceId));
-      } else {
-        await tx.insert(teacherAttendance).values({
-          id: attendanceId,
-          staffId: request.staffId,
-          academicYearId: request.academicYearId,
-          date: dateString,
-          status,
+  if (existingIds.length > 0) {
+    await tx
+      .update(teacherAttendance)
+      .set({ status, reason, leaveRequestId: request.id, markedAt })
+      .where(inArray(teacherAttendance.id, existingIds));
+    await tx
+      .delete(teacherPeriodAbsence)
+      .where(inArray(teacherPeriodAbsence.teacherAttendanceId, existingIds));
+  }
+
+  const recordedDates = new Set(existing.map((row) => row.date));
+  const created: (typeof teacherAttendance.$inferInsert & { id: string })[] =
+    [];
+  for (const date of dates) {
+    if (!recordedDates.has(date)) {
+      created.push({
+        id: crypto.randomUUID(),
+        staffId: request.staffId,
+        academicYearId: request.academicYearId,
+        date,
+        status,
+        reason,
+        leaveRequestId: request.id,
+      });
+    }
+  }
+  if (created.length > 0) {
+    await tx.insert(teacherAttendance).values(created);
+  }
+
+  if (absencePeriods.length > 0) {
+    const attendanceIds = [...existingIds, ...created.map((row) => row.id)];
+    await tx.insert(teacherPeriodAbsence).values(
+      attendanceIds.flatMap((teacherAttendanceId) =>
+        absencePeriods.map((periodNumber) => ({
+          id: crypto.randomUUID(),
+          teacherAttendanceId,
+          periodNumber,
           reason,
-          leaveRequestId: request.id,
-        });
-      }
-
-      if (absencePeriods.length > 0) {
-        await tx.insert(teacherPeriodAbsence).values(
-          absencePeriods.map((periodNumber) => ({
-            id: crypto.randomUUID(),
-            teacherAttendanceId: attendanceId,
-            periodNumber,
-            reason,
-          }))
-        );
-      }
-    })
-  );
+        }))
+      )
+    );
+  }
 };
 
 /** Position keys (see constants/positions.ts) that may recommend leave. */
@@ -290,16 +303,25 @@ export const recommendLeave = protectedProcedure
         // Principal finalises.
         status: input.decision === "recommended" ? "recommended" : "rejected",
       })
+      // Conditional on the state read above: a teacher cancelling, or a
+      // second Deputy recommending, between the read and this write must not
+      // be overwritten (F-17). No row back means someone else got there first.
       .where(
         and(
           eq(leaveRequest.id, input.id),
-          eq(leaveRequest.academicYearId, selectedYear.id)
+          eq(leaveRequest.academicYearId, selectedYear.id),
+          eq(leaveRequest.status, "pending"),
+          eq(leaveRequest.deputyStatus, "pending"),
+          isNull(leaveRequest.finalizedAt)
         )
       )
       .returning();
 
     if (!updated) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
+      throw new ORPCError("CONFLICT", {
+        message:
+          "This request changed while you were reviewing it (cancelled or already decided). Reload and try again",
+      });
     }
 
     return {
@@ -348,7 +370,10 @@ export const finalizeLeave = protectedProcedure
             eq(leaveRequest.academicYearId, selectedYear.id)
           )
         )
-        .limit(1);
+        .limit(1)
+        // Locked so a double-submitted approval, or a cancel racing it, waits
+        // for this decision instead of both acting on the same snapshot.
+        .for("update");
 
       if (!record) {
         throw new ORPCError("NOT_FOUND", {
@@ -359,6 +384,32 @@ export const finalizeLeave = protectedProcedure
       if (record.finalizedAt) {
         throw new ORPCError("CONFLICT", {
           message: "This request was already finalised",
+        });
+      }
+
+      // A cancelled or Deputy-rejected request is closed. The override reason
+      // used to let a Principal approve a request the teacher had withdrawn.
+      if (
+        !DECIDABLE_STATUSES.includes(
+          record.status as (typeof DECIDABLE_STATUSES)[number]
+        )
+      ) {
+        throw new ORPCError("CONFLICT", {
+          message: `This request is ${record.status} and can no longer be decided`,
+        });
+      }
+
+      if (input.decision === "approved") {
+        await lockStaffForLeave(tx, record.staffId);
+        await assertWithinQuota(tx, {
+          staffId: record.staffId,
+          academicYearId: record.academicYearId,
+          type: record.type,
+          paymentStatus: record.paymentStatus,
+          statuses: ["approved"],
+          excludeRequestId: record.id,
+          requestedDays: leaveDaysOf(record),
+          action: "approve",
         });
       }
 

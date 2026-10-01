@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { leaveRequest } from "@school-student-teacher-management/db/schema/leaves";
 import { staff } from "@school-student-teacher-management/db/schema/staff";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import * as v from "valibot";
 
 import { teacherProcedure } from "../../../index";
@@ -47,14 +47,27 @@ export const cancelLeave = teacherProcedure
       });
     }
 
+    // Conditional on still being pending: a Deputy recommendation or a
+    // Principal decision landing between the read above and this write wins,
+    // instead of being silently overwritten by "cancelled" (F-17).
     const [updated] = await context.db
       .update(leaveRequest)
       .set({ status: "cancelled" })
-      .where(eq(leaveRequest.id, input.id))
+      .where(
+        and(
+          eq(leaveRequest.id, input.id),
+          eq(leaveRequest.staffId, staffRecord.id),
+          eq(leaveRequest.status, "pending"),
+          isNull(leaveRequest.finalizedAt)
+        )
+      )
       .returning();
 
     if (!updated) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
+      throw new ORPCError("CONFLICT", {
+        message:
+          "This request was reviewed a moment ago and can no longer be cancelled",
+      });
     }
 
     return {

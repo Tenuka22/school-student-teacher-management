@@ -1,7 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import { calculateLeaveDays } from "@school-student-teacher-management/db/constants/leave";
 import {
-  leaveEntitlement,
   leaveRequest,
   leaveRequestInsertSchema,
 } from "@school-student-teacher-management/db/schema/leaves";
@@ -15,6 +14,11 @@ import { pick } from "valibot";
 import * as v from "valibot";
 
 import { teacherProcedure } from "../../../index";
+import {
+  RESERVING_STATUSES,
+  assertWithinQuota,
+  lockStaffForLeave,
+} from "./quota";
 
 /**
  * Only maternity leave carries a payment status, and it is chosen by the
@@ -120,119 +124,83 @@ export const applyLeave = teacherProcedure
       });
     }
 
-    const [entitlement] = await context.db
-      .select({ id: leaveEntitlement.id, maxDays: leaveEntitlement.maxDays })
-      .from(leaveEntitlement)
-      .where(
-        and(
-          eq(leaveEntitlement.academicYearId, currentYear.id),
-          eq(leaveEntitlement.leaveType, input.type),
-          eq(leaveEntitlement.paymentStatus, paymentStatus)
-        )
-      )
-      .limit(1);
-
-    if (!entitlement) {
-      throw new ORPCError("PRECONDITION_FAILED", {
-        message: `No leave entitlement is configured for ${input.type}`,
-      });
-    }
-
-    /**
-     * The quota is checked, not merely displayed.
-     *
-     * `leave_entitlement.maxDays` used to be decorative: the procedure only
-     * checked that a row *existed*, so a teacher could file 200 days of annual
-     * leave against a 20-day entitlement and watch the balance on their own
-     * dashboard go negative. Approved days are what consume the quota, matching
-     * the balance a teacher is shown.
-     */
     const requestedDays = calculateLeaveDays(
       input.startDate,
       input.endDate,
       dayPart
     );
 
-    const consumed = await context.db
-      .select({
-        startDate: leaveRequest.startDate,
-        endDate: leaveRequest.endDate,
-        dayPart: leaveRequest.dayPart,
-      })
-      .from(leaveRequest)
-      .where(
-        and(
-          eq(leaveRequest.staffId, staffRecord.id),
-          eq(leaveRequest.academicYearId, currentYear.id),
-          eq(leaveRequest.type, input.type),
-          eq(leaveRequest.paymentStatus, paymentStatus),
-          eq(leaveRequest.status, "approved")
-        )
-      );
-
-    const usedDays = consumed.reduce(
-      (total, request) =>
-        total +
-        calculateLeaveDays(
-          request.startDate,
-          request.endDate,
-          request.dayPart as LeaveDayPart
-        ),
-      0
-    );
-
-    if (usedDays + requestedDays > entitlement.maxDays) {
-      const remaining = Math.max(0, entitlement.maxDays - usedDays);
-
-      throw new ORPCError("PRECONDITION_FAILED", {
-        message: `This request is ${requestedDays} day${requestedDays === 1 ? "" : "s"} and you have ${remaining} of ${entitlement.maxDays} ${input.type} day${entitlement.maxDays === 1 ? "" : "s"} left this year. Reduce the request, or ask the Principal to review an exception.`,
+    if (requestedDays === 0) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "These dates contain no working day — weekends are not leave",
       });
     }
 
-    const overlappingRequests = await context.db
-      .select({
-        dayPart: leaveRequest.dayPart,
-      })
-      .from(leaveRequest)
-      .where(
-        and(
-          eq(leaveRequest.staffId, staffRecord.id),
-          eq(leaveRequest.academicYearId, currentYear.id),
-          inArray(leaveRequest.status, ["pending", "recommended", "approved"]),
-          lte(leaveRequest.startDate, input.endDate),
-          gte(leaveRequest.endDate, input.startDate)
-        )
-      );
+    /**
+     * Check-then-insert used to run with no transaction and no lock, so a
+     * double-click filed two requests and two requests for the last day of
+     * a quota both passed (F-07, F-17). The teacher's staff row is locked
+     * for the duration, which serializes every leave write for that person.
+     */
+    const record = await context.db.transaction(async (tx) => {
+      await lockStaffForLeave(tx, staffRecord.id);
 
-    const hasConflictingLeave = overlappingRequests.some((request) => {
-      if (dayPart === "full" || request.dayPart === "full") {
-        return true;
-      }
-      return request.dayPart === dayPart;
-    });
-
-    if (hasConflictingLeave) {
-      throw new ORPCError("CONFLICT", {
-        message:
-          "You already have an active leave request covering this day part",
-      });
-    }
-
-    const [record] = await context.db
-      .insert(leaveRequest)
-      .values({
-        id: crypto.randomUUID(),
+      await assertWithinQuota(tx, {
         staffId: staffRecord.id,
         academicYearId: currentYear.id,
         type: input.type,
-        startDate: input.startDate,
-        endDate: input.endDate,
-        dayPart,
         paymentStatus,
-        reason: input.reason ?? null,
-        status: "pending",
-      })
-      .returning();
+        statuses: RESERVING_STATUSES,
+        requestedDays,
+        action: "apply",
+      });
+
+      const overlappingRequests = await tx
+        .select({
+          dayPart: leaveRequest.dayPart,
+        })
+        .from(leaveRequest)
+        .where(
+          and(
+            eq(leaveRequest.staffId, staffRecord.id),
+            eq(leaveRequest.academicYearId, currentYear.id),
+            inArray(leaveRequest.status, [...RESERVING_STATUSES]),
+            lte(leaveRequest.startDate, input.endDate),
+            gte(leaveRequest.endDate, input.startDate)
+          )
+        );
+
+      const hasConflictingLeave = overlappingRequests.some((request) => {
+        if (dayPart === "full" || request.dayPart === "full") {
+          return true;
+        }
+        return request.dayPart === dayPart;
+      });
+
+      if (hasConflictingLeave) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "You already have an active leave request covering this day part",
+        });
+      }
+
+      const [inserted] = await tx
+        .insert(leaveRequest)
+        .values({
+          id: crypto.randomUUID(),
+          staffId: staffRecord.id,
+          academicYearId: currentYear.id,
+          type: input.type,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          dayPart,
+          paymentStatus,
+          reason: input.reason ?? null,
+          status: "pending",
+        })
+        .returning();
+      return inserted;
+    });
 
     if (!record) {
       throw new ORPCError("INTERNAL_SERVER_ERROR");

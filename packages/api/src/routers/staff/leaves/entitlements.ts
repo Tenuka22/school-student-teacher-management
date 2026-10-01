@@ -1,14 +1,10 @@
-import {
-  DEFAULT_LEAVE_ENTITLEMENTS,
-  calculateLeaveDays,
-} from "@school-student-teacher-management/db/constants/leave";
+import { DEFAULT_LEAVE_ENTITLEMENTS } from "@school-student-teacher-management/db/constants/leave";
 import {
   leaveEntitlement,
   leaveEntitlementInsertSchema,
   leaveRequest,
 } from "@school-student-teacher-management/db/schema/leaves";
 import type {
-  LeaveDayPart,
   LeavePaymentStatus,
   LeaveType,
 } from "@school-student-teacher-management/db/schema/leaves";
@@ -18,10 +14,11 @@ import {
   staff,
 } from "@school-student-teacher-management/db/schema/staff";
 import type { AcademicYearId } from "@school-student-teacher-management/db/schema/staff";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
 import { leaveManagerProcedure, protectedProcedure } from "../../../index";
+import { RESERVING_STATUSES, leaveDaysOf } from "./quota";
 
 const entitlementKey = (leaveType: string, paymentStatus: string) =>
   `${leaveType}:${paymentStatus}`;
@@ -88,7 +85,7 @@ export const upsertLeaveEntitlement = leaveManagerProcedure
       academicYearId: academicYearIdSchema,
       leaveType: leaveEntitlementInsertSchema.entries.leaveType,
       paymentStatus: leaveEntitlementInsertSchema.entries.paymentStatus,
-      maxDays: v.pipe(v.number(), v.integer(), v.minValue(0)),
+      maxDays: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(366)),
       minDays: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0)), 0),
     })
   )
@@ -186,57 +183,58 @@ export const getMyLeaveBalance = protectedProcedure
       academicYearId = currentYear.id as AcademicYearId;
     }
 
-    const [entitlements, approved] = await Promise.all([
+    const [entitlements, reserved] = await Promise.all([
       context.db
         .select()
         .from(leaveEntitlement)
         .where(eq(leaveEntitlement.academicYearId, academicYearId)),
       context.db
         .select({
+          id: leaveRequest.id,
           type: leaveRequest.type,
           paymentStatus: leaveRequest.paymentStatus,
           startDate: leaveRequest.startDate,
           endDate: leaveRequest.endDate,
           dayPart: leaveRequest.dayPart,
+          status: leaveRequest.status,
         })
         .from(leaveRequest)
         .where(
           and(
             eq(leaveRequest.staffId, staffRecord.id),
             eq(leaveRequest.academicYearId, academicYearId),
-            eq(leaveRequest.status, "approved")
+            inArray(leaveRequest.status, [...RESERVING_STATUSES])
           )
         ),
     ]);
 
+    // `usedDays` is approved leave; `pendingDays` is filed and not yet
+    // decided. Both are held against the quota by `applyLeave`, so
+    // `remainingDays` is what the teacher can still ask for — the same
+    // number the server checks (see `quota.ts`).
     const usedByEntitlement = new Map<string, number>();
-    for (const row of approved) {
+    const pendingByEntitlement = new Map<string, number>();
+    for (const row of reserved) {
       const key = entitlementKey(row.type, row.paymentStatus);
-      usedByEntitlement.set(
-        key,
-        (usedByEntitlement.get(key) ?? 0) +
-          calculateLeaveDays(
-            row.startDate,
-            row.endDate,
-            row.dayPart as LeaveDayPart
-          )
-      );
+      const totals =
+        row.status === "approved" ? usedByEntitlement : pendingByEntitlement;
+      totals.set(key, (totals.get(key) ?? 0) + leaveDaysOf(row));
     }
 
     return {
       academicYearId,
       balances: entitlements.map((row) => {
-        const used =
-          usedByEntitlement.get(
-            entitlementKey(row.leaveType, row.paymentStatus)
-          ) ?? 0;
+        const key = entitlementKey(row.leaveType, row.paymentStatus);
+        const used = usedByEntitlement.get(key) ?? 0;
+        const pending = pendingByEntitlement.get(key) ?? 0;
         return {
           leaveType: row.leaveType as LeaveType,
           paymentStatus: row.paymentStatus as LeavePaymentStatus,
           maxDays: row.maxDays,
           minDays: row.minDays,
           usedDays: used,
-          remainingDays: row.maxDays - used,
+          pendingDays: pending,
+          remainingDays: Math.max(0, row.maxDays - used - pending),
         };
       }),
     };
