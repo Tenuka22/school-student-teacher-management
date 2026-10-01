@@ -54,6 +54,7 @@ import { eq, inArray } from "drizzle-orm";
 import { object, optional, string } from "valibot";
 
 import { inventoryManagerProcedure } from "../../index";
+import { isUniqueViolation } from "../../lib/db-errors";
 import {
   calculateAvailableQuantity,
   calculateItemStatus,
@@ -186,10 +187,7 @@ const pinFreshlyClaimedUnits = async (
       .insert(inventoryDisposalUnit)
       .values(units.map((unit) => ({ disposalId, unitId: unit.id })));
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes(DISPOSAL_UNIT_ACTIVE_CONSTRAINT)
-    ) {
+    if (isUniqueViolation(error, DISPOSAL_UNIT_ACTIVE_CONSTRAINT)) {
       throw new ORPCError("CONFLICT", {
         message: `Asset ${contestedTag(units.map((unit) => unit.uniqueNo))} is already pinned to another write-off request that has not been finalised or cancelled. Reload the request and finalise the units that are still available`,
       });

@@ -47,6 +47,7 @@ import {
 } from "valibot";
 
 import { inventoryManagerProcedure } from "../../index";
+import { isUniqueViolation } from "../../lib/db-errors";
 import {
   assertSufficientAvailableQuantity,
   assertUnitsNotPendingDisposal,
@@ -307,10 +308,7 @@ export const createIssue = inventoryManagerProcedure
             // updates roll back with the failed insert, so the ledger and the
             // counters are untouched and the clerk can simply retry. The whole
             // transaction aborts here — there is no partial issue.
-            if (
-              error instanceof Error &&
-              error.message.includes(ISSUE_UNIT_UNIQUE_CONSTRAINT)
-            ) {
+            if (isUniqueViolation(error, ISSUE_UNIT_UNIQUE_CONSTRAINT)) {
               throw new ORPCError("CONFLICT", {
                 message: `Asset ${contestedTag(input.uniqueItemIds, claimedTags)} has already been issued to somebody else. Reload the item and issue the units that are still available`,
               });

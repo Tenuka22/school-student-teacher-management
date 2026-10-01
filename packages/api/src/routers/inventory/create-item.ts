@@ -24,6 +24,7 @@ import { count, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
 import { inventoryManagerProcedure } from "../../index";
+import { isUniqueViolation } from "../../lib/db-errors";
 import { generateSku, normalizeLabel } from "./inventory-calculations";
 import type { Executor, InventoryItemRow } from "./inventory-database";
 import {
@@ -323,10 +324,7 @@ const insertItem = async (
   try {
     [created] = await db.insert(inventoryItem).values(values).returning();
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("inventory_item_sku_unique")
-    ) {
+    if (isUniqueViolation(error, "inventory_item_sku_unique")) {
       throw new ORPCError("CONFLICT", {
         message: `SKU ${values.sku} is already in use — enter a different one`,
       });
@@ -448,8 +446,7 @@ const insertUnits = async (
     );
   } catch (error) {
     if (
-      error instanceof Error &&
-      error.message.includes("inventory_unit_normalized_unique_no_unique")
+      isUniqueViolation(error, "inventory_unit_normalized_unique_no_unique")
     ) {
       throw new ORPCError("CONFLICT", {
         message:

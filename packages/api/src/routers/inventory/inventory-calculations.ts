@@ -17,6 +17,7 @@
  * on it. The database-side shapes are derived from these in
  * `inventory-database.ts` instead.
  */
+import { schoolToday } from "@school-student-teacher-management/db/dates";
 import { inventoryItem } from "@school-student-teacher-management/db/schema/inventory";
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -170,8 +171,11 @@ export const generateSku = (
 
 const toIsoDate = (value: Date): string => value.toISOString().slice(0, 10);
 
-/** Today as an ISO `YYYY-MM-DD` string, in UTC. */
-export const todayIsoDate = (): string => toIsoDate(new Date());
+/**
+ * Today at the school (Asia/Colombo) as `YYYY-MM-DD`. It was the UTC date,
+ * which is yesterday at the school until 05:30 every morning (F-20).
+ */
+export const todayIsoDate = (): string => schoolToday();
 
 /**
  * A date `days` from `from` (today when omitted), as an ISO `YYYY-MM-DD`
@@ -184,6 +188,6 @@ export const todayIsoDate = (): string => toIsoDate(new Date());
  * is a bare date with no offset to correct the mistake afterwards.
  */
 export const addDaysIsoDate = (days: number, from?: string): string => {
-  const base = from === undefined ? new Date() : new Date(`${from}T00:00:00Z`);
+  const base = new Date(`${from ?? schoolToday()}T00:00:00Z`);
   return toIsoDate(new Date(base.getTime() + days * 86_400_000));
 };

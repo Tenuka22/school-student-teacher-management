@@ -36,6 +36,7 @@
  * only: this store keeps no row per physical unit, so the number exists for
  * a human to read off a label or a scan, not looked up server-side.
  */
+import { ORPCError } from "@orpc/server";
 import {
   inventoryItem,
   inventoryItemIdSchema,
@@ -59,6 +60,36 @@ const LABEL_SIZE_PT = Math.floor(
 );
 /** One requested sheet cannot ask for more labels than a school actually owns of anything. */
 const MAX_COPIES_PER_ITEM = 500;
+
+/**
+ * Bounds on one sheet (forensic audit F-25). Every label is a QR render and a
+ * PDF node on the request thread, and the input used to be unbounded in item
+ * count — 500 copies times any number of items. 2,000 labels is about 50 A4
+ * pages; a larger run is several sheets.
+ */
+const MAX_ITEMS_PER_SHEET = 500;
+const MAX_LABELS_PER_SHEET = 2000;
+
+/**
+ * The origin printed into every label. The server's own configured base URL
+ * when it has one: a label is a physical object that outlives the request,
+ * and the client-supplied value let a caller print stickers pointing at any
+ * host (F-25). Only an in-process caller with no auth instance (a test) falls
+ * back to the supplied origin, and then only a bare http(s) origin.
+ */
+const labelOrigin = (
+  configured: string | undefined,
+  supplied: string
+): string => {
+  if (configured) {
+    return new URL(configured).origin;
+  }
+  const parsed = new URL(supplied);
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new ORPCError("BAD_REQUEST", { message: "Invalid origin" });
+  }
+  return parsed.origin;
+};
 /** The render canvas's own side, in SVG user units — large enough that hand-drawn modules and the inlaid text both stay crisp when scaled down to `LABEL_SIZE_PT`. */
 const CANVAS_SIZE = 600;
 /** Modules of white border around the code, matching the quiet zone the QR spec itself requires for a scanner to find the finder squares reliably. */
@@ -217,12 +248,23 @@ export const exportQrSheet = inventoryOverseerProcedure
             ),
           })
         ),
-        v.minLength(1)
+        v.minLength(1),
+        v.maxLength(MAX_ITEMS_PER_SHEET),
+        v.check(
+          (items) =>
+            items.reduce((total, entry) => total + entry.copies, 0) <=
+            MAX_LABELS_PER_SHEET,
+          `A sheet holds at most ${MAX_LABELS_PER_SHEET} labels; print the rest on another sheet`
+        )
       ),
-      origin: v.pipe(v.string(), v.minLength(1)),
+      origin: v.pipe(v.string(), v.url()),
     })
   )
   .handler(async ({ input, context }) => {
+    const origin = labelOrigin(
+      (context.auth?.options as { baseURL?: string } | undefined)?.baseURL,
+      input.origin
+    );
     const itemIds = input.items.map((entry) => entry.itemId);
     const rows = await context.db
       .select({
@@ -246,8 +288,8 @@ export const exportQrSheet = inventoryOverseerProcedure
         sku: entry.copies > 1 ? `${row.sku} #${index + 1}` : row.sku,
         url:
           entry.copies > 1
-            ? `${input.origin}/inventory/${row.id}?u=${index + 1}`
-            : `${input.origin}/inventory/${row.id}`,
+            ? `${origin}/inventory/${row.id}?u=${index + 1}`
+            : `${origin}/inventory/${row.id}`,
       }));
     });
 
