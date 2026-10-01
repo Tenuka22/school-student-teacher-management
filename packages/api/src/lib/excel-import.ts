@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 
+import { zipProblem } from "./zip-guard";
+
 /**
  * Reads an uploaded workbook into plain rows, for the import side of the
  * Excel story that `lib/export.ts` writes.
@@ -75,6 +77,12 @@ export const readExcelRows = async (
   // `Buffer.from` returns today, and the two will not unify. An `ArrayBuffer`
   // is accepted by both sides and carries no version of its own to argue with.
   const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
+  // Before inflating anything: the row cap below only applies once every
+  // part is already in memory (F-26).
+  const problem = zipProblem(bytes);
+  if (problem) {
+    throw new Error(problem);
+  }
   await workbook.xlsx.load(bytes.buffer);
 
   const [worksheet] = workbook.worksheets;
