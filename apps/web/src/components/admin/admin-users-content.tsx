@@ -162,7 +162,7 @@ export const AdminUsersContent = ({ search }: { search: UsersSearch }) => {
       <BanUserDialog
         isPending={banMutation.isPending}
         isUnban={banDialog?.banned === false}
-        key={banDialog?.target.id ?? "closed"}
+        key={`ban-${banDialog?.target.id ?? "closed"}`}
         onConfirm={(input) => banMutation.mutate(input)}
         onOpenChange={(open) => {
           if (!open) {
@@ -176,10 +176,10 @@ export const AdminUsersContent = ({ search }: { search: UsersSearch }) => {
         accounts={bulkDialog?.accounts ?? []}
         isPending={bulkBanMutation.isPending}
         isUnban={bulkDialog?.banned === false}
-        key={
+        key={`bulk-${
           bulkDialog?.accounts.map((account) => account.id).join(",") ??
           "closed"
-        }
+        }`}
         onConfirm={(input) => {
           if (bulkDialog) {
             bulkBanMutation.mutate({ accounts: bulkDialog.accounts, ...input });
