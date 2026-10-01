@@ -115,11 +115,27 @@ const WEEKDAYS = [
 export const weekdayName = (dayOfWeek: number): string =>
   WEEKDAYS[dayOfWeek - 1] ?? `Day ${dayOfWeek}`;
 
-export const formatDate = (value: string): string =>
-  format(new Date(`${value}T00:00:00`), "d MMM yyyy");
+/**
+ * A stored date as a reader sees it.
+ *
+ * A malformed stored value (a single-digit day slipped in outside the
+ * `isoDateSchema`-validated write path, for instance) must not take the
+ * whole history page down with it — `format` throws `RangeError: Invalid
+ * time value` on an unparseable `Date`, which this tab let escape all the
+ * way to the router's error boundary. The stored text is the fallback: it
+ * is wrong, but it is not nothing.
+ */
+export const formatDate = (value: string): string => {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? value : format(parsed, "d MMM yyyy");
+};
 
-export const formatDateTime = (value: string): string =>
-  format(new Date(value), "d MMM yyyy, HH:mm");
+export const formatDateTime = (value: string): string => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : format(parsed, "d MMM yyyy, HH:mm");
+};
 
 export const formatLeaveDescription = (
   type: string,

@@ -14,14 +14,15 @@ import { and, eq, inArray, lt, or } from "drizzle-orm";
 
 import type { AuthConfig } from "./index";
 
-/** Position keys (see db/constants/positions.ts) for the two leadership seats. */
+/** Position key for the Principal's own seeded seat. */
 export const PRINCIPAL_POSITION = "principal";
-export const DEPUTY_PRINCIPAL_POSITION = "vicePrincipal";
 
 /**
- * Auth role for each leadership position. Principal gets `principal`; both
- * deputy seats (Vice and Assistant Principal) get `vicePrincipal`, since the
- * role names the tier and the position row carries the exact title.
+ * Auth role for each leadership position. Principal gets `principal`; a Deputy
+ * or Assistant Principal \u2014 a current-year `staffPosition` held by a real
+ * member of staff, assigned via `assignPosition`, never a seeded login \u2014
+ * gets `vicePrincipal`, since the role names the tier and the position row
+ * carries the exact title.
  */
 export const LEADERSHIP_ROLE_BY_POSITION = {
   principal: "principal",
@@ -42,13 +43,12 @@ export const leadershipRoleForPosition = (
 
 /**
  * Login usernames for the seeded accounts. Fixed rather than configurable:
- * they are operational constants that the Principal, Deputy and admin all
+ * they are operational constants that the Principal and admin both
  * know, and keeping them out of env removes a class of misconfiguration.
  * Passwords stay in env — those are genuinely per-deployment secrets.
  */
 export const ADMIN_USERNAME = "admin";
 export const PRINCIPAL_USERNAME = "principal";
-export const DEPUTY_PRINCIPAL_USERNAME = "deputy-principal";
 
 /**
  * The Inventory Administrator's seat. Custody of every item \u2014 who has it,
@@ -84,7 +84,6 @@ export const LEAVE_ADMIN_USERNAME = "leave-admin";
  */
 export const ADMIN_EMAIL = "admin@aloysiuscollege.lk";
 export const PRINCIPAL_EMAIL = "principal@aloysiuscollege.lk";
-export const DEPUTY_PRINCIPAL_EMAIL = "deputy-principal@aloysiuscollege.lk";
 export const INVENTORY_ADMIN_EMAIL = "inventory-admin@aloysiuscollege.lk";
 export const ACADEMIC_ADMIN_EMAIL = "academic-admin@aloysiuscollege.lk";
 export const LEAVE_ADMIN_EMAIL = "leave-admin@aloysiuscollege.lk";
@@ -124,7 +123,6 @@ export const internalEmailForUsername = (accountUsername: string) =>
 export const SEEDED_PLACEHOLDER_NIC = {
   [ADMIN_USERNAME]: "000000000001",
   [PRINCIPAL_USERNAME]: "000000000002",
-  [DEPUTY_PRINCIPAL_USERNAME]: "000000000003",
   [INVENTORY_ADMIN_USERNAME]: "000000000004",
   [ACADEMIC_ADMIN_USERNAME]: "000000000005",
   [LEAVE_ADMIN_USERNAME]: "000000000006",
@@ -239,7 +237,13 @@ interface EnsureBootstrapAccountConfig {
   password: string;
   /** Display name, e.g. "Principal". */
   name: string;
-  /** Seeded auth role: `admin`, `principal`, `vicePrincipal` or `teacher`. */
+  /**
+   * Seeded auth role: `admin`, `principal`, `inventoryAdmin`, `academicAdmin`
+   * or `leaveAdmin`. `vicePrincipal` is deliberately never seeded here \u2014
+   * there is no institutional Deputy Principal login any more. A Deputy or
+   * Assistant Principal is a real staff member holding a current-year
+   * `staffPosition`, assigned through `assignPosition`.
+   */
   role: string;
   /**
    * The synthetic NIC the seat's `staff` row carries, from
@@ -319,14 +323,16 @@ const seededStaffId = (accountUsername: string): string =>
  * different reason.
  *
  * **No `staff_position` row, deliberately.** `resolveAuthority`
- * (`leadership-review.ts:175-185`) returns early for a seeded account —
- * `isSeededAccount(username)` plus a `principal` / `vicePrincipal` role —
- * with `staffId: null`, *before* it ever looks up a `staff` row, let alone a
- * position. A position row would therefore be unreachable: the only reader of
- * `staffPosition` in that function is past the early return. And it would look
- * authoritative while doing nothing, which is worse than absent — a future
- * reader would reasonably assume the position was load-bearing. Do not
- * "helpfully" add one. Leave-review authority comes from the seeded role.
+ * (`leadership-review.ts`) returns early, with `staffId: null`, only for the
+ * seeded **Principal** account \u2014 `isSeededAccount(username)` plus a
+ * `principal` role \u2014 before it ever looks up a `staff` row, let alone a
+ * position. There is no equivalent shortcut for Deputy Principal any more:
+ * that authority is **only** ever read from a current-year `staffPosition`
+ * row, which is why there is no seeded deputy-principal account left to seed
+ * one for. A position row on this seat's own `staff` record would therefore
+ * still be unreachable for the Principal (the only reader of `staffPosition`
+ * in that function is past the early return for a seeded Principal) and would
+ * look authoritative while doing nothing. Do not "helpfully" add one.
  *
  * **The `staff` row is never overwritten.** `onConflictDoNothing({ target:
  * staff.userId })`, for the same reason the password is never re-asserted: an
@@ -598,9 +604,15 @@ const ensureInventoryCategories = async (database: Database) => {
 };
 
 /**
- * Bootstraps the admin, Principal, Deputy Principal, Inventory Administrator
- * and Academic Administrator accounts from env, and the inventory register's
- * default categories.
+ * Bootstraps the admin, Principal, Inventory Administrator, Academic
+ * Administrator and Leave Administrator accounts from env, and the inventory
+ * register's default categories.
+ *
+ * There is no seeded Deputy Principal account. A Deputy (or Assistant)
+ * Principal is a real member of staff holding a current-year `vicePrincipal`
+ * or `assistantPrincipal` `staffPosition` row, assigned manually through
+ * `assignPosition` by the Administrator, the Principal, or the Academic
+ * Administrator \u2014 and any number of staff may hold it at once.
  *
  * Runs on every server start, so a missing account is created and a changed
  * role, name or address is restored. It does **not** re-assert a password that
@@ -632,14 +644,6 @@ export const ensureBootstrapUsers = async (
       name: env.PRINCIPAL_NAME || "Principal",
       role: leadershipRoleForPosition(PRINCIPAL_POSITION) ?? "admin",
       placeholderNic: SEEDED_PLACEHOLDER_NIC[PRINCIPAL_USERNAME],
-    }),
-    ensureBootstrapAccount(database, {
-      username: DEPUTY_PRINCIPAL_USERNAME,
-      email: DEPUTY_PRINCIPAL_EMAIL,
-      password: env.DEPUTY_PRINCIPAL_PASSWORD,
-      name: env.DEPUTY_PRINCIPAL_NAME || "Deputy Principal",
-      role: leadershipRoleForPosition(DEPUTY_PRINCIPAL_POSITION) ?? "admin",
-      placeholderNic: SEEDED_PLACEHOLDER_NIC[DEPUTY_PRINCIPAL_USERNAME],
     }),
     ensureBootstrapAccount(database, {
       username: INVENTORY_ADMIN_USERNAME,

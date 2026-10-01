@@ -13,9 +13,9 @@ import {
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 
-import { adminProcedure } from "../../index";
+import { positionManagerProcedure } from "../../index";
 
-export const removePosition = adminProcedure
+export const removePosition = positionManagerProcedure
   .input(v.object({ id: staffPositionIdSchema }))
   .handler(async ({ input, context }) => {
     const [existing] = await context.db
@@ -26,6 +26,16 @@ export const removePosition = adminProcedure
     if (!existing) {
       throw new ORPCError("NOT_FOUND", {
         message: "Position assignment not found",
+      });
+    }
+
+    if (
+      existing.position === "principal" &&
+      context.session.user.role === "academicAdmin"
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Only the Administrator or Principal may remove the Principal position.",
       });
     }
 

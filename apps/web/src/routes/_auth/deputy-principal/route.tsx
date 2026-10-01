@@ -6,10 +6,16 @@ import { redirectToHome } from "@/lib/home-redirect";
 import { isWorkspaceRoot } from "@/lib/year-guard";
 
 /**
- * Deputy Principal workspace shell. Both deputy seats (Vice and Assistant
- * Principal) are seeded with the `vicePrincipal` role, so the guard is a
- * local check — leave-review authority is still resolved separately from
- * the current-year `staff_position` row.
+ * Deputy Principal workspace shell. There is no seeded deputy-principal
+ * login \u2014 both deputy seats (Vice and Assistant Principal) are real staff
+ * members whose `user.role` is promoted to `vicePrincipal` the moment they
+ * are assigned either `staffPosition` (via `assignPosition`, by the
+ * Administrator, the Principal, or the Academic Administrator), and demoted
+ * back when the position is removed \u2014 see `reconcilePositionDerivedRoles`.
+ * So the guard below is a plain role check, and leave-review authority is
+ * still resolved separately, straight from the current-year `staff_position`
+ * row (`resolveAuthority`), which is what lets any number of staff hold the
+ * seat at once.
  */
 export const Route = createFileRoute("/_auth/deputy-principal")({
   component: Outlet,

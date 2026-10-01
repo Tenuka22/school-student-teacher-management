@@ -64,14 +64,11 @@ export {
   purgeUnverifiedAccounts,
   LEADERSHIP_ROLE_BY_POSITION,
   PRINCIPAL_POSITION,
-  DEPUTY_PRINCIPAL_POSITION,
   UNVERIFIED_ACCOUNT_TTL_MS,
   ADMIN_EMAIL,
   PRINCIPAL_EMAIL,
-  DEPUTY_PRINCIPAL_EMAIL,
   ADMIN_USERNAME,
   PRINCIPAL_USERNAME,
-  DEPUTY_PRINCIPAL_USERNAME,
   INVENTORY_ADMIN_EMAIL,
   INVENTORY_ADMIN_USERNAME,
   ACADEMIC_ADMIN_EMAIL,
@@ -96,16 +93,17 @@ export { LEADERSHIP_POSITION_KEYS } from "@school-student-teacher-management/db/
  * Runtime auth configuration.
  *
  * Only passwords and display names live here. The login usernames are fixed
- * constants (`admin`, `principal`, `deputy-principal`) and the seeded accounts
- * have no staff identity, so no NIC is involved — see `./admin`.
+ * constants (`admin`, `principal`, `inventory-admin`, `academic-admin`,
+ * `leave-admin`). There is no seeded Deputy Principal account \u2014 a Deputy
+ * or Assistant Principal is a real staff member holding a current-year
+ * `staffPosition`, assigned manually through `assignPosition` \u2014 see
+ * `./admin`.
  */
 export interface AuthConfig {
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
   PRINCIPAL_PASSWORD: string;
   PRINCIPAL_NAME?: string;
-  DEPUTY_PRINCIPAL_PASSWORD: string;
-  DEPUTY_PRINCIPAL_NAME?: string;
   ADMIN_PASSWORD: string;
   ADMIN_NAME?: string;
   INVENTORY_ADMIN_PASSWORD: string;

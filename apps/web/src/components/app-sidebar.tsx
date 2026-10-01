@@ -473,9 +473,11 @@ const SidebarGroups = ({
 const useSidebarNav = (user: AppSidebarProps["user"]) => {
   // Admins get the full staff-management nav; teachers (and anyone else)
   // get their personal workspace links instead.
-  // Leadership carries its own seeded role (`principal` / `vicePrincipal`)
-  // and is confined to its own workspace, so `isAdmin` here means strictly
-  // the non-leadership admin account — which is no longer the same set as
+  // Leadership carries its own role (`principal`, or `vicePrincipal` for a
+  // real staff member holding a current-year Deputy/Assistant Principal
+  // position \u2014 there is no seeded deputy-principal login) and is confined
+  // to its own workspace, so `isAdmin` here means strictly the non-leadership
+  // admin account \u2014 which is no longer the same set as
   // the academic-year writes: those moved to `adminOrAcademicProcedure`, so
   // the switcher below asks `managesStaff` rather than `isAdmin`.
   // `isAcademicAdmin` is the specialist seat that shares the staff-management
@@ -634,6 +636,18 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
     ...(isPrincipal
       ? [{ title: "Teacher Requests", url: principal("teacher-requests") }]
       : []),
+    // Assigning the Deputy/Assistant Principal `staffPosition` is the
+    // Administrator's, the Academic Administrator's, or the Principal's call
+    // (`positionManagerProcedure`) \u2014 not the sitting Deputy's own, so this
+    // entry is Principal-only, same gate as Teacher Requests above.
+    ...(isPrincipal
+      ? [
+          {
+            title: "Deputy Principals",
+            url: principal("staff", "deputy-principals"),
+          },
+        ]
+      : []),
     { title: "Attendance", url: leadershipLinks.attendance },
   ];
 
@@ -649,6 +663,10 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
       count: badgeCount(classesQuery.data?.length),
     },
     { title: "Period Assignment", url: management("staff", "periods") },
+    {
+      title: "Deputy Principals",
+      url: management("staff", "deputy-principals"),
+    },
     {
       title: "Teacher Timetable",
       url: management("staff", "teacher-timetable"),

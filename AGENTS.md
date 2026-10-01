@@ -176,6 +176,7 @@ apps/web/src/routes/_auth/
 ├── admin/$year/teacher-requests.tsx   # /admin/2026/teacher-requests
 ├── admin/$year/staff/                 # teachers, classes, periods, leaves, attendance,
 │                                      #   teacher-timetable, historical-data, inventory
+│                                      #   deputy-principals
 ├── academic-admin/route.tsx           # role guard: academicAdmin | admin
 ├── academic-admin/$year/route.tsx     # same year guard as the admin tree
 ├── academic-admin/$year/index.tsx     # /academic-admin/2026 — the shared dashboard
@@ -184,6 +185,7 @@ apps/web/src/routes/_auth/
 ├── academic-admin/$year/academic-years.tsx
 ├── academic-admin/$year/staff/        # teachers, classes, periods, attendance, leaves,
 │                                      #   teacher-timetable, historical-data (allowAnyYear);
+│                                      #   deputy-principals
 │                                      #   no leaves.tsx here — moved to leave-admin
 ├── inventory-admin/route.tsx          # role guard: inventoryAdmin | admin
 ├── inventory-admin/$year/route.tsx    # same year guard as the admin tree
@@ -200,7 +202,7 @@ apps/web/src/routes/_auth/
 ├── principal/$year/teacher-requests.tsx
 ├── principal/$year/equipment.tsx      # /principal/2026/equipment — own equipment only
 ├── principal/$year/staff/attendance.tsx
-├── deputy-principal/route.tsx         # role guard: vicePrincipal
+├── deputy-principal/route.tsx         # role guard: vicePrincipal (no seeded account — a real staff member's current-year staffPosition)
 ├── deputy-principal/$year/index.tsx   # /deputy-principal/2026
 ├── deputy-principal/$year/leaves.tsx
 ├── deputy-principal/$year/equipment.tsx

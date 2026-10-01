@@ -34,9 +34,13 @@ export const POSITION_TYPES = {
 export type PositionType = keyof typeof POSITION_TYPES;
 
 /**
- * Positions that carry leave-review authority (and auth role `admin`).
- * A staff member holding any of these gets promoted to `role: "admin"`
- * on assignment and demoted back to `teacher` when the last one is removed.
+ * Positions that carry leave-review authority. A staff member holding any of
+ * these gets promoted to `role: "principal"` or `role: "vicePrincipal"` (see
+ * `leadershipRoleForPosition`) on assignment, and demoted back to `teacher`
+ * when the last one is removed. Any number of staff may hold `vicePrincipal`
+ * or `assistantPrincipal` in the same year \u2014 assigned manually by the
+ * Administrator, the Principal, or the Academic Administrator via
+ * `assignPosition`.
  */
 export const LEADERSHIP_POSITION_KEYS: ReadonlySet<string> = new Set([
   "principal",

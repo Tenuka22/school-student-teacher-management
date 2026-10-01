@@ -161,6 +161,20 @@ const DEPUTY_POSITIONS = new Set(["vicePrincipal", "assistantPrincipal"]);
 /** Position keys that may finalise a leave request. */
 const PRINCIPAL_POSITIONS = new Set(["principal"]);
 
+/**
+ * Who may recommend or finalise leave for this academic year.
+ *
+ * The Principal's seeded institutional login (no `staff` row of its own)
+ * still grants `isPrincipal` directly off its role \u2014 that account has
+ * nowhere else to get it from. **The Deputy Principal has no such
+ * shortcut.** There is no seeded deputy-principal account any more: a
+ * Deputy is a real member of staff holding a current-year `vicePrincipal` or
+ * `assistantPrincipal` `staffPosition` row, assigned by the Administrator,
+ * the Principal, or the Academic Administrator (see `assignPosition`). This
+ * also means any number of staff can hold the position at once \u2014
+ * `isDeputy` is computed per caller from their own position rows, not from a
+ * single global seat.
+ */
 export const resolveAuthority = async (
   db: ApiDatabase,
   userId: string,
@@ -173,14 +187,13 @@ export const resolveAuthority = async (
     .limit(1);
 
   const isSeededLeadership =
-    isSeededAccount(account?.username) &&
-    (account?.role === "principal" || account?.role === "vicePrincipal");
+    isSeededAccount(account?.username) && account?.role === "principal";
 
   if (account && isSeededLeadership) {
     return {
       staffId: null,
-      isDeputy: account.role === "vicePrincipal",
-      isPrincipal: account.role === "principal",
+      isDeputy: false,
+      isPrincipal: true,
     };
   }
 

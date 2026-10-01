@@ -89,12 +89,13 @@ import { eq, sql } from "drizzle-orm";
  * make one already-large script respowsible for two unrelated domains.
  *
  * Run with `bun run seed:full` from the repo root. **This truncates the
- * `user`/`session`/`account` tables too** — every signed-in session is
- * logged out — and then re-seeds the six institutional accounts itself via
+ * `user`/`session`/`account` tables too** \u2014 every signed-in session is
+ * logged out \u2014 and then re-seeds the five institutional accounts itself via
  * `ensureBootstrapUsers`, the same function the web server calls on every
- * boot, so `admin`/`principal`/`deputy-principal`/`inventory-admin`/
- * `academic-admin`/`leave-admin` sign back in with the passwords already in
- * `apps/web/.env`.
+ * boot, so `admin`/`principal`/`inventory-admin`/`academic-admin`/
+ * `leave-admin` sign back in with the passwords already in `apps/web/.env`.
+ * There is no seeded Deputy Principal account \u2014 the demo data below gives
+ * a real staff member the `vicePrincipal` `staffPosition` instead.
  */
 
 config({ path: fileURLToPath(new URL("../apps/web/.env", import.meta.url)) });
@@ -119,8 +120,6 @@ const authConfig = {
   BETTER_AUTH_SECRET: requireEnv("BETTER_AUTH_SECRET"),
   PRINCIPAL_PASSWORD: requireEnv("PRINCIPAL_PASSWORD"),
   PRINCIPAL_NAME: process.env.PRINCIPAL_NAME,
-  DEPUTY_PRINCIPAL_PASSWORD: requireEnv("DEPUTY_PRINCIPAL_PASSWORD"),
-  DEPUTY_PRINCIPAL_NAME: process.env.DEPUTY_PRINCIPAL_NAME,
   ADMIN_PASSWORD: requireEnv("ADMIN_PASSWORD"),
   ADMIN_NAME: process.env.ADMIN_NAME,
   INVENTORY_ADMIN_PASSWORD: requireEnv("INVENTORY_ADMIN_PASSWORD"),
@@ -196,7 +195,7 @@ const wipe = async () => {
 const seedInstitutionalAccounts = async () => {
   await ensureBootstrapUsers(db, authConfig);
   log(
-    "Re-seeded the six institutional accounts (admin, principal, deputy-principal, inventory-admin, academic-admin, leave-admin)"
+    "Re-seeded the five institutional accounts (admin, principal, inventory-admin, academic-admin, leave-admin)"
   );
 };
 
@@ -689,17 +688,24 @@ const run = async () => {
   const shuffled = faker.helpers.shuffle(activeTeachers);
 
   // Leadership/positions, assigned once and held across every year that
-  // teacher is active — a real school does not reshuffle leadership yearly.
-  const [staffVicePrincipal, staffAssistantPrincipal] = shuffled;
-  const sectionalHeads = shuffled.slice(2, 6);
+  // teacher is active \u2014 a real school does not reshuffle leadership yearly.
+  // Two staff hold `vicePrincipal` at once \u2014 Deputy Principal is a position
+  // any number of staff can hold, assigned manually by the Administrator, the
+  // Principal, or the Academic Administrator, not a single seeded seat.
+  const [
+    staffVicePrincipal,
+    staffSecondVicePrincipal,
+    staffAssistantPrincipal,
+  ] = shuffled;
+  const sectionalHeads = shuffled.slice(3, 7);
   const sectionalScopes = [
     "primary",
     "grade6_7",
     "grade8_9",
     "grade10_11",
   ] as const;
-  const departmentHeads = shuffled.slice(6, 10);
-  const plainTeachers = shuffled.slice(10);
+  const departmentHeads = shuffled.slice(7, 11);
+  const plainTeachers = shuffled.slice(11);
 
   const yearContexts: YearContext[] = [];
 
@@ -729,6 +735,15 @@ const run = async () => {
       positionRows.push({
         id: newId(),
         staffId: staffVicePrincipal.id,
+        academicYearId: year.id,
+        position: "vicePrincipal",
+        sectionalScope: null,
+      });
+    }
+    if (staffSecondVicePrincipal) {
+      positionRows.push({
+        id: newId(),
+        staffId: staffSecondVicePrincipal.id,
         academicYearId: year.id,
         position: "vicePrincipal",
         sectionalScope: null,
@@ -810,8 +825,10 @@ const run = async () => {
   // Reconcile role-from-position for the current year, exactly as
   // `setCurrentYear` does, so the staff-position-based Deputy/Assistant
   // Principal's `user.role` matches their seat (distinct from the seeded
-  // `principal`/`deputy-principal` institutional accounts, which stay role
-  // "principal"/"vicePrincipal" by their own seeded role, not by position).
+  // `principal` institutional account, which stays role "principal" by its
+  // own seeded role, not by position \u2014 there is no seeded deputy-principal
+  // account, so every `vicePrincipal`/`assistantPrincipal` role below comes
+  // from this reconciliation).
   await reconcilePositionDerivedRoles(currentYear.id);
   log("Reconciled position-derived roles for the current year");
 

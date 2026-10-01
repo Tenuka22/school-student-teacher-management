@@ -7,7 +7,6 @@ import { toDeviceSessions } from "@/lib/auth-sessions";
 
 const ROLE_HINTS: { match: RegExp; label: string }[] = [
   { match: /^principal$/u, label: "Principal" },
-  { match: /^deputy-principal$/u, label: "Deputy Principal" },
   { match: /^admin$/u, label: "Admin" },
 ];
 

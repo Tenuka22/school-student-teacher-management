@@ -10,9 +10,9 @@ import {
 import { eq } from "drizzle-orm";
 import { pick } from "valibot";
 
-import { adminProcedure } from "../../index";
+import { positionManagerProcedure } from "../../index";
 
-export const assignPosition = adminProcedure
+export const assignPosition = positionManagerProcedure
   .input(
     pick(staffPositionInsertSchema, [
       "staffId",
@@ -22,6 +22,16 @@ export const assignPosition = adminProcedure
     ])
   )
   .handler(async ({ input, context }) => {
+    if (
+      input.position === "principal" &&
+      context.session.user.role === "academicAdmin"
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Only the Administrator or Principal may assign the Principal position.",
+      });
+    }
+
     const id = crypto.randomUUID();
     const [[targetYear], [record]] = await Promise.all([
       context.db

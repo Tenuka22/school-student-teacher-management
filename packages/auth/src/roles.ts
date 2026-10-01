@@ -74,7 +74,6 @@ export const roleLabel = (value: string | null | undefined): string => {
 export const SEEDED_USERNAMES = [
   "admin",
   "principal",
-  "deputy-principal",
   "inventory-admin",
   "academic-admin",
   "leave-admin",

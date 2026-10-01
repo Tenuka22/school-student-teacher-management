@@ -82,13 +82,14 @@ export const adminProcedure = publicProcedure.use(requireRole(...ADMIN_ROLES));
  * The academic desk's procedures: `ADMIN_ROLES` **plus** the seeded
  * `academicAdmin` seat.
  *
- * Leadership keeps every read it had before this tier existed — `ADMIN_ROLES`
- * is a subset — so widening a staff-router procedure from `adminProcedure` to
+ * Leadership keeps every read it had before this tier existed \u2014 `ADMIN_ROLES`
+ * is a subset \u2014 so widening a staff-router procedure from `adminProcedure` to
  * `academicProcedure` grants exactly one new audience and nothing else. What
- * the seat does **not** get is listed by omission: `assignPosition` /
- * `removePosition` stay on `adminProcedure` because they mint the
- * `principal` / `vicePrincipal` role itself, and the `adminOnlyProcedure`
- * family stays above it.
+ * the seat does **not** get is listed by omission: the `adminOnlyProcedure`
+ * family stays above it. `assignPosition`/`removePosition` sit on their own
+ * `positionManagerProcedure` (below) rather than on this tier, because that
+ * one is also open to `principal` \u2014 a seat `academicProcedure` does not name
+ * directly (it inherits it only via `ADMIN_ROLES`).
  */
 export const academicProcedure = publicProcedure.use(
   requireRole(...ADMIN_ROLES, "academicAdmin")
@@ -124,6 +125,25 @@ export const adminOrAcademicProcedure = publicProcedure.use(
  * out.
  */
 export const adminOnlyProcedure = publicProcedure.use(requireRole("admin"));
+
+/**
+ * Assigning or removing a staff member's position for a year \u2014 Deputy or
+ * Assistant Principal, Sectional Head, Head of Department, or plain teacher.
+ * `admin`, `principal`, and the seeded `academicAdmin` seat: a Deputy
+ * Principal is this year's appointment of a real member of staff, not a
+ * login of their own, so handing the position to someone is the academic
+ * desk's or the Principal's call to make, not only the top administrator's.
+ *
+ * `vicePrincipal` is deliberately absent \u2014 a sitting Deputy Principal does
+ * not get to appoint (or remove) another one, or themselves. Assigning the
+ * `principal` position itself is narrower still: `assign-position.ts` and
+ * `remove-position.ts` refuse it from `academicAdmin` in the handler, since
+ * handing someone the Principal's own seat is not the academic desk's
+ * decision to make about the person it reports to.
+ */
+export const positionManagerProcedure = publicProcedure.use(
+  requireRole("admin", "principal", "academicAdmin")
+);
 
 export const teacherProcedure = publicProcedure.use(
   requireRole(...ADMIN_ROLES, "teacher")
