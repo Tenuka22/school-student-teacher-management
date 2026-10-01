@@ -4,7 +4,6 @@
    and every row needs an id generated after the row it depends on has
    actually landed. `Promise.all`-ing these would race inserts against their
    own foreign keys; the loops are sequential on purpose, not by omission. */
-import { fileURLToPath } from "node:url";
 
 import { faker } from "@faker-js/faker";
 import {
@@ -23,6 +22,7 @@ import {
   resolveEntries,
 } from "@school-student-teacher-management/db/constants/structureVersions/index";
 import type { StructureVersionEntry } from "@school-student-teacher-management/db/constants/structureVersions/index";
+import { assertCalendarDate } from "@school-student-teacher-management/db/dates";
 import { CODE_DEFINED_PERIODS } from "@school-student-teacher-management/db/periods";
 import {
   class_,
@@ -63,7 +63,6 @@ import {
   staffPosition,
 } from "@school-student-teacher-management/db/schema/staff";
 import { teacherSubjectAssignment } from "@school-student-teacher-management/db/schema/teacher-subjects";
-import { config } from "dotenv";
 import { eq, sql } from "drizzle-orm";
 
 /**
@@ -97,8 +96,6 @@ import { eq, sql } from "drizzle-orm";
  * There is no seeded Deputy Principal account \u2014 the demo data below gives
  * a real staff member the `vicePrincipal` `staffPosition` instead.
  */
-
-config({ path: fileURLToPath(new URL("../apps/web/.env", import.meta.url)) });
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -181,7 +178,30 @@ const TABLES_TO_WIPE = [
   "user",
 ] as const;
 
+/**
+ * The wipe below erases every account and record in the target database, so
+ * it runs only when the operator has named that database explicitly:
+ * `CONFIRM_RESET_DATABASE=<database name> bun run seed:full`. A stale or
+ * mistyped `DATABASE_URL` in `.env` used to be all it took to empty a live
+ * school (forensic repair NEW-F-03). Never under `NODE_ENV=production`.
+ */
+const assertResetConfirmed = async () => {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Refusing to reset a database with NODE_ENV=production");
+  }
+  const result = await db.execute(sql`select current_database() as name`);
+  const target = String(
+    (result.rows[0] as { name?: unknown } | undefined)?.name ?? ""
+  );
+  if (process.env.CONFIRM_RESET_DATABASE !== target) {
+    throw new Error(
+      `seed:full TRUNCATEs every table (accounts included) in database "${target}". Re-run with CONFIRM_RESET_DATABASE=${target} to confirm.`
+    );
+  }
+};
+
 const wipe = async () => {
+  await assertResetConfirmed();
   await db.execute(
     sql.raw(
       `TRUNCATE TABLE ${TABLES_TO_WIPE.map((t) => `"${t}"`).join(", ")} CASCADE;`
@@ -620,13 +640,22 @@ const loadGradeSubjects = async (
   return byGrade;
 };
 
-/** Inclusive [start, end] ISO date pair, `days` long from `start`. */
+/**
+ * Inclusive [start, end] ISO date pair, `days` long from `start`.
+ *
+ * All in UTC, and `start` must be a real `YYYY-MM-DD`: this used to add days
+ * with local-time `setDate` and read them back with UTC `toISOString` (a day
+ * off west of UTC), and was called with an unpadded `2024-01-6`, which sorts
+ * after `2024-01-09` as text — the `leave_request_date_order` CHECK caught it.
+ */
 const dayRange = (start: string, days: number): [string, string] => {
-  const startDate = new Date(start);
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + days - 1);
+  assertCalendarDate(start);
+  const endDate = new Date(`${start}T00:00:00.000Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + days - 1);
   return [start, endDate.toISOString().slice(0, 10)];
 };
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
 
 const isWeekday = (d: Date) => d.getDay() !== 0 && d.getDay() !== 6;
 
@@ -1248,7 +1277,7 @@ const run = async () => {
     // exactly `DEFAULT_LEAVE_ENTITLEMENTS`'s casual maxDays.
     if (t0) {
       for (let block = 0; block < 4; block += 1) {
-        const [s, e] = dayRange(`${y}-01-${6 + block * 7}`, 5);
+        const [s, e] = dayRange(`${y}-01-${pad2(6 + block * 7)}`, 5);
         await insertLeave({
           staffId: t0.id,
           academicYearId: ctx.year.id,
@@ -1852,13 +1881,23 @@ const run = async () => {
           toStatus: def.status,
           changedByStaffId: disposalStaff.id,
         });
+        // A finalised write-off removes the unit from stock and records the
+        // counter it actually moved, as `finalizeDisposal` does. This used to
+        // write a hard-coded 1 -> 0 ledger row and leave `qty` untouched, so
+        // every disposed item disagreed with its own ledger (NEW-F-06).
+        const [afterDisposal] = await db
+          .update(inventoryItem)
+          .set({ qty: sql`${inventoryItem.qty} - 1` })
+          .where(eq(inventoryItem.id, item.id))
+          .returning({ qty: inventoryItem.qty });
+        const qtyAfter = afterDisposal?.qty ?? 0;
         await db.insert(inventoryTransaction).values({
           id: newId(),
           actorStaffId: disposalStaff.id,
           action: "disposal_finalized",
           itemId: item.id,
-          qtyBefore: 1,
-          qtyAfter: 0,
+          qtyBefore: qtyAfter + 1,
+          qtyAfter,
           meta: { actorName: disposalStaff.name, disposalId },
         });
       }

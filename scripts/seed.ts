@@ -1,11 +1,12 @@
-import { fileURLToPath } from "node:url";
-
+import { insertInventoryTransaction } from "@school-student-teacher-management/api/routers/inventory/inventory-database";
+import { openAcademicYear } from "@school-student-teacher-management/api/routers/staff/create-academic-year";
 import { createStaffCredential } from "@school-student-teacher-management/auth";
 import { createDb } from "@school-student-teacher-management/db";
 import {
   DEFAULT_INVENTORY_CATEGORIES,
   normalizeInventoryKey,
 } from "@school-student-teacher-management/db/constants/inventory";
+import { LATEST_STRUCTURE_VERSION_KEY } from "@school-student-teacher-management/db/constants/structureVersions/index";
 import {
   inventoryCategory,
   inventoryCustodyHistory,
@@ -26,15 +27,21 @@ import {
  * never duplicates a category, an account, or an item line. Safe to re-run
  * after a fresh `db:migrate`.
  *
- * Run with `bun run seed` from the repo root. Loads `apps/web/.env` directly
- * — the same file `apps/web`'s own dev server and drizzle scripts read —
- * because `varlock/auto-load`'s cwd-relative discovery only finds a package's
- * own `.env`, and this script's package is the repo root, which has none.
+ * Run with `bun run seed` from the repo root, which passes
+ * `--env-file=apps/web/.env`. CI runs `bun scripts/seed.ts` with
+ * `DATABASE_URL` set directly. (This used to import `dotenv`, which no
+ * package declared — it only resolved because something else pulled it in.)
+ *
+ * **Refuses to run with `NODE_ENV=production`**: it creates logins with a
+ * published demo password.
  */
-import { config } from "dotenv";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
-config({ path: fileURLToPath(new URL("../apps/web/.env", import.meta.url)) });
+if (process.env.NODE_ENV === "production") {
+  throw new Error(
+    "Refusing to seed demo data with NODE_ENV=production: the demo teachers share a published password"
+  );
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -49,12 +56,25 @@ const log = (line: string) => {
 
 // ─── Academic year ──────────────────────────────────────────────────────────
 
+/**
+ * Opens the current calendar year through `openAcademicYear` — the same code
+ * the academic-years page runs — so the year arrives with its attendance
+ * policy, leave quotas and curriculum. The old seed inserted a bare
+ * `academic_year` row marked current, which broke attendance and leave
+ * review, and created a second current year on a database that had one.
+ * `openAcademicYear` makes the new year current only if no year is.
+ */
 const seedAcademicYear = async () => {
   const currentCalendarYear = new Date().getFullYear();
   const [existing] = await db
     .select({ id: academicYear.id })
     .from(academicYear)
-    .where(eq(academicYear.year, currentCalendarYear))
+    .where(
+      and(
+        eq(academicYear.year, currentCalendarYear),
+        isNull(academicYear.deletedAt)
+      )
+    )
     .limit(1);
 
   if (existing) {
@@ -62,14 +82,15 @@ const seedAcademicYear = async () => {
     return;
   }
 
-  await db.insert(academicYear).values({
-    id: crypto.randomUUID(),
+  const created = await openAcademicYear(db, {
     year: currentCalendarYear,
     startDate: `${currentCalendarYear}-01-01`,
     endDate: `${currentCalendarYear}-12-31`,
-    isCurrent: true,
+    structureVersionKey: LATEST_STRUCTURE_VERSION_KEY,
   });
-  log(`Created academic year ${currentCalendarYear}`);
+  log(
+    `Created academic year ${currentCalendarYear}${created.isCurrent ? " (current)" : " (not current: another year already is)"}`
+  );
 };
 
 // ─── Categories ─────────────────────────────────────────────────────────────
@@ -149,27 +170,31 @@ const seedTeacher = async (demo: DemoTeacher): Promise<string> => {
     return existingStaff.id;
   }
 
-  const { userId, username } = await createStaffCredential(db, {
-    nic: demo.nic,
-    password: demo.password,
-    name: demo.name,
-    email: demo.email,
-    role: "teacher",
-    emailVerified: true,
-  });
-
-  const [createdStaff] = await db
-    .insert(staff)
-    .values({
-      id: crypto.randomUUID(),
+  // Login and staff row together: a failure between them used to leave a
+  // login holding the NIC, which made every later run fail on it.
+  const { username, createdStaff } = await db.transaction(async (tx) => {
+    const credential = await createStaffCredential(tx, {
+      nic: demo.nic,
+      password: demo.password,
       name: demo.name,
       email: demo.email,
-      nic: demo.nic,
-      userId,
-      staffCategory: "teacher",
-      employmentStatus: "active",
-    })
-    .returning({ id: staff.id });
+      role: "teacher",
+      emailVerified: true,
+    });
+    const [row] = await tx
+      .insert(staff)
+      .values({
+        id: crypto.randomUUID(),
+        name: demo.name,
+        email: demo.email,
+        nic: demo.nic,
+        userId: credential.userId,
+        staffCategory: "teacher",
+        employmentStatus: "active",
+      })
+      .returning({ id: staff.id });
+    return { username: credential.username, createdStaff: row };
+  });
 
   if (!createdStaff) {
     throw new Error(`Failed to create staff row for ${demo.name}`);
@@ -190,6 +215,16 @@ const seedTeacher = async (demo: DemoTeacher): Promise<string> => {
  * what makes `custody.transfer`/`custody.take` testable without registering an
  * item by hand first.
  */
+/**
+ * Seeded stock is ledgered like stock entered through the app: every item gets
+ * its opening `created` row, so `scripts/reconcile-inventory.ts` holds from the
+ * first run. It used to insert the items alone, leaving a register whose
+ * counters no ledger explained (forensic repair NEW-F-06). Attributed to the
+ * demo teacher who holds the items: the seeded seats exist only once the app
+ * has booted, and the seed must work on a database that never has.
+ */
+const SEED_ACTOR_NAME = "Demo seed";
+
 const seedEquipment = async (
   cameraCategoryId: string,
   chairCategoryId: string,
@@ -205,28 +240,38 @@ const seedEquipment = async (
     log("Digital Camera (INV-90001) already seeded");
   } else {
     const itemId = crypto.randomUUID();
-    await db.insert(inventoryItem).values({
-      id: itemId,
-      sku: "INV-90001",
-      categoryId: cameraCategoryId,
-      name: "Digital Camera",
-      description: "DSLR camera, kept in the AV cupboard",
-      unit: "unit",
-      qty: 1,
-      borrowable: true,
-      condition: "Good",
-      managerStaffId: custodianStaffId,
-      custodianStaffId,
-    });
-    await db.insert(inventoryCustodyHistory).values({
-      id: crypto.randomUUID(),
-      itemId,
-      previousCustodianStaffId: null,
-      newCustodianStaffId: custodianStaffId,
-      previousManagerStaffId: null,
-      newManagerStaffId: null,
-      changeType: "custody_taken",
-      changedByStaffId: custodianStaffId,
+    await db.transaction(async (tx) => {
+      await tx.insert(inventoryItem).values({
+        id: itemId,
+        sku: "INV-90001",
+        categoryId: cameraCategoryId,
+        name: "Digital Camera",
+        description: "DSLR camera, kept in the AV cupboard",
+        unit: "unit",
+        qty: 1,
+        borrowable: true,
+        condition: "Good",
+        managerStaffId: custodianStaffId,
+        custodianStaffId,
+      });
+      await tx.insert(inventoryCustodyHistory).values({
+        id: crypto.randomUUID(),
+        itemId,
+        previousCustodianStaffId: null,
+        newCustodianStaffId: custodianStaffId,
+        previousManagerStaffId: null,
+        newManagerStaffId: null,
+        changeType: "custody_taken",
+        changedByStaffId: custodianStaffId,
+      });
+      await insertInventoryTransaction(tx, {
+        actor: { staffId: custodianStaffId, name: SEED_ACTOR_NAME },
+        action: "created",
+        item: { id: itemId, name: "Digital Camera", sku: "INV-90001" },
+        before: { qty: 0 },
+        after: { qty: 1 },
+        note: "Item created (demo seed)",
+      });
     });
     log("Created Digital Camera (INV-90001), held by the first demo teacher");
   }
@@ -240,18 +285,29 @@ const seedEquipment = async (
   if (existingChairs) {
     log("Office Chair (INV-90002) already seeded");
   } else {
-    await db.insert(inventoryItem).values({
-      id: crypto.randomUUID(),
-      sku: "INV-90002",
-      categoryId: chairCategoryId,
-      name: "Office Chair",
-      description: "Standard staff-room chair",
-      unit: "unit",
-      qty: 20,
-      borrowable: false,
-      condition: "Good",
-      managerStaffId: custodianStaffId,
-      custodianStaffId,
+    const chairsId = crypto.randomUUID();
+    await db.transaction(async (tx) => {
+      await tx.insert(inventoryItem).values({
+        id: chairsId,
+        sku: "INV-90002",
+        categoryId: chairCategoryId,
+        name: "Office Chair",
+        description: "Standard staff-room chair",
+        unit: "unit",
+        qty: 20,
+        borrowable: false,
+        condition: "Good",
+        managerStaffId: custodianStaffId,
+        custodianStaffId,
+      });
+      await insertInventoryTransaction(tx, {
+        actor: { staffId: custodianStaffId, name: SEED_ACTOR_NAME },
+        action: "created",
+        item: { id: chairsId, name: "Office Chair", sku: "INV-90002" },
+        before: { qty: 0 },
+        after: { qty: 20 },
+        note: "Item created (demo seed)",
+      });
     });
     log("Created Office Chair (INV-90002), a bulk-counted line of 20");
   }
@@ -284,10 +340,9 @@ const run = async () => {
     )
     .limit(1);
 
-  const [teacherOneId, teacherTwoId] = await Promise.all([
-    seedTeacher(demoTeacherOne),
-    seedTeacher(demoTeacherTwo),
-  ]);
+  // Sequential, so the log and any failure are in a deterministic order.
+  const teacherOneId = await seedTeacher(demoTeacherOne);
+  const teacherTwoId = await seedTeacher(demoTeacherTwo);
 
   if (audioVisual && furniture) {
     await seedEquipment(audioVisual.id, furniture.id, teacherOneId);
