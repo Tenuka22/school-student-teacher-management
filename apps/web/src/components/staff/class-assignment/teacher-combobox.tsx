@@ -65,12 +65,33 @@ export const TeacherCombobox = ({
     [staffList, value]
   );
 
+  /**
+   * Only a keystroke re-queries the server. Picking a name also fires
+   * `onInputValueChange` \u2014 Base UI fills the box with the selected name on
+   * selection, same as typing a character would \u2014 and forwarding that
+   * straight to `setQuery` restarted the 250 ms debounce. For the gap between
+   * the restart and the new response, `staffList` had no previous-data
+   * fallback, so it went briefly empty and the row just clicked dropped out
+   * of `selected`, flashing the box back to blank before the fresh response
+   * (matching the same name) put it back. `reason` is Base UI's own record of
+   * *why* the box changed; `"item-press"` is the one value that means a row
+   * was picked rather than typed, so it is the one excluded from re-querying.
+   */
+  const handleInputValueChange = (
+    next: string,
+    eventDetails: { reason: string }
+  ) => {
+    if (eventDetails.reason !== "item-press") {
+      setQuery(next);
+    }
+  };
+
   return (
     <Combobox<Staff>
       items={staffList}
       value={selected}
       onValueChange={(item) => onValueChange(item?.id ?? "")}
-      onInputValueChange={setQuery}
+      onInputValueChange={handleInputValueChange}
       itemToStringLabel={(item) => item?.name ?? ""}
       isItemEqualToValue={(a, b) => a?.id === b?.id}
       filter={null}

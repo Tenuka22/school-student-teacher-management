@@ -1,27 +1,26 @@
-import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { files } from "@school-student-teacher-management/db/schema/files";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ENV } from "@/env.server";
 import {
   checkDeclaredLength,
   normaliseUploadedImage,
 } from "@/lib/image-upload";
-import { auth, db, storage } from "@/services.server";
+import { auth, db } from "@/services.server";
 
 /**
  * Item-photo upload: the storage half of `inventoryItem.imageFileId`, which
  * has existed on the schema since the table was designed and had no writer
  * until this route.
  *
- * **MinIO, addressed through the S3 API, not the app server's own disk.**
- * `files.key` is documented as "MinIO object key" — this route is what makes
- * that true rather than aspirational. The object goes to the bucket named by
- * `MINIO_BUCKET`; nothing about the bucket is made public, because a public
- * bucket lets anyone who has ever seen a key read that photo forever, long
- * after the item is retired. Every reader gets the photo back through
- * `/api/files/$fileId` (`files.$fileId.ts`), which checks the caller's
- * session and hands out a short-lived presigned URL instead.
+ * **The bytes live in the `files.data` column, not an object store.** An
+ * earlier version of this route wrote to MinIO over the S3 API; that meant a
+ * second service to run, back up and keep reachable for what is, after the
+ * re-encode below, a handful of tens-of-kilobyte rows — small enough that
+ * Postgres itself (already the system of record for everything else here)
+ * is the simpler place to keep them. Nothing about a row is public: every
+ * reader gets the photo back through `/api/files/$fileId`
+ * (`files.$fileId.ts`), which checks the caller's session before it streams
+ * the bytes back.
  *
  * **Every accepted image is re-encoded to WebP, cropped to a 1:1 square, and
  * capped at `MAX_DIMENSION` — not a pass-through, and not optional.** The
@@ -103,23 +102,13 @@ const handleUpload = async ({ request }: { request: Request }) => {
   const webpBytes = result.webp;
 
   const id = crypto.randomUUID();
-  const objectKey = `inventory/${id}.webp`;
-
-  await storage.send(
-    new PutObjectCommand({
-      Bucket: ENV.MINIO_BUCKET,
-      Key: objectKey,
-      Body: webpBytes,
-      ContentType: "image/webp",
-    })
-  );
 
   await db.insert(files).values({
     id,
     name: file.name,
     size: webpBytes.length,
     type: "image/webp",
-    key: objectKey,
+    data: webpBytes,
     userId: session.user.id,
   });
 

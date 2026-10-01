@@ -401,6 +401,32 @@ export const StaffComboboxField: React.FC<{
     refetch();
   }, [refetch]);
 
+  /**
+   * Only a keystroke re-queries the server. Picking a name also fires
+   * `onInputValueChange` — Base UI fills the box with `itemToStringLabel(item)`
+   * on selection, same as typing a character would — and forwarding that
+   * straight to `setQuery` restarted the 250 ms debounce on the server list.
+   * For the ~250 ms between the restart and the new response landing,
+   * `query.data` has no previous-data fallback, so `options` went briefly
+   * empty and the row the reader had just clicked fell out of it, surfacing
+   * "Chosen — not on this page of names" on a perfectly valid selection
+   * before the fresh response (matching the same person by name) put it
+   * back. `reason` is Base UI's own record of *why* the box changed, and
+   * `"item-press"` is the one value that means the box text changed because a
+   * row was picked, not because anybody typed. Typing, pasting and clearing
+   * the box all still reach `setQuery` as before — only the one reason that
+   * fills the box with a value already known to be valid is excluded. Same
+   * fix as `item-picker.tsx`'s `handleInputValueChange`.
+   */
+  const handleInputValueChange = useCallback(
+    (next: string, eventDetails: { reason: string }) => {
+      if (eventDetails.reason !== "item-press") {
+        setQuery(next);
+      }
+    },
+    [setQuery]
+  );
+
   return (
     <Field data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
@@ -408,7 +434,7 @@ export const StaffComboboxField: React.FC<{
         items={items}
         value={chosen}
         onValueChange={(item) => onChange(item?.id ?? null)}
-        onInputValueChange={setQuery}
+        onInputValueChange={handleInputValueChange}
         itemToStringLabel={(item) => item?.name ?? ""}
         isItemEqualToValue={(a, b) => a?.id === b?.id}
         /*

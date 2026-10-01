@@ -1,24 +1,24 @@
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { files } from "@school-student-teacher-management/db/schema/files";
 import { createFileRoute } from "@tanstack/react-router";
 import { eq } from "drizzle-orm";
 
-import { ENV } from "@/env.server";
-import { auth, db, storage } from "@/services.server";
+import { auth, db } from "@/services.server";
 
 /**
  * The read half of `files.upload.ts` — every `imageUrl` this app hands to an
- * `<img src>` is a URL under this route, never a raw MinIO address.
+ * `<img src>` is a URL under this route, never a raw database row.
  *
- * **The bucket is private, on purpose (see `files.upload.ts`'s own
- * comment), so nothing can fetch an object straight from MinIO.** This route
- * is what stands between a stored object and a browser: it checks the caller
- * has a session at all, then mints a presigned `GetObject` URL good for
- * `PRESIGN_TTL_SECONDS` and redirects to it. The redirect is 302 rather than
- * 301 for the reason it always is for a link whose target rotates on every
- * request — a client or proxy that cached a 301 would keep replaying a
- * presigned URL whose signature has since expired.
+ * **Nothing about a row is public**, so this route is what stands between a
+ * stored photo and a browser: it checks the caller has a session at all, then
+ * hands the `files.data` bytes straight back. An earlier version of this
+ * route fetched an object from MinIO first (and, before that, redirected to
+ * a presigned MinIO URL); both put a second network hop and a second service
+ * between the request and the answer for what `files.upload.ts` now writes as
+ * a plain row. Reading it back is one query.
+ *
+ * `Cache-Control: private, max-age=...` rather than public: the response is
+ * gated on the caller's own session, so a shared cache must not serve one
+ * reader's fetch to the next request that happens to reuse the same path.
  *
  * **Gated on "signed in", not on the two roles that may upload.** Uploading a
  * photo is a write with a blast radius — it changes what every reader of the
@@ -28,7 +28,8 @@ import { auth, db, storage } from "@/services.server";
  * render, and narrowing this route to the upload roles would blank every
  * other reader's item dialog.
  */
-const PRESIGN_TTL_SECONDS = 300;
+/** How long a browser or intermediate cache may keep a fetched photo. */
+const CACHE_MAX_AGE_SECONDS = 300;
 
 const handleGet = async ({
   request,
@@ -44,7 +45,7 @@ const handleGet = async ({
   }
 
   const [row] = await db
-    .select({ key: files.key, type: files.type })
+    .select({ data: files.data, type: files.type })
     .from(files)
     .where(eq(files.id, params.fileId))
     .limit(1);
@@ -53,17 +54,12 @@ const handleGet = async ({
     return new Response("Not found", { status: 404 });
   }
 
-  const url = await getSignedUrl(
-    storage,
-    new GetObjectCommand({
-      Bucket: ENV.MINIO_BUCKET,
-      Key: row.key,
-      ResponseContentType: row.type,
-    }),
-    { expiresIn: PRESIGN_TTL_SECONDS }
-  );
-
-  return Response.redirect(url, 302);
+  return new Response(new Uint8Array(row.data), {
+    headers: {
+      "Content-Type": row.type,
+      "Cache-Control": `private, max-age=${CACHE_MAX_AGE_SECONDS}`,
+    },
+  });
 };
 
 export const Route = createFileRoute("/api/files/$fileId")({
