@@ -1,3 +1,4 @@
+import { schoolToday } from "@school-student-teacher-management/db/dates";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
@@ -77,12 +78,8 @@ const quickActions: { label: string; to: InventoryPath }[] = [
  * reachable from here, and one round trip to learn today's date is not worth a
  * tile.
  */
-const monthStartIsoDate = (): string => {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-    .toISOString()
-    .slice(0, 10);
-};
+// The school's month (Asia/Colombo), the same calendar the server uses (F-20).
+const monthStartIsoDate = (): string => `${schoolToday().slice(0, 7)}-01`;
 
 const useInventoryDashboardData = () => {
   /**

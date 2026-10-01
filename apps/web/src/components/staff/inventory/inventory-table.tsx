@@ -665,6 +665,59 @@ const useSortedRows = (
   }, [items, recentWrite, sort]);
 
 /**
+ * The header checkbox's two states, which are two questions and not one.
+ *
+ * `allSelected` is "every selectable row on this page is ticked", so it is false
+ * on an empty page rather than vacuously true — a select-all that reads as checked
+ * with nothing to check is a control claiming to have done something. `indeterminate`
+ * is "some but not all", and it is the state a reader needs: it is what tells
+ * them their next click will tick the rest rather than clear the lot.
+ */
+const headerSelection = (
+  selectableIds: readonly string[],
+  selectedIds: ReadonlySet<string>
+) => {
+  const allSelected =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedIds.has(id));
+  const someSelected =
+    !allSelected && selectableIds.some((id) => selectedIds.has(id));
+  return { allSelected, someSelected };
+};
+
+/**
+ * The register's column sort: ascending, descending, then back to the
+ * server's own order. Lifted out of `InventoryTable` unchanged, to keep that
+ * component under the size limit.
+ */
+const useColumnSort = () => {
+  const [sort, setSort] = useState<SortState | null>(null);
+
+  const toggleSort = useCallback((key: SortKey) => {
+    setSort((previous) => {
+      if (previous?.key !== key) {
+        // First click on a column is ascending, which is what "sort by name"
+        // means to the person who clicked it. For `availableQty` it is
+        // deliberate too: the empty end of the column is the interesting end.
+        return { key, direction: "asc" };
+      }
+
+      if (previous.direction === "asc") {
+        return { key, direction: "desc" };
+      }
+
+      // Third click hands the ordering back to the server, which is a real
+      // third state rather than a repeat of ascending: the register's natural
+      // order is newest-first and there is no reason to make the user
+      // re-derive it.
+      return null;
+    });
+  }, []);
+
+  return { sort, toggleSort };
+};
+
+/**
  * The register, as a table.
  *
  * ## The four states, and the one that is dangerous
@@ -746,28 +799,7 @@ export const InventoryTable = ({
   onToggleSelect,
   onToggleSelectAll,
 }: InventoryTableProps) => {
-  const [sort, setSort] = useState<SortState | null>(null);
-
-  const toggleSort = useCallback((key: SortKey) => {
-    setSort((previous) => {
-      if (previous?.key !== key) {
-        // First click on a column is ascending, which is what "sort by name"
-        // means to the person who clicked it. For `availableQty` it is
-        // deliberate too: the empty end of the column is the interesting end.
-        return { key, direction: "asc" };
-      }
-
-      if (previous.direction === "asc") {
-        return { key, direction: "desc" };
-      }
-
-      // Third click hands the ordering back to the server, which is a real
-      // third state rather than a repeat of ascending: the register's natural
-      // order is newest-first and there is no reason to make the user
-      // re-derive it.
-      return null;
-    });
-  }, []);
+  const { sort, toggleSort } = useColumnSort();
 
   const dialogs = useRegisterDialogs({
     onRetireItem,
@@ -817,20 +849,10 @@ export const InventoryTable = ({
     isTruncated,
   });
 
-  /**
-   * The header checkbox's two states, which are two questions and not one.
-   *
-   * `allSelected` is "every selectable row on this page is ticked", so it is false
-   * on an empty page rather than vacuously true — a select-all that reads as checked
-   * with nothing to check is a control claiming to have done something. `indeterminate`
-   * is "some but not all", and it is the state a reader needs: it is what tells
-   * them their next click will tick the rest rather than clear the lot.
-   */
-  const allSelected =
-    selectableIds.length > 0 &&
-    selectableIds.every((id) => selectedIds.has(id));
-  const someSelected =
-    !allSelected && selectableIds.some((id) => selectedIds.has(id));
+  const { allSelected, someSelected } = headerSelection(
+    selectableIds,
+    selectedIds
+  );
 
   /**
    * The row menu's four dialogs, addressed by name.
