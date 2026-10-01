@@ -20,6 +20,8 @@ services:
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_USE_SSL: "false"
+      # The server clock must not depend on the host (see apps/web/Dockerfile).
+      TZ: UTC
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,8 +50,11 @@ services:
       POSTGRES_DB: school-student-teacher-management
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    # Published on the loopback interface only. It used to listen on every
+    # interface with the default password `password` (audit F-28); set
+    # POSTGRES_PASSWORD for anything but a single developer's machine.
     ports:
-      - "3000:5432"
+      - "127.0.0.1:3000:5432"
     volumes:
       - school-student-teacher-management_postgres_data:/var/lib/postgresql
     healthcheck:
@@ -70,9 +75,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    # Loopback only, like postgres: the app reaches MinIO over the compose
+    # network, and nobody else needs to.
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - school-student-teacher-management_minio_data:/data
     healthcheck:
