@@ -4,7 +4,7 @@ import {
   user,
 } from "@school-student-teacher-management/db/schema/auth";
 import { staff } from "@school-student-teacher-management/db/schema/staff";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
 
 import { academicProcedure } from "../../index";
@@ -224,22 +224,31 @@ export const approveTeacherRequest = academicProcedure
       });
     }
 
-    if (linkedStaff.employmentStatus !== "active") {
-      await context.db
-        .update(staff)
-        .set({ employmentStatus: "active" })
-        .where(eq(staff.id, linkedStaff.id));
-    }
+    // Activation and promotion together (F-17): an active staff record whose
+    // login was never promoted stayed stuck on the pending-approval page.
+    // The promotion is conditional, so two approvers clicking at once — or
+    // an approval racing a role change — produce one transition, not two.
+    const updated = await context.db.transaction(async (tx) => {
+      if (linkedStaff.employmentStatus !== "active") {
+        await tx
+          .update(staff)
+          .set({ employmentStatus: "active" })
+          .where(eq(staff.id, linkedStaff.id));
+      }
 
-    const [updated] = await context.db
-      .update(user)
-      .set({ role: "teacher" })
-      .where(eq(user.id, target.id))
-      .returning({ id: user.id, role: user.role });
+      const [promoted] = await tx
+        .update(user)
+        .set({ role: "teacher" })
+        .where(and(eq(user.id, target.id), eq(user.role, "teacher-requester")))
+        .returning({ id: user.id, role: user.role });
 
-    if (!updated) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
-    }
+      if (!promoted) {
+        throw new ORPCError("CONFLICT", {
+          message: "That account was approved or changed a moment ago",
+        });
+      }
+      return promoted;
+    });
 
     return { id: updated.id, role: updated.role };
   });

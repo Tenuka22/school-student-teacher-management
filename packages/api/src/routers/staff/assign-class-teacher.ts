@@ -85,28 +85,49 @@ export const assignClassTeacher = requireAssignmentPermission("update")
       });
     }
 
-    const [record] = await context.db
-      .update(class_)
-      .set({ homeroomTeacherId: newTeacherId })
-      .where(eq(class_.id, input.classId))
-      .returning();
+    // The pointer and its history row together, against a locked class row
+    // (F-17). Two writes used to leave a changed homeroom with no audit row
+    // (or the reverse), and two concurrent reassignments both recorded the
+    // same "previous teacher". If the homeroom moved since it was read above,
+    // the change is refused rather than recorded against a stale predecessor.
+    const record = await context.db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select({ homeroomTeacherId: class_.homeroomTeacherId })
+        .from(class_)
+        .where(eq(class_.id, input.classId))
+        .for("update");
 
-    if (!record) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
-    }
+      if ((locked?.homeroomTeacherId ?? null) !== previousTeacherId) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "This class's homeroom teacher was changed a moment ago — reload and try again",
+        });
+      }
 
-    if (changeType) {
-      await context.db.insert(classTeacherAssignmentHistory).values({
-        id: crypto.randomUUID(),
-        classId: record.id,
-        academicYearId: record.academicYearId,
-        previousTeacherId,
-        newTeacherId,
-        changeType,
-        reason: input.reason ?? null,
-        note: input.note ?? null,
-      });
-    }
+      const [updated] = await tx
+        .update(class_)
+        .set({ homeroomTeacherId: newTeacherId })
+        .where(eq(class_.id, input.classId))
+        .returning();
+
+      if (!updated) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      if (changeType) {
+        await tx.insert(classTeacherAssignmentHistory).values({
+          id: crypto.randomUUID(),
+          classId: updated.id,
+          academicYearId: updated.academicYearId,
+          previousTeacherId,
+          newTeacherId,
+          changeType,
+          reason: input.reason ?? null,
+          note: input.note ?? null,
+        });
+      }
+      return updated;
+    });
 
     return {
       id: record.id,

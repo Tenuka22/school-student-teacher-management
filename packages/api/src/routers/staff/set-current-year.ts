@@ -9,150 +9,222 @@ import {
   staff,
   staffPosition,
 } from "@school-student-teacher-management/db/schema/staff";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 
 import { adminOrAcademicProcedure } from "../../index";
 
+/** Anything that can run a query: the pool or an open transaction. */
+type Executor = Pick<Database, "select" | "update" | "execute">;
+
 /** When a person holds more than one seat, the senior one describes them. */
 const LEADERSHIP_PRECEDENCE = ["principal", "vicePrincipal"] as const;
+type LeadershipRole = (typeof LEADERSHIP_PRECEDENCE)[number];
 
 /**
- * Recomputes position-derived roles so they match one academic year.
+ * The roles that follow a year's positions. Every other role is an office or
+ * a seat — `admin`, the three specialist administrators, `teacher-requester` —
+ * and is never rewritten here.
+ */
+const POSITION_DERIVED_ROLES: readonly string[] = LEADERSHIP_PRECEDENCE;
+
+/**
+ * Serializes year switches. `pg_advisory_xact_lock` is held until the switch's
+ * transaction ends, so a second administrator's switch waits and then runs
+ * against the committed state instead of interleaving with the first.
+ */
+const YEAR_SWITCH_LOCK = 734_119_001;
+
+const senior = (
+  current: LeadershipRole | null,
+  candidate: LeadershipRole | null
+): LeadershipRole | null => {
+  if (!candidate) {
+    return current;
+  }
+  if (!current) {
+    return candidate;
+  }
+  return LEADERSHIP_PRECEDENCE.indexOf(candidate) <
+    LEADERSHIP_PRECEDENCE.indexOf(current)
+    ? candidate
+    : current;
+};
+
+/**
+ * Makes every position-derived role match the given (current) academic year.
+ * The single authority for leadership roles: `setCurrentYear`,
+ * `assignPosition` and `removePosition` all end by calling it.
  *
- * Assigning a Principal position promotes the account's role, because the
- * workspace guard and the sidebar read that role. Nothing used to undo it:
- * switch to a year where the person holds no Principal position and they still
- * landed in `/principal`, showing leadership navigation with no current-year
- * authority behind it. The role now follows the position in both directions.
+ * It used to iterate only the users holding a position **in the new year**,
+ * so a Principal with no position in the next year was never looked at and
+ * kept the `principal` role — and with it the leadership workspace and the
+ * `ADMIN_ROLES` bypass in `requirePermission` (forensic audit F-10).
+ * `removePosition` separately hard-coded `teacher` as the fallback, which made
+ * an office-staff Deputy a teacher. Now the candidate set is the union of
+ * "holds a leadership role" and "holds a position this year", and the
+ * fallback follows the staff category in both places.
  *
- * Two kinds of account are deliberately left alone:
- * - the three institutional logins, whose role belongs to the College rather
- *   than to a year, and
- * - `admin`, which is a College-wide office, not a seat in a year.
- *
- * Everyone else ends up holding the role their year implies: a leadership
- * seat if they have one, otherwise `teacher` for teaching staff and `user` for
- * everyone else. An account whose role already matches is not written at all.
+ * Never touched: `admin`, the seeded institutional seats, and any role that is
+ * not position-derived (the specialist administrators).
  */
 export const reconcilePositionDerivedRoles = async (
-  db: Database,
+  db: Executor,
   academicYearId: string
 ): Promise<void> => {
-  const rows = await db
+  const candidates = await db
     .select({
       userId: userTable.id,
       username: userTable.username,
       role: userTable.role,
-      position: staffPosition.position,
+      staffId: staff.id,
       staffCategory: staff.staffCategory,
     })
-    .from(staffPosition)
-    .innerJoin(staff, eq(staffPosition.staffId, staff.id))
-    .innerJoin(userTable, eq(staff.userId, userTable.id))
-    .where(eq(staffPosition.academicYearId, academicYearId));
+    .from(userTable)
+    .innerJoin(staff, eq(staff.userId, userTable.id))
+    .where(
+      or(
+        inArray(userTable.role, [...POSITION_DERIVED_ROLES]),
+        inArray(
+          staff.id,
+          db
+            .select({ staffId: staffPosition.staffId })
+            .from(staffPosition)
+            .where(eq(staffPosition.academicYearId, academicYearId))
+        )
+      )
+    );
 
-  // One account can hold several positions; the senior seat wins.
-  const expectedByUserId = new Map<
-    string,
-    { leadership: string | null; staffCategory: string | null }
-  >();
-
-  for (const row of rows) {
-    const existing = expectedByUserId.get(row.userId);
-    const leadership = leadershipRoleForPosition(row.position);
-
-    if (!existing) {
-      expectedByUserId.set(row.userId, {
-        leadership,
-        staffCategory: row.staffCategory,
-      });
-      continue;
-    }
-
-    if (
-      leadership &&
-      LEADERSHIP_PRECEDENCE.includes(
-        leadership as (typeof LEADERSHIP_PRECEDENCE)[number]
-      ) &&
-      (!existing.leadership ||
-        LEADERSHIP_PRECEDENCE.indexOf(
-          leadership as (typeof LEADERSHIP_PRECEDENCE)[number]
-        ) <
-          LEADERSHIP_PRECEDENCE.indexOf(
-            existing.leadership as (typeof LEADERSHIP_PRECEDENCE)[number]
-          ))
-    ) {
-      existing.leadership = leadership;
-    }
+  if (candidates.length === 0) {
+    return;
   }
 
-  const rowsByUserId = new Map(rows.map((row) => [row.userId, row]));
+  const positions = await db
+    .select({
+      staffId: staffPosition.staffId,
+      position: staffPosition.position,
+    })
+    .from(staffPosition)
+    .where(
+      and(
+        eq(staffPosition.academicYearId, academicYearId),
+        inArray(
+          staffPosition.staffId,
+          candidates.map((candidate) => candidate.staffId)
+        )
+      )
+    );
 
-  const updates: Promise<unknown>[] = [];
+  const leadershipByStaffId = new Map<string, LeadershipRole | null>();
+  for (const row of positions) {
+    const role = leadershipRoleForPosition(
+      row.position
+    ) as LeadershipRole | null;
+    leadershipByStaffId.set(
+      row.staffId,
+      senior(leadershipByStaffId.get(row.staffId) ?? null, role)
+    );
+  }
 
-  for (const [userId, expected] of expectedByUserId) {
-    const current = rowsByUserId.get(userId);
-
-    if (!current) {
+  const userIdsByRole = new Map<string, string[]>();
+  for (const candidate of candidates) {
+    const isOffice =
+      candidate.role === "admin" || isSeededAccount(candidate.username);
+    const roleFollowsPositions =
+      candidate.role === null ||
+      POSITION_DERIVED_ROLES.includes(candidate.role) ||
+      candidate.role === "teacher" ||
+      candidate.role === "user";
+    if (isOffice || !roleFollowsPositions) {
       continue;
     }
 
     const nextRole =
-      expected.leadership ??
-      (expected.staffCategory === "teacher" ? "teacher" : "user");
+      leadershipByStaffId.get(candidate.staffId) ??
+      (candidate.staffCategory === "teacher" ? "teacher" : "user");
 
-    if (
-      current.role === nextRole ||
-      current.role === "admin" ||
-      isSeededAccount(current.username)
-    ) {
-      continue;
+    if (candidate.role !== nextRole) {
+      const ids = userIdsByRole.get(nextRole) ?? [];
+      ids.push(candidate.userId);
+      userIdsByRole.set(nextRole, ids);
     }
-
-    updates.push(
-      db
-        .update(userTable)
-        .set({ role: nextRole })
-        .where(eq(userTable.id, userId))
-    );
   }
 
-  await Promise.all(updates);
+  // One set-based update per target role (at most four), not one per person.
+  await Promise.all(
+    [...userIdsByRole].map(([role, ids]) =>
+      db.update(userTable).set({ role }).where(inArray(userTable.id, ids))
+    )
+  );
+};
+
+/** The current year's id, or null when no year is current. */
+export const currentAcademicYearId = async (
+  db: Pick<Database, "select">
+): Promise<string | null> => {
+  const [row] = await db
+    .select({ id: academicYear.id })
+    .from(academicYear)
+    .where(eq(academicYear.isCurrent, true))
+    .limit(1);
+  return row?.id ?? null;
 };
 
 export const setCurrentYear = adminOrAcademicProcedure
   .input(v.object({ id: academicYearIdSchema }))
   .handler(async ({ input, context }) => {
-    const [existing] = await context.db
-      .select()
-      .from(academicYear)
-      .where(eq(academicYear.id, input.id));
+    /**
+     * One transaction, serialized by an advisory lock (F-09). The clear and
+     * the set used to be two independent statements: a failure between them
+     * left no current year, and two administrators switching at once could
+     * leave two. The `academic_year_single_current` index now makes two
+     * impossible regardless; the lock makes concurrent switches queue rather
+     * than fail on it.
+     */
+    const record = await context.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${YEAR_SWITCH_LOCK})`);
 
-    if (!existing) {
-      throw new ORPCError("NOT_FOUND", { message: "Academic year not found" });
-    }
+      const [existing] = await tx
+        .select({ id: academicYear.id, deletedAt: academicYear.deletedAt })
+        .from(academicYear)
+        .where(eq(academicYear.id, input.id))
+        .limit(1);
 
-    // Unset all current flags
-    await context.db
-      .update(academicYear)
-      .set({ isCurrent: false })
-      .where(sql`1 = 1`);
+      if (!existing) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Academic year not found",
+        });
+      }
+      if (existing.deletedAt) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "A closed academic year cannot be made current — restore it first",
+        });
+      }
 
-    // Set the selected year as current
-    const [record] = await context.db
-      .update(academicYear)
-      .set({ isCurrent: true })
-      .where(eq(academicYear.id, input.id))
-      .returning();
+      await tx
+        .update(academicYear)
+        .set({ isCurrent: false })
+        .where(
+          and(eq(academicYear.isCurrent, true), ne(academicYear.id, input.id))
+        );
 
-    if (!record) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
-    }
+      const [updated] = await tx
+        .update(academicYear)
+        .set({ isCurrent: true })
+        .where(eq(academicYear.id, input.id))
+        .returning();
 
-    // The year just changed, so every position-derived role has to be
-    // re-derived from it.
-    await reconcilePositionDerivedRoles(context.db, record.id);
+      if (!updated) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
+      }
+
+      // The year just changed, so every position-derived role is re-derived
+      // from it — inside the same transaction, so a failure leaves both the
+      // year and the roles as they were.
+      await reconcilePositionDerivedRoles(tx, updated.id);
+      return updated;
+    });
 
     return {
       id: record.id,

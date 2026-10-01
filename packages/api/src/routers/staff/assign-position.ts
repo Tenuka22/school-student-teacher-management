@@ -1,9 +1,6 @@
 import { ORPCError } from "@orpc/server";
-import { leadershipRoleForPosition } from "@school-student-teacher-management/auth";
-import { user as userTable } from "@school-student-teacher-management/db/schema/auth";
 import {
   academicYear,
-  staff,
   staffPosition,
   staffPositionInsertSchema,
 } from "@school-student-teacher-management/db/schema/staff";
@@ -11,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { pick } from "valibot";
 
 import { positionManagerProcedure } from "../../index";
+import { reconcilePositionDerivedRoles } from "./set-current-year";
 
 export const assignPosition = positionManagerProcedure
   .input(
@@ -32,45 +30,55 @@ export const assignPosition = positionManagerProcedure
       });
     }
 
-    const id = crypto.randomUUID();
-    const [[targetYear], [record]] = await Promise.all([
-      context.db
-        .select({ isCurrent: academicYear.isCurrent })
+    /**
+     * The position and the role it implies are written together or not at
+     * all (F-10). This used to insert the position and, separately, overwrite
+     * the account's role with no check of what that role was — so assigning
+     * a position to the administrator's own staff row demoted `admin` to
+     * `principal`. The role now comes from `reconcilePositionDerivedRoles`,
+     * which never touches `admin` or the seeded seats.
+     */
+    const record = await context.db.transaction(async (tx) => {
+      const [targetYear] = await tx
+        .select({
+          isCurrent: academicYear.isCurrent,
+          deletedAt: academicYear.deletedAt,
+        })
         .from(academicYear)
         .where(eq(academicYear.id, input.academicYearId))
-        .limit(1),
-      context.db
+        .limit(1);
+
+      if (!targetYear) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Academic year not found",
+        });
+      }
+      if (targetYear.deletedAt) {
+        throw new ORPCError("CONFLICT", {
+          message: "A closed academic year cannot be changed",
+        });
+      }
+
+      const [inserted] = await tx
         .insert(staffPosition)
         .values({
-          id,
+          id: crypto.randomUUID(),
           staffId: input.staffId,
           academicYearId: input.academicYearId,
           position: input.position,
           sectionalScope: input.sectionalScope,
         })
-        .returning(),
-    ]);
+        .returning();
 
-    if (!record) {
-      throw new ORPCError("INTERNAL_SERVER_ERROR");
-    }
-
-    const leadershipRole = leadershipRoleForPosition(input.position);
-
-    if (leadershipRole && targetYear?.isCurrent) {
-      const [staffRow] = await context.db
-        .select({ userId: staff.userId })
-        .from(staff)
-        .where(eq(staff.id, input.staffId))
-        .limit(1);
-
-      if (staffRow?.userId) {
-        await context.db
-          .update(userTable)
-          .set({ role: leadershipRole })
-          .where(eq(userTable.id, staffRow.userId));
+      if (!inserted) {
+        throw new ORPCError("INTERNAL_SERVER_ERROR");
       }
-    }
+
+      if (targetYear.isCurrent) {
+        await reconcilePositionDerivedRoles(tx, input.academicYearId);
+      }
+      return inserted;
+    });
 
     return {
       id: record.id,

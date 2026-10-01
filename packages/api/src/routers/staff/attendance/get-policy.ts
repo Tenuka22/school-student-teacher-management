@@ -1,3 +1,4 @@
+import { schoolToday } from "@school-student-teacher-management/db/dates";
 import {
   attendancePolicy,
   shortLeaveUsage,
@@ -40,8 +41,9 @@ export const getPolicy = protectedProcedure
     } | null = null;
 
     if (staffRecord) {
-      const now = new Date();
-      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      // The school month, the same calendar `recordArrival` writes usage
+      // under (its `input.date`); this used the server's local clock (F-20).
+      const yearMonth = schoolToday().slice(0, 7);
       const [row] = await context.db
         .select()
         .from(shortLeaveUsage)

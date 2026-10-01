@@ -10,6 +10,7 @@ import * as v from "valibot";
 import { pick } from "valibot";
 
 import { requireStaffPermission } from "../../index";
+import { isUniqueViolation } from "../../lib/db-errors";
 
 const EDITABLE_STAFF_FIELDS = [
   "name",
@@ -119,20 +120,18 @@ export const updateStaff = requireStaffPermission("update")
       if (error instanceof ORPCError) {
         throw error;
       }
-      if (error instanceof Error) {
-        if (error.message.includes("staff_teacher_service_no_unique")) {
-          throw new ORPCError("CONFLICT", {
-            message: "This teacher service number is already in use",
-          });
-        }
-        if (
-          error.message.includes("staff_nic_unique") ||
-          error.message.includes("user_username_unique")
-        ) {
-          throw new ORPCError("CONFLICT", {
-            message: "A staff member with this NIC already exists",
-          });
-        }
+      if (isUniqueViolation(error, "staff_teacher_service_no_unique")) {
+        throw new ORPCError("CONFLICT", {
+          message: "This teacher service number is already in use",
+        });
+      }
+      if (
+        isUniqueViolation(error, "staff_nic_unique") ||
+        isUniqueViolation(error, "user_username_unique")
+      ) {
+        throw new ORPCError("CONFLICT", {
+          message: "A staff member with this NIC already exists",
+        });
       }
       throw error;
     }
