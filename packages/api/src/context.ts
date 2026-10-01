@@ -32,4 +32,12 @@ export interface Context {
   session: Session | null;
   db: Database;
   auth: ReturnType<typeof createAuth> | null;
+  /**
+   * Request headers, for the few procedures that need the caller's address
+   * (rate limiting the public sign-up). Absent for in-process calls such as
+   * SSR loaders and tests.
+   */
+  headers?: Headers;
+  /** Correlates log lines with the `x-request-id` response header. */
+  requestId?: string;
 }

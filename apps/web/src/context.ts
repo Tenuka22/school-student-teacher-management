@@ -14,6 +14,7 @@ export const createContext = async ({
     db,
     session,
     auth,
+    headers: req.headers,
   };
 };
 

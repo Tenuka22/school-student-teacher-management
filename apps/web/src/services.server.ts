@@ -37,8 +37,11 @@ export const storage = new S3Client({
   },
 });
 
-// Bootstrap the admin + leadership accounts from env on every server
-// start — their credentials stay in sync with the environment.
+// Bootstrap the admin + leadership accounts on every server start. A missing
+// seat is created with its env password; an existing seat's password is never
+// overwritten (env is the *initial* password only — rotate with
+// `scripts/rotate-seat-password.ts`). Boot refuses a short or published seat
+// password (`seat-password-policy.ts`).
 await ensureBootstrapUsers(db, ENV);
 
 // Then sweep abandoned sign-ups: an account that never confirmed its address

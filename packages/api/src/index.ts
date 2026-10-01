@@ -1,6 +1,14 @@
 import { ORPCError, os } from "@orpc/server";
 
 import type { Context } from "./context";
+import {
+  PG_CHECK_VIOLATION,
+  PG_CLOSED_YEAR,
+  PG_FOREIGN_KEY_VIOLATION,
+  PG_NOT_NULL_VIOLATION,
+  PG_UNIQUE_VIOLATION,
+  pgErrorOf,
+} from "./lib/db-errors";
 
 /** Shape of better-auth's permission check, stated structurally — the
  * inferred auth type loses plugin API inference through the config helper.
@@ -35,7 +43,58 @@ const hasPermission = (
 
 export const o = os.$context<Context>();
 
-export const publicProcedure = o;
+/**
+ * Safety net for integrity violations no handler mapped itself.
+ *
+ * A duplicate, a dangling reference or a CHECK the database refused is the
+ * caller's problem, not a server fault: it becomes a 409/400 with a generic
+ * sentence. The raw driver error is never forwarded — its message is the SQL
+ * and its parameters (names, NICs, phone numbers). Handlers that can say
+ * something more specific still do, with `isUniqueViolation` and a constraint
+ * name; this only catches what reaches it unmapped.
+ */
+const mapDatabaseErrors = o.middleware(async ({ next }) => {
+  try {
+    return await next();
+  } catch (error) {
+    if (error instanceof ORPCError) {
+      throw error;
+    }
+    const info = pgErrorOf(error);
+    if (info?.code === PG_CLOSED_YEAR) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "That academic year is closed and read-only. Restore it before changing its records",
+        cause: error,
+      });
+    }
+    if (info?.code === PG_UNIQUE_VIOLATION) {
+      throw new ORPCError("CONFLICT", {
+        message: "A record with these details already exists",
+        cause: error,
+      });
+    }
+    if (info?.code === PG_FOREIGN_KEY_VIOLATION) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "This record is linked to other records, or refers to one that no longer exists",
+        cause: error,
+      });
+    }
+    if (
+      info?.code === PG_CHECK_VIOLATION ||
+      info?.code === PG_NOT_NULL_VIOLATION
+    ) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "The submitted values are not valid for this record",
+        cause: error,
+      });
+    }
+    throw error;
+  }
+});
+
+export const publicProcedure = o.use(mapDatabaseErrors);
 
 // ─── Auth middleware ─────────────────────────────────────────────────────────
 
