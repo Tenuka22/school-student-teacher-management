@@ -50,6 +50,14 @@ import {
 export const DISPOSAL_LIST_LIMIT = 50;
 
 /**
+ * The column labels: deep-green ground, amber small caps \u2014 the same
+ * treatment the register's own `COLUMN_HEADING` uses, copied by value rather
+ * than imported across a boundary the two tables otherwise share nothing over.
+ */
+const DISPOSAL_COLUMN_HEADING =
+  "text-accent h-11 text-xs font-extrabold tracking-[0.16em] uppercase";
+
+/**
  * The queue presets on the register tab.
  *
  * `final` is the odd one out: `listDisposals` takes a single `disposalStatusSchema`
@@ -394,11 +402,15 @@ const SignOffCell: React.FC<{
   pending: string;
 }> = ({ name, staffId, at, pending }) => {
   if (at === null) {
-    return <span className="text-muted-foreground">{pending}</span>;
+    return (
+      <span className="text-muted-foreground block whitespace-normal">
+        {pending}
+      </span>
+    );
   }
 
   return (
-    <span className="block">
+    <span className="block whitespace-normal">
       {/*
        * The *stage* is the empty state here, not "no name": `pending` says what this
        * column would be holding if the step had not happened yet, which is true
@@ -431,25 +443,48 @@ export const DisposalCertificatesTable: React.FC<{
   onFinalise: (disposal: DisposalRecord) => void;
   onWithdraw: (disposal: DisposalRecord) => void;
 }> = ({ disposals, onSignOff, onFinalise, onWithdraw }) => (
-  <Table>
+  <Table
+    stickyHeader
+    className="[&_[data-slot=table-header]]:[&_th]:bg-primary min-w-[1500px] table-fixed"
+  >
     <TableCaption>
       One row per write-off certificate, carrying all four signatures: who
       raised it, who signed it, who finalised it, and who withdrew it.
       Finalising is the only step that moves stock.
     </TableCaption>
     <TableHeader>
-      <TableRow>
-        <TableHead>Item</TableHead>
-        <TableHead className="text-right">Qty</TableHead>
-        <TableHead>Reason</TableHead>
-        <TableHead>Pinned tags</TableHead>
-        <TableHead>Method</TableHead>
-        <TableHead>Status</TableHead>
-        <TableHead>Requested</TableHead>
-        <TableHead>Approved</TableHead>
-        <TableHead>Finalised</TableHead>
-        <TableHead>Cancelled</TableHead>
-        <TableHead>Actions</TableHead>
+      <TableRow className="bg-primary hover:bg-primary border-none">
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-36`}>
+          Item
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-16 text-right`}>
+          Qty
+        </TableHead>
+        <TableHead className={DISPOSAL_COLUMN_HEADING}>Reason</TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-36`}>
+          Pinned tags
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-28`}>
+          Method
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-28`}>
+          Status
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-36`}>
+          Requested
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-36`}>
+          Approved
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-36`}>
+          Finalised
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-36`}>
+          Cancelled
+        </TableHead>
+        <TableHead className={`${DISPOSAL_COLUMN_HEADING} w-44`}>
+          Actions
+        </TableHead>
       </TableRow>
     </TableHeader>
     <TableBody>
@@ -469,10 +504,10 @@ export const DisposalCertificatesTable: React.FC<{
             <TableCell className="text-right font-medium tabular-nums">
               {disposal.qty}
             </TableCell>
-            <TableCell className="max-w-64">
+            <TableCell className="whitespace-normal">
               <span className="line-clamp-2">{disposal.reason}</span>
             </TableCell>
-            <TableCell>
+            <TableCell className="whitespace-normal">
               {/**
                * Every pinned tag, in full. The certificate is the only record of which
                * specific devices a write-off covered, so a count standing in for the
@@ -522,7 +557,7 @@ export const DisposalCertificatesTable: React.FC<{
                 pending="Not finalised"
               />
             </TableCell>
-            <TableCell>
+            <TableCell className="whitespace-normal">
               {/*
                * `pending="Not withdrawn"`, and not a dash.
                *

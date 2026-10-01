@@ -11,6 +11,17 @@ import { cn } from "cn"
  * where that is enforced — a `min-w-` on the table or a `table-fixed` here
  * would push the last column off the page instead.
  *
+ * **`min-w-0` on the wrapper, not just `overflow-x-auto` on it.** A flex or
+ * grid item defaults to `min-width: auto`, which means it refuses to shrink
+ * below its content's own intrinsic width — so a table wide enough to need
+ * its own scrollbar was instead stretching every flex ancestor up to the page
+ * shell, and the *page* grew a horizontal scrollbar while this wrapper's own
+ * `overflow-x-auto` sat unused. `min-w-0` is what tells the browser this
+ * wrapper is allowed to be narrower than its content, which is the whole
+ * precondition for "scrolls instead of overflowing" to be true anywhere this
+ * component is placed inside a flex or grid layout — every page it is used
+ * on, without exception.
+ *
  * Two props decide how the frame behaves:
  *
  * - `stickyHeader` keeps the `<thead>` row pinned while the body scrolls. The
@@ -31,7 +42,7 @@ function Table({
   return (
     <div
       data-slot="table-container"
-      className="relative w-full max-w-full overflow-x-auto overscroll-x-contain"
+      className="relative w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain"
     >
       <table
         data-slot="table"

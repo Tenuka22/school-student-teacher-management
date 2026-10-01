@@ -66,11 +66,6 @@ export type ItemCondition = NonNullable<
   InventoryInput["items"]["update"]["condition"]
 >;
 
-/** `packages/db/src/constants/inventory.ts` `UNIT_STATUSES`. */
-export type UnitStatus = NonNullable<
-  InventoryInput["units"]["update"]["status"]
->;
-
 /**
  * `INVENTORY_TRANSFER_REASONS`. Read off `custody.transfer.reason` because
  * `assignManager.reason` is the same picklist and a change to either has to
@@ -126,7 +121,7 @@ export type AuditLogRecord = ElementOf<
 
 /** One row of `orpc.inventory.custody.requests.listIncoming` / `.listOutgoing`. */
 /**
- * The filter state the register and the asset-tag register share.
+ * The filter state the register's own request carries.
  *
  * The two sentinels — `status: "all"` and the empty string for every id — are
  * part of the state rather than an absence of state, because both are

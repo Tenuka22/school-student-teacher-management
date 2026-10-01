@@ -34,7 +34,7 @@ import type * as React from "react";
 import type { InventoryItemView } from "@/components/staff/inventory/inventory-types";
 import {
   ConditionBadge,
-  CustodyBadge,
+  CustodyFlow,
   ItemStatusBadge,
 } from "@/components/staff/inventory/shared";
 import { formatDateTime } from "@/components/staff/inventory/stock-dialogs";
@@ -73,6 +73,37 @@ const CategoryDot: React.FC<{ color: string }> = ({ color }) => (
     style={{ backgroundColor: color }}
   />
 );
+
+/**
+ * The item's own photo, as a square thumbnail beside its identity — the
+ * register's one visual confirmation that the row and the physical object
+ * agree, which the text columns alone cannot give a clerk standing in the
+ * store holding the thing.
+ *
+ * `item.imageUrl` is already the app's own serving URL
+ * (`/api/files/<fileId>`, built in `inventory-database.ts`), so this needs no
+ * knowledge of MinIO, presigning, or the upload pipeline — it is exactly the
+ * same `<img src>` the item form's own preview uses. Unphotographed is the
+ * overwhelming majority of a school's store, so the empty state is the
+ * category's own colour dot on a plain tile — the one piece of visual
+ * identity every row already has, rather than a generic placeholder icon that
+ * says nothing about the item.
+ */
+const AssetThumbnail: React.FC<{ item: InventoryItemView }> = ({ item }) =>
+  item.imageUrl ? (
+    <img
+      alt=""
+      className="border-primary/14 size-10 shrink-0 border object-cover"
+      src={item.imageUrl}
+    />
+  ) : (
+    <div
+      aria-hidden="true"
+      className="border-primary/14 bg-muted flex size-10 shrink-0 items-center justify-center border"
+    >
+      <CategoryDot color={item.categoryColor} />
+    </div>
+  );
 
 /**
  * The two counters, in the order a clerk reads them.
@@ -161,7 +192,7 @@ const StockFigures: React.FC<{ item: InventoryItemView }> = ({ item }) => {
  *
  * **Words, a dashed edge and a struck-through date beside them — never a colour
  * alone.** Every other state on this register is carried by a badge whose tone
- * means something (`ItemStatusBadge`, `ConditionBadge`, `CustodyBadge`), and a
+ * means something (`ItemStatusBadge`, `ConditionBadge`, `CustodyFlow`), and a
  * reader who has learned those four tones will read a fifth one as a fifth kind
  * of *condition*: low, damaged, borrowed. Retired is not a condition of the
  * thing, it is a fact about the record, and it needs its own word — and its own
@@ -564,60 +595,64 @@ const AssetCell = ({
 }) => {
   if (isRetired) {
     return (
-      <div className="flex flex-col items-start gap-0.5 text-left">
-        <span className="text-muted-foreground font-medium line-through">
-          {item.name}
-        </span>
-        <span className="text-muted-foreground font-mono text-xs">
-          {item.sku}
-        </span>
-        <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <CategoryDot color={item.categoryColor} />
-          {item.categoryName}
-        </span>
-        <RetiredBadge deletedAt={item.deletedAt} />
-        <span className="text-muted-foreground text-xs">
-          Off the working register. Its ledger and custody history are on file
-          in the change log.
-        </span>
+      <div className="flex items-start gap-2 text-left">
+        <AssetThumbnail item={item} />
+        <div className="flex min-w-0 flex-col items-start gap-0.5">
+          <span className="text-muted-foreground font-medium line-through">
+            {item.name}
+          </span>
+          <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <span className="font-mono">{item.sku}</span>
+            <span aria-hidden="true">·</span>
+            <CategoryDot color={item.categoryColor} />
+            {item.categoryName}
+          </span>
+          <RetiredBadge deletedAt={item.deletedAt} />
+        </div>
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onOpenItem(item);
-      }}
-      className="hover:text-primary flex flex-col items-start gap-0.5 text-left"
-    >
-      <span className="font-medium underline-offset-4 hover:underline">
-        {item.name}
-      </span>
-      <span className="text-muted-foreground font-mono text-xs">
-        {item.sku}
-      </span>
-      <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-        <CategoryDot color={item.categoryColor} />
-        {item.categoryName}
-      </span>
-      {/*
-        Tagged or counted in bulk, and the distinction changes what a clerk can
-        do with the row. A tagged item has one asset tag per unit, so a borrow
-        names a device; a bulk line is a count, and the borrow takes the oldest
-        units by the server's own record with nothing to name. It is a third
-        muted line rather than a column because it is a property of the line, not
-        something to be scanned across — and it is words, not a dot, so it
-        survives without colour.
-      */}
-      <span className="text-muted-foreground text-xs">
-        {item.uniqueIdCount > 0
-          ? `${item.uniqueIdCount} tagged unit${item.uniqueIdCount === 1 ? "" : "s"}`
-          : "Counted in bulk"}
-      </span>
-    </button>
+    <div className="flex items-start gap-2 text-left">
+      <AssetThumbnail item={item} />
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenItem(item);
+        }}
+        className="hover:text-primary flex min-w-0 flex-col items-start gap-0.5 text-left"
+      >
+        <span className="font-medium underline-offset-4 hover:underline">
+          {item.name}
+        </span>
+        {/*
+          Tagged or counted in bulk, and the distinction changes what a clerk can
+          do with the row. A tagged item has one asset tag per unit, so a borrow
+          names a device; a bulk line is a count, and the borrow takes the oldest
+          units by the server's own record with nothing to name. It is a third
+          muted line rather than a column because it is a property of the line, not
+          something to be scanned across — and it is words, not a dot, so it
+          survives without colour. The SKU and category are combined onto one line
+          above it, rather than each getting its own — this asset cell used to be
+          four muted lines deep (name, SKU, category, this line), which made every
+          row in a 200-line register roughly twice the height a clerk needs to
+          scan it.
+        */}
+        <span className="text-muted-foreground flex items-center gap-1.5 text-xs whitespace-nowrap">
+          <span className="font-mono">{item.sku}</span>
+          <span aria-hidden="true">·</span>
+          <CategoryDot color={item.categoryColor} />
+          <span className="truncate">{item.categoryName}</span>
+        </span>
+        <span className="text-muted-foreground text-xs">
+          {item.uniqueIdCount > 0
+            ? `${item.uniqueIdCount} tagged unit${item.uniqueIdCount === 1 ? "" : "s"}`
+            : "Counted in bulk"}
+        </span>
+      </button>
+    </div>
   );
 };
 
@@ -733,7 +768,7 @@ const ConditionCell = ({
  *
  * **The custody column is the widest and the first after identity**, because it is
  * the reason a reader opens this page at all: "who is in charge, and who is holding
- * it" are two facts, and `CustodyBadge` renders all four legitimate combinations of
+ * it" are two facts, and `CustodyFlow` renders all four legitimate combinations of
  * them rather than leaving a gap where a pointer was null.
  *
  * Left rendering on a retired row, and that is a fact rather than an
@@ -780,8 +815,8 @@ export const InventoryRow = ({
         <AssetCell item={item} isRetired={isRetired} onOpenItem={onOpenItem} />
       </TableCell>
 
-      <TableCell className="max-w-72 whitespace-normal">
-        <CustodyBadge
+      <TableCell className="max-w-48 whitespace-normal">
+        <CustodyFlow
           managerName={item.managerName}
           custodianName={item.custodianName}
         />
@@ -791,11 +826,11 @@ export const InventoryRow = ({
         <StockFigures item={item} />
       </TableCell>
 
-      <TableCell>
+      <TableCell className="whitespace-normal">
         <StatusCell item={item} isRetired={isRetired} />
       </TableCell>
 
-      <TableCell className="hidden md:table-cell">
+      <TableCell className="hidden whitespace-normal md:table-cell">
         <ConditionCell item={item} isRetired={isRetired} />
       </TableCell>
 

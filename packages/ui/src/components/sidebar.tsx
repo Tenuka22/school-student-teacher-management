@@ -343,12 +343,21 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
 
 // A plain container: the app shell places its own <header> and <main> inside,
 // so the page header is not trapped inside the main landmark.
+//
+// `min-w-0` is load-bearing, not decoration. This is a flex item in the shell's
+// outer row (sidebar, then this), and a flex item's automatic minimum width
+// defaults to its content's own min-content size unless told otherwise — so a
+// page whose content happens to be wide (a data-dense table, a long unbroken
+// token) was stretching this whole panel past the viewport instead of letting
+// the page's own `overflow-x-auto` regions (every `Table` in
+// `table.tsx`) handle it locally. `min-w-0` is what makes "a table scrolls
+// instead of overflowing" true at the shell level, not just inside the table.
 function SidebarInset({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-none md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        "relative flex w-full min-w-0 flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-none md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
       )}
       {...props}

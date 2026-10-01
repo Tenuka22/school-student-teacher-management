@@ -26,5 +26,5 @@ import { InventoryPage } from "@/components/staff/inventory/inventory-page";
 export const Route = createFileRoute(
   "/_auth/inventory-admin/$year/staff/inventory/"
 )({
-  component: () => <InventoryPage section="register" base="/inventory-admin" />,
+  component: () => <InventoryPage section="register" />,
 });

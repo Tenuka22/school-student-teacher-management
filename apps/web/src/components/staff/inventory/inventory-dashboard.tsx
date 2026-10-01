@@ -53,20 +53,15 @@ type InventoryPath =
   | "/inventory-admin/$year/staff/inventory"
   | "/inventory-admin/$year/staff/inventory/issues"
   | "/inventory-admin/$year/staff/inventory/write-offs"
-  | "/inventory-admin/$year/staff/inventory/asset-register"
   | "/inventory-admin/$year/staff/inventory/ledger";
 
-/** The store's five panes, in the order a storekeeper works through them. */
+/** The store's four panes, in the order a storekeeper works through them. */
 const quickActions: { label: string; to: InventoryPath }[] = [
   { label: "Item register", to: "/inventory-admin/$year/staff/inventory" },
-  { label: "Transfers", to: "/inventory-admin/$year/staff/inventory/issues" },
+  { label: "Issues", to: "/inventory-admin/$year/staff/inventory/issues" },
   {
     label: "Disposals",
     to: "/inventory-admin/$year/staff/inventory/write-offs",
-  },
-  {
-    label: "History",
-    to: "/inventory-admin/$year/staff/inventory/asset-register",
   },
   { label: "Ledger", to: "/inventory-admin/$year/staff/inventory/ledger" },
 ];

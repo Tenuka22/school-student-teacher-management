@@ -244,12 +244,14 @@ export const DisposalsPanel = () => {
       !disposalsQuery.isError &&
       visibleDisposals.length > 0 ? (
         <>
-          <DisposalCertificatesTable
-            disposals={visibleDisposals}
-            onSignOff={setApproving}
-            onFinalise={setFinalizing}
-            onWithdraw={setCancelling}
-          />
+          <div className="border-primary/14 flex flex-col gap-3 border p-3">
+            <DisposalCertificatesTable
+              disposals={visibleDisposals}
+              onSignOff={setApproving}
+              onFinalise={setFinalizing}
+              onWithdraw={setCancelling}
+            />
+          </div>
 
           {/**
            * **Two different numbers, and this line says which is which.**

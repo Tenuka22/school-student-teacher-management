@@ -1,8 +1,7 @@
 "use client";
 
 /**
- * The feature's stable import surface for the two counter movements, and the
- * asset-tag register they are read back on.
+ * The feature's stable import surface for the two counter movements.
  *
  * ## What moved, and why this file is now four lines of exports
  *
@@ -22,12 +21,11 @@
  * | `stock-form-helpers.tsx` | the primitives — dates, tag prose, `PartyName`, the discard guard |
  * | `stock-in-dialog.tsx` | `StockInDialog`, the tag list, the provenance block, the paste path |
  * | `stock-out-dialog.tsx` | `StockOutDialog`, its two field blocks, the irreversible confirm |
- * | `asset-register-panel.tsx` | `AssetRegisterPanel`, the per-page counter table, the per-unit popover |
  * | `quantity.ts` / `quantity-field.tsx` | the counted-quantity parser, the unit-aware input, the resulting-quantity readout |
  * | `dialog-form.tsx` | focus-first-invalid, and the polite live region |
  *
  * `no-giant-component` is the reason, but the reason it was *worth* doing is that
- * `stock-out-dialog.tsx` and `asset-register-panel.tsx` had ended up sharing a
+ * `stock-out-dialog.tsx` and `stock-in-dialog.tsx` had ended up sharing a
  * 2200-line file for no reason other than chronology, and the two halves of the
  * quantity story — the parse and the projection — were in a third one.
  */
@@ -49,6 +47,5 @@ export {
   useDiscardGuard,
 } from "@/components/staff/inventory/stock-form-helpers";
 
-export { AssetRegisterPanel } from "@/components/staff/inventory/asset-register-panel";
 export { StockInDialog } from "@/components/staff/inventory/stock-in-dialog";
 export { StockOutDialog } from "@/components/staff/inventory/stock-out-dialog";

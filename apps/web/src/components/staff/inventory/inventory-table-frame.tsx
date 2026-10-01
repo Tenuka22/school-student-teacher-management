@@ -235,7 +235,7 @@ export const RegisterTableHeader = ({
         onToggle={onToggleSort}
         className={COLUMN_HEADING}
       />
-      <TableHead scope="col" className={`${COLUMN_HEADING} max-w-72`}>
+      <TableHead scope="col" className={`${COLUMN_HEADING} w-48`}>
         Responsible
       </TableHead>
       <SortableHead
@@ -243,25 +243,25 @@ export const RegisterTableHeader = ({
         sort={sort}
         activeKey="availableQty"
         onToggle={onToggleSort}
-        className={COLUMN_HEADING}
+        className={`${COLUMN_HEADING} w-48`}
       />
-      <TableHead scope="col" className={COLUMN_HEADING}>
+      <TableHead scope="col" className={`${COLUMN_HEADING} w-40`}>
         Status
       </TableHead>
       {/* The two columns that go below `md`; the header hides with the cells. */}
       <TableHead
         scope="col"
-        className={`${COLUMN_HEADING} hidden md:table-cell`}
+        className={`${COLUMN_HEADING} hidden w-36 md:table-cell`}
       >
         Condition
       </TableHead>
       <TableHead
         scope="col"
-        className={`${COLUMN_HEADING} hidden md:table-cell`}
+        className={`${COLUMN_HEADING} hidden w-36 md:table-cell`}
       >
         Location
       </TableHead>
-      <TableHead scope="col" className={COLUMN_HEADING}>
+      <TableHead scope="col" className={`${COLUMN_HEADING} w-10`}>
         <span className="sr-only">Actions</span>
       </TableHead>
     </TableRow>
@@ -320,7 +320,7 @@ export const RegisterTableSkeleton = () => (
                 <Skeleton className="h-2.5 w-28" />
               </div>
             </TableCell>
-            <TableCell className="max-w-72">
+            <TableCell className="max-w-48">
               <Skeleton className="h-4 w-32" />
             </TableCell>
             <TableCell>

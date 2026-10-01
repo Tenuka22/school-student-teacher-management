@@ -1,37 +1,49 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { files } from "@school-student-teacher-management/db/schema/files";
 import { createFileRoute } from "@tanstack/react-router";
+import sharp from "sharp";
 
-import { auth, db } from "@/services.server";
+import { ENV } from "@/env.server";
+import { auth, db, storage } from "@/services.server";
 
 /**
  * Item-photo upload: the storage half of `inventoryItem.imageFileId`, which
  * has existed on the schema since the table was designed and had no writer
  * until this route.
  *
- * **Disk, under `public/uploads/`, not a database blob and not a bucket.**
- * `files.key` is documented as "LMDB in dev, MinIO object key in production"
- * — an aspiration this repo had not built either half of. This route builds
- * the dev half for real, and picks the plainest thing that is actually true
- * of a dev (and small-school single-instance) deployment: the app server's
- * own disk. `public/` is already how the college crest is served
- * (`/uploads/college-crest.png`), so a file written under
- * `public/uploads/inventory/` is reachable at the matching URL with no
- * second route to serve it back. **What would have to change for a
- * multi-instance production deployment** is exactly the write below and
- * nothing else: swap this `writeFile` for a MinIO/S3 `putObject` call and
- * store the returned object URL in the same `files.key` column — every
- * reader of `imageUrl` in this codebase already only cares that it is a
- * fetchable URL, never how it got there.
+ * **MinIO, addressed through the S3 API, not the app server's own disk.**
+ * `files.key` is documented as "MinIO object key" — this route is what makes
+ * that true rather than aspirational. The object goes to the bucket named by
+ * `MINIO_BUCKET`; nothing about the bucket is made public, because a public
+ * bucket lets anyone who has ever seen a key read that photo forever, long
+ * after the item is retired. Every reader gets the photo back through
+ * `/api/files/$fileId` (`files.$fileId.ts`), which checks the caller's
+ * session and hands out a short-lived presigned URL instead.
+ *
+ * **Every accepted image is re-encoded to WebP, cropped to a 1:1 square, and
+ * capped at `MAX_DIMENSION` — not a pass-through, and not optional.** The
+ * client already crops to a square before it ever calls this route (see
+ * `ImageUploadField` in `item-form-fields.tsx`), but the server does not trust
+ * that: `sharp`'s own `resize(…, { fit: "cover" })` re-crops to exactly square
+ * regardless of what arrives, so a client that skipped the crop step — a
+ * future caller, a replayed request — still cannot write a non-square photo
+ * into the register. `.rotate()` with no argument reads the image's own EXIF
+ * orientation and bakes it into the pixels before the crop, which is what
+ * stops a phone-camera portrait from being cropped square in landscape and
+ * saved sideways. WebP is required rather than offered because the four
+ * formats a phone or a scanner actually produces (PNG, JPEG, WEBP, GIF) each
+ * decode and display fine but do not compress alike, and a register with 300
+ * item photos in whatever format each camera happened to produce is 300 files
+ * of unpredictable weight; one format, one quality setting, is one number to
+ * reason about.
  *
  * A plain `POST` handler rather than an oRPC procedure, for the same reason
  * `api/rpc/$.ts` and `api/auth/$.ts` already are: this reads a
  * `multipart/form-data` body, and oRPC's own request/response contract is
  * built around typed JSON in and out, not a raw upload stream.
  */
-/** 8 MiB \u2014 a phone photo, not a scan. */
+/** 8 MiB — a phone photo, not a scan. Checked before decoding, so an
+ * oversized upload never reaches `sharp` at all. */
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set([
   "image/png",
@@ -40,7 +52,17 @@ const ALLOWED_TYPES = new Set([
   "image/gif",
 ]);
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "inventory");
+/**
+ * The square a stored photo is capped at, in pixels. Large enough to fill the
+ * item dialog's own preview at any density this app targets, small enough
+ * that a register of a few hundred items stays a few hundred small files
+ * rather than a few hundred phone-camera originals.
+ */
+const MAX_DIMENSION = 1024;
+
+/** WebP's own quality scale (0–100). 82 is libwebp's frequently-cited "no
+ * visible loss on a photo" point; higher rarely earns back the extra bytes. */
+const WEBP_QUALITY = 82;
 
 /**
  * Who may attach a photo to an item: `admin` and `inventoryAdmin` — the two
@@ -92,25 +114,48 @@ const handleUpload = async ({ request }: { request: Request }) => {
     );
   }
 
-  const id = crypto.randomUUID();
-  const extension = path.extname(file.name) || `.${file.type.split("/")[1]}`;
-  const storedName = `${id}${extension}`;
-  const url = `/uploads/inventory/${storedName}`;
+  const originalBytes = new Uint8Array(await file.arrayBuffer());
 
-  await mkdir(UPLOAD_DIR, { recursive: true });
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  await writeFile(path.join(UPLOAD_DIR, storedName), bytes);
+  let webpBytes: Buffer;
+  try {
+    webpBytes = await sharp(originalBytes)
+      .rotate()
+      .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: "cover" })
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer();
+  } catch {
+    // `sharp` refuses whatever this was to decode as an image — a renamed
+    // non-image file, or a truncated upload. The MIME check above only trusts
+    // what the browser claimed; this is the check on what the bytes actually
+    // are.
+    return Response.json(
+      { message: "That file could not be read as an image" },
+      { status: 400 }
+    );
+  }
+
+  const id = crypto.randomUUID();
+  const objectKey = `inventory/${id}.webp`;
+
+  await storage.send(
+    new PutObjectCommand({
+      Bucket: ENV.MINIO_BUCKET,
+      Key: objectKey,
+      Body: webpBytes,
+      ContentType: "image/webp",
+    })
+  );
 
   await db.insert(files).values({
     id,
     name: file.name,
-    size: file.size,
-    type: file.type,
-    key: url,
+    size: webpBytes.length,
+    type: "image/webp",
+    key: objectKey,
     userId: session.user.id,
   });
 
-  return Response.json({ fileId: id, url });
+  return Response.json({ fileId: id, url: `/api/files/${id}` });
 };
 
 export const Route = createFileRoute("/api/files/upload")({

@@ -57,14 +57,16 @@ import {
 import { Textarea } from "@school-student-teacher-management/ui/components/textarea";
 import {
   IconAlertTriangle,
+  IconCamera,
   IconInfoCircle,
   IconPackageExport,
   IconRefresh,
   IconSwitchHorizontal,
   IconTrash,
   IconUserCheck,
+  IconUpload,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { CategoryIcon } from "@/components/staff/inventory/category-icon";
 import type { CategoryOption } from "@/components/staff/inventory/inventory-types";
@@ -82,6 +84,10 @@ import {
   newTagRow,
   UNIT_PRESETS,
 } from "@/components/staff/inventory/item-form-model";
+import {
+  PhotoCropDialog,
+  readFileAsDataUrl,
+} from "@/components/staff/inventory/photo-crop-dialog";
 import {
   MoneyField,
   StaffComboboxField,
@@ -701,7 +707,21 @@ interface ImageUploadFieldProps {
  * lets the preview show the photo that was actually saved rather than a local
  * object URL that could still fail to upload after the item itself was created.
  *
- * All four outcomes are drawn: uploading (`aria-busy` on the row and a spoken
+ * **Two ways to start, one crop step, one upload.** "Take photo" carries
+ * `capture="environment"` on its hidden input, which launches the device
+ * camera directly on a phone or tablet; "Upload photo" has no `capture`, so it
+ * opens the ordinary file/photo picker. Desktop browsers ignore `capture`
+ * entirely, so both buttons open the same file dialog there — a graceful
+ * degradation rather than a second code path, since the attribute is simply
+ * absent from the platform's own picker. Whichever button is used, the picked
+ * file goes to `PhotoCropDialog` before it ever reaches `uploadPhoto`: the
+ * register shows a 1:1 photo everywhere it appears, and the crop step is what
+ * lets the person attaching it choose *which* square, rather than leaving that
+ * to the server's own centre-crop (`files.upload.ts`'s `fit: "cover"`, which
+ * still runs regardless — belt and braces, not a duplicate step, because the
+ * server does not trust a client it cannot see).
+ *
+ * All four upload outcomes are drawn: uploading (`aria-busy` on the row and a spoken
  * status), uploaded (the preview *is* the confirmation, plus a spoken status), a
  * refusal from the server (its own sentence, under the field, in a `FieldError`),
  * and no connection (a different sentence, saying the same thing differently).
@@ -717,7 +737,10 @@ const ImageUploadField = ({
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [pickedImageSrc, setPickedImageSrc] = useState<string | null>(null);
   const inputId = `${formId}-image`;
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
     setIsUploading(true);
@@ -749,6 +772,15 @@ const ImageUploadField = ({
     });
   };
 
+  const handlePicked = async (file: File) => {
+    setError(null);
+    try {
+      setPickedImageSrc(await readFileAsDataUrl(file));
+    } catch {
+      setError("That file could not be opened for cropping.");
+    }
+  };
+
   return (
     <Field invalid={Boolean(error)} disabled={disabled || isUploading}>
       <FieldLabel htmlFor={inputId}>Photo</FieldLabel>
@@ -770,19 +802,66 @@ const ImageUploadField = ({
             None
           </div>
         )}
-        <div className="flex min-w-0 flex-col gap-1">
-          <Input
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            id={inputId}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void handleFile(file);
-              }
-              event.target.value = "";
-            }}
-            type="file"
-          />
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/*
+              Two hidden inputs rather than one input whose `capture`
+              attribute is toggled: `capture` is read once, when the browser
+              opens the picker, so swapping it on an input already in the DOM
+              is unreliable across browsers. Two inputs is one attribute each,
+              set once, and never changed.
+            */}
+            <input
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              id={inputId}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  void handlePicked(file);
+                }
+                event.target.value = "";
+              }}
+              ref={cameraInputRef}
+              tabIndex={-1}
+              type="file"
+            />
+            <input
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  void handlePicked(file);
+                }
+                event.target.value = "";
+              }}
+              ref={uploadInputRef}
+              tabIndex={-1}
+              type="file"
+            />
+            <Button
+              data-icon="inline-start"
+              onClick={() => cameraInputRef.current?.click()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <IconCamera data-icon="inline-start" />
+              Take photo
+            </Button>
+            <Button
+              data-icon="inline-start"
+              onClick={() => uploadInputRef.current?.click()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <IconUpload data-icon="inline-start" />
+              Upload photo
+            </Button>
+          </div>
           {previewUrl ? (
             <Button
               disabled={isUploading}
@@ -800,10 +879,19 @@ const ImageUploadField = ({
           ) : null}
         </div>
       </div>
+      <PhotoCropDialog
+        imageSrc={pickedImageSrc}
+        onCancel={() => setPickedImageSrc(null)}
+        onCropped={(file) => {
+          setPickedImageSrc(null);
+          void handleFile(file);
+        }}
+      />
       <FieldDescription>
-        Optional. PNG, JPEG, WEBP or GIF, up to 8 MB. It uploads as soon as you
-        choose it, so a failure is told to you here rather than after the item
-        has been saved.
+        Optional. Take a photo or upload one — PNG, JPEG, WEBP or GIF, up to 8
+        MB — then crop it to a square. It uploads as soon as you confirm the
+        crop, so a failure is told to you here rather than after the item has
+        been saved. Every photo is stored as WebP.
       </FieldDescription>
       {/*
         The four upload states are also spoken. `aria-busy` on the row stops a

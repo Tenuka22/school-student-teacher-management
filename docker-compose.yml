@@ -17,9 +17,16 @@ services:
       BETTER_AUTH_URL: http://localhost:3001
       CORS_ORIGIN: http://localhost:3001
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/school-student-teacher-management
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -52,8 +59,51 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Object storage for uploaded files (item photos today). The same MinIO
+  # server this stack runs against in every environment, addressed through
+  # the S3 API — `apps/web/src/services.server.ts` never special-cases MinIO
+  # vs. real S3.
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: school-student-teacher-management-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - school-student-teacher-management_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # One-shot: creates the bucket the app writes to (`MINIO_BUCKET`, default
+  # `aloysius`) if it does not already exist, then exits. MinIO never creates
+  # a bucket on its own — the app assumes it is there, the same assumption
+  # `web`'s own `depends_on: service_healthy` makes about the database schema
+  # already being migrated.
+  minio-init:
+    image: quay.io/minio/minio:latest
+    container_name: school-student-teacher-management-minio-init
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin} &&
+        mc mb --ignore-existing local/${MINIO_BUCKET:-aloysius}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   school-student-teacher-management_postgres_data:
+  school-student-teacher-management_minio_data:
 
 # BuildKit makes these available only while install/build commands run.
 secrets:

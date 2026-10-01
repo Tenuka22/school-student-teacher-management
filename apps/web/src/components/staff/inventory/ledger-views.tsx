@@ -126,7 +126,16 @@ const ITEM_FILTER_LIMIT = 200;
  * exists, the two filters below say so on their face.
  */
 const ACTOR_FILTER_DESCRIPTION =
-  "Any member of staff still employed can be named here, but somebody who has since left cannot — a change they made is on the record and their name is off this list. Administrators, principals and deputy principals are not in it at all, by design: they hold no staff record, so filtering by one of them will return nothing however the search is typed. Narrow by date range or action instead.";
+  "Any member of staff still employed can be named here, but somebody who has since left cannot \u2014 a change they made is on the record and their name is off this list. Administrators, principals and deputy principals are not in it at all, by design: they hold no staff record, so filtering by one of them will return nothing however the search is typed. Narrow by date range or action instead.";
+
+/**
+ * The column labels: deep-green ground, amber small caps \u2014 the same
+ * treatment the register's own `COLUMN_HEADING` uses, copied by value rather
+ * than shared across a barrel file, exactly as `inventory-issue-dialogs.tsx`
+ * and `disposal-certificates.tsx` already do.
+ */
+const LEDGER_COLUMN_HEADING =
+  "text-accent h-11 text-xs font-extrabold tracking-[0.16em] uppercase";
 
 const ENTITY_TYPES = [
   "inventory_item",
@@ -715,107 +724,129 @@ const MovementsTable = () => {
       !transactionsQuery.isError &&
       transactions.length > 0 ? (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Action</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead>Who</TableHead>
-                <TableHead>When</TableHead>
-                <TableHead className="text-right">On hand</TableHead>
-                <TableHead>Asset tags</TableHead>
-                <TableHead>Note</TableHead>
-                {/**
-                 * A column named for what it holds. See `BeforeAfterPanel`: the
-                 * disclosure *is* the before/after pair, it was the reason this
-                 * procedure stores two counters instead of a delta, and calling
-                 * the column "Note" put the only place the absolute values are
-                 * written under a heading that promised a sentence.
-                 */}
-                <TableHead>Before → after</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.map((row) => {
-                const tags = metaTags(row.meta);
-                const reason =
-                  metaText(row.meta, "reason") ?? metaText(row.meta, "purpose");
+          <div className="border-primary/14 flex flex-col gap-3 border p-3">
+            <Table
+              stickyHeader
+              className="[&_[data-slot=table-header]]:[&_th]:bg-primary min-w-[1150px] table-fixed"
+            >
+              <TableHeader>
+                <TableRow className="bg-primary hover:bg-primary border-none">
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-40`}>
+                    Action
+                  </TableHead>
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-44`}>
+                    Item
+                  </TableHead>
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-32`}>
+                    Who
+                  </TableHead>
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-40`}>
+                    When
+                  </TableHead>
+                  <TableHead
+                    className={`${LEDGER_COLUMN_HEADING} w-20 text-right`}
+                  >
+                    On hand
+                  </TableHead>
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-40`}>
+                    Asset tags
+                  </TableHead>
+                  <TableHead className={LEDGER_COLUMN_HEADING}>Note</TableHead>
+                  {/**
+                   * A column named for what it holds. See `BeforeAfterPanel`: the
+                   * disclosure *is* the before/after pair, it was the reason this
+                   * procedure stores two counters instead of a delta, and calling
+                   * the column "Note" put the only place the absolute values are
+                   * written under a heading that promised a sentence.
+                   */}
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-36`}>
+                    Before → after
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((row) => {
+                  const tags = metaTags(row.meta);
+                  const reason =
+                    metaText(row.meta, "reason") ??
+                    metaText(row.meta, "purpose");
 
-                return (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {row.actionLabel ?? inventoryActionLabel(row.action)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="block">{row.itemName}</span>
-                      <span className="text-muted-foreground font-mono text-xs">
-                        {row.sku}
-                      </span>
-                    </TableCell>
-                    <TableCell>
+                  return (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {row.actionLabel ?? inventoryActionLabel(row.action)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="block">{row.itemName}</span>
+                        <span className="text-muted-foreground font-mono text-xs">
+                          {row.sku}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {/**
+                         * Three states, not one: a name, a departed colleague, or
+                         * an account with no staff row. `actorStaffId` is
+                         * `set null`, so the second is a normal row and the third is
+                         * an empty slot, and the ledger is the only place either can
+                         * be told apart.
+                         */}
+                        <PartyName
+                          name={row.actorName}
+                          staffId={row.actorStaffId}
+                          emptyLabel="Account with no staff record"
+                        />
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {formatDateTime(row.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DeltaCell delta={row.qtyDelta} />
+                      </TableCell>
                       {/**
-                       * Three states, not one: a name, a departed colleague, or
-                       * an account with no staff row. `actorStaffId` is
-                       * `set null`, so the second is a normal row and the third is
-                       * an empty slot, and the ledger is the only place either can
-                       * be told apart.
+                       * Every tag, wrapping, never truncated. A movement of twenty
+                       * labelled devices is one row here, and a list that stops at
+                       * three is a list that cannot answer "which twenty".
                        */}
-                      <PartyName
-                        name={row.actorName}
-                        staffId={row.actorStaffId}
-                        emptyLabel="Account with no staff record"
-                      />
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {formatDateTime(row.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DeltaCell delta={row.qtyDelta} />
-                    </TableCell>
-                    {/**
-                     * Every tag, wrapping, never truncated. A movement of twenty
-                     * labelled devices is one row here, and a list that stops at
-                     * three is a list that cannot answer "which twenty".
-                     */}
-                    <TableCell className="max-w-48 text-xs">
-                      {tags.length > 0 ? (
-                        <span className="font-mono break-all">
-                          {tags.join(", ")}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          &mdash; counted in bulk
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-64">
-                      {row.note ? (
-                        <span className="line-clamp-2">{row.note}</span>
-                      ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <BeforeAfterPanel
-                        qtyBefore={row.qtyBefore}
-                        qtyAfter={row.qtyAfter}
-                        qtyDelta={row.qtyDelta}
-                        reason={reason}
-                      />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-            <TableCaption>
-              On hand shows the changes to the item&rsquo;s quantity. Open a
-              row&rsquo;s <span className="font-medium">Before \\ after</span>{" "}
-              column for the absolute pair either side of the movement, which is
-              what the ledger stores instead of a difference.
-            </TableCaption>
-          </Table>
+                      <TableCell className="text-xs whitespace-normal">
+                        {tags.length > 0 ? (
+                          <span className="font-mono break-all">
+                            {tags.join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            &mdash; counted in bulk
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        {row.note ? (
+                          <span className="line-clamp-2">{row.note}</span>
+                        ) : (
+                          <span className="text-muted-foreground">&mdash;</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <BeforeAfterPanel
+                          qtyBefore={row.qtyBefore}
+                          qtyAfter={row.qtyAfter}
+                          qtyDelta={row.qtyDelta}
+                          reason={reason}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+              <TableCaption>
+                On hand shows the changes to the item&rsquo;s quantity. Open a
+                row&rsquo;s <span className="font-medium">Before → after</span>{" "}
+                column for the absolute pair either side of the movement, which
+                is what the ledger stores instead of a difference.
+              </TableCaption>
+            </Table>
+          </div>
 
           <ResultCount
             shown={transactions.length}
@@ -1070,63 +1101,80 @@ const ChangeLogTable = () => {
       !auditLogsQuery.isError &&
       auditLogs.length > 0 ? (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Who</TableHead>
-                <TableHead>When</TableHead>
-                <TableHead>What changed</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {auditLogs.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>
-                    <Badge variant="outline">{row.action}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span className="block">{humanizeKey(row.entityType)}</span>
-                    {/**
-                     * The full id is reachable without a pointer.
-                     *
-                     * It used to exist only in `title=` on a truncated span, which
-                     * contradicts this file's own rule seven hundred lines up —
-                     * "hover is never the only way to reach information in this
-                     * file" — and the id is the one field on the row that has to
-                     * be transcribed: it is how a row here is matched against a row
-                     * on the Movements tab, and a half-read uuid is not a match.
-                     *
-                     * So the visible span is `aria-hidden` and truncated for
-                     * layout, and the whole value sits beside it in an `sr-only`
-                     * span, which is what a screen reader and a text-selection
-                     * both get.
-                     */}
-                    <span
-                      className="text-muted-foreground block max-w-40 truncate font-mono text-xs"
-                      aria-hidden="true"
-                    >
-                      {row.entityId}
-                    </span>
-                    <span className="sr-only">Row id {row.entityId}</span>
-                  </TableCell>
-                  <TableCell>{row.actorName}</TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatDateTime(row.createdAt)}
-                  </TableCell>
-                  <TableCell className="max-w-xl min-w-96 whitespace-normal">
-                    <EntityDiff before={row.before} after={row.after} />
-                  </TableCell>
+          <div className="border-primary/14 flex flex-col gap-3 border p-3">
+            <Table
+              stickyHeader
+              className="[&_[data-slot=table-header]]:[&_th]:bg-primary min-w-[1000px] table-fixed"
+            >
+              <TableHeader>
+                <TableRow className="bg-primary hover:bg-primary border-none">
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-40`}>
+                    Action
+                  </TableHead>
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-40`}>
+                    Entity
+                  </TableHead>
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-32`}>
+                    Who
+                  </TableHead>
+                  <TableHead className={`${LEDGER_COLUMN_HEADING} w-40`}>
+                    When
+                  </TableHead>
+                  <TableHead className={LEDGER_COLUMN_HEADING}>
+                    What changed
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-            <TableCaption>
-              Only the fields that actually changed are shown by default. The
-              unchanged remainder of each snapshot is one disclosure away, so
-              the log is never lossy and never a wall of jsonb.
-            </TableCaption>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {auditLogs.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      <Badge variant="outline">{row.action}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <span className="block">
+                        {humanizeKey(row.entityType)}
+                      </span>
+                      {/**
+                       * The full id is reachable without a pointer.
+                       *
+                       * It used to exist only in `title=` on a truncated span, which
+                       * contradicts this file's own rule seven hundred lines up —
+                       * "hover is never the only way to reach information in this
+                       * file" — and the id is the one field on the row that has to
+                       * be transcribed: it is how a row here is matched against a row
+                       * on the Movements tab, and a half-read uuid is not a match.
+                       *
+                       * So the visible span is `aria-hidden` and truncated for
+                       * layout, and the whole value sits beside it in an `sr-only`
+                       * span, which is what a screen reader and a text-selection
+                       * both get.
+                       */}
+                      <span
+                        className="text-muted-foreground block max-w-40 truncate font-mono text-xs"
+                        aria-hidden="true"
+                      >
+                        {row.entityId}
+                      </span>
+                      <span className="sr-only">Row id {row.entityId}</span>
+                    </TableCell>
+                    <TableCell>{row.actorName}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {formatDateTime(row.createdAt)}
+                    </TableCell>
+                    <TableCell className="max-w-xl min-w-96 whitespace-normal">
+                      <EntityDiff before={row.before} after={row.after} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <TableCaption>
+                Only the fields that actually changed are shown by default. The
+                unchanged remainder of each snapshot is one disclosure away, so
+                the log is never lossy and never a wall of jsonb.
+              </TableCaption>
+            </Table>
+          </div>
 
           <ResultCount shown={auditLogs.length} total={total} noun="changes" />
         </>

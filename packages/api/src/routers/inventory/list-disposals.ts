@@ -74,7 +74,7 @@ import type { InferOutput } from "valibot";
 
 import type { Context } from "../../context";
 import { inventoryOverseerProcedure } from "../../index";
-import { iso, isoOrNull } from "./inventory-database";
+import { iso, isoOrNull, itemImageFile } from "./inventory-database";
 
 type Database = Context["db"];
 
@@ -183,6 +183,11 @@ const disposalSelect = {
   itemId: inventoryDisposal.itemId,
   itemName: inventoryItem.name,
   itemSku: inventoryItem.sku,
+  /** See `inventory-database.ts`'s `itemImageFile` — a served URL, never the
+   * raw storage key, null for an unphotographed item. */
+  itemImageUrl: sql<
+    string | null
+  >`case when ${itemImageFile.id} is null then null else '/api/files/' || ${itemImageFile.id} end`,
   qty: inventoryDisposal.qty,
   reason: inventoryDisposal.reason,
   method: inventoryDisposal.method,
@@ -213,6 +218,7 @@ const disposalRows = (db: Database) =>
     // no such thing as a disposal without an item — and the item's name and SKU
     // are on the certificate the user is looking for.
     .innerJoin(inventoryItem, eq(inventoryDisposal.itemId, inventoryItem.id))
+    .leftJoin(itemImageFile, eq(inventoryItem.imageFileId, itemImageFile.id))
     .leftJoin(
       requestedByStaff,
       eq(inventoryDisposal.requestedByStaffId, requestedByStaff.id)
@@ -385,6 +391,7 @@ const toDisposalRow = (
   itemId: row.itemId,
   itemName: row.itemName,
   itemSku: row.itemSku,
+  itemImageUrl: row.itemImageUrl,
   qty: row.qty,
   reason: row.reason,
   method: row.method,

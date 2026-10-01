@@ -29,6 +29,16 @@ const DEFAULT_OPTION_LIMIT = 50;
 
 export interface ItemPickerOption {
   value: string;
+  /**
+   * The bare item name, kept apart from `label`. This is what `itemToStringLabel`
+   * feeds back into the box when an item becomes the value — `search` then hits
+   * `ilike(inventoryItem.name, ...)` on the server and matches itself. `label`
+   * ("Desktop PC (INV-90005)") is what the row displays, and it is a string no
+   * column holds: re-submitting it as a search term emptied the list the moment
+   * an item was picked, which is also the one moment the field most needs to
+   * keep showing the row the user just chose.
+   */
+  name: string;
   label: string;
   description?: string;
   disabled?: boolean;
@@ -89,6 +99,7 @@ export const useItemOptions = (input?: {
     () =>
       (query.data?.items ?? []).map((item) => ({
         value: item.id,
+        name: item.name,
         label: `${item.name} (${item.sku})`,
         description: [
           `${item.availableQty} of ${item.qty} available`,
@@ -198,6 +209,7 @@ export const ItemPickerField: React.FC<{
     return [
       {
         value,
+        name: "Chosen item — not on this page",
         label: "Chosen item — not on this page",
         description: "Its name and counters are not loaded",
       },
@@ -214,6 +226,31 @@ export const ItemPickerField: React.FC<{
     refetch();
   }, [refetch]);
 
+  /**
+   * Only a keystroke re-queries the server. Picking an item also fires
+   * `onInputValueChange` — Base UI fills the box with `itemToStringLabel(item)`
+   * on selection, same as typing a character would — and forwarding that to
+   * `setSearch` restarted the 250 ms debounce on the server list. For the
+   * ~250 ms between the restart and the new response landing, `query.data` has
+   * no previous-data fallback, so `options` went briefly empty and the row the
+   * reader had just clicked fell out of it, surfacing "Chosen item — not on
+   * this page" on a perfectly valid selection before the fresh response
+   * (matching the same item by name) put it back. `reason` is Base UI's own
+   * record of *why* the box changed, and `"item-press"` is the one value that
+   * means the box text changed because a row was picked, not because anybody
+   * typed. Typing, pasting and clearing the box all still reach `setSearch` as
+   * before — only the one reason that fills the box with a value already
+   * known to be valid is excluded.
+   */
+  const handleInputValueChange = useCallback(
+    (next: string, eventDetails: { reason: string }) => {
+      if (eventDetails.reason !== "item-press") {
+        setSearch(next);
+      }
+    },
+    [setSearch]
+  );
+
   return (
     <Field data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
@@ -221,8 +258,8 @@ export const ItemPickerField: React.FC<{
         items={items}
         value={selected}
         onValueChange={(item) => onChange(item?.value ?? null)}
-        onInputValueChange={setSearch}
-        itemToStringLabel={(item) => item?.label ?? ""}
+        onInputValueChange={handleInputValueChange}
+        itemToStringLabel={(item) => item?.name ?? ""}
         isItemEqualToValue={(a, b) => a?.value === b?.value}
         // Server-side search, same reason as the teacher combobox: the list is
         // a page of a large register, not the whole register.

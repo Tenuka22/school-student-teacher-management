@@ -27,7 +27,7 @@ import {
 } from "@school-student-teacher-management/db/schema/inventory";
 import { isoDateSchema } from "@school-student-teacher-management/db/schema/primitives";
 import { staff } from "@school-student-teacher-management/db/schema/staff";
-import { and, count, desc, eq, gte, ilike, lt, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
   integer,
@@ -44,7 +44,7 @@ import {
 import { inventoryOverseerProcedure } from "../../index";
 import { addDaysIsoDate } from "./inventory-calculations";
 import type { Executor } from "./inventory-database";
-import { iso } from "./inventory-database";
+import { iso, itemImageFile } from "./inventory-database";
 
 /** A year of movements is a plausible page size; 500 is the hard ceiling. */
 const MAX_LIMIT = 500;
@@ -120,6 +120,11 @@ const ledgerSelection = {
   actorStaffId: inventoryTransaction.actorStaffId,
   itemName: inventoryItem.name,
   itemSku: inventoryItem.sku,
+  /** See `inventory-database.ts`'s `itemImageFile` — a served URL, never
+   * the raw storage key, null for an unphotographed item. */
+  itemImageUrl: sql<
+    string | null
+  >`case when ${itemImageFile.id} is null then null else '/api/files/' || ${itemImageFile.id} end`,
   actorName: staff.name,
 } as const;
 
@@ -128,6 +133,7 @@ const ledgerQuery = (db: Executor) =>
     .select(ledgerSelection)
     .from(inventoryTransaction)
     .innerJoin(inventoryItem, eq(inventoryTransaction.itemId, inventoryItem.id))
+    .leftJoin(itemImageFile, eq(inventoryItem.imageFileId, itemImageFile.id))
     .leftJoin(staff, eq(inventoryTransaction.actorStaffId, staff.id));
 
 type LedgerRow = Awaited<ReturnType<typeof ledgerQuery>>[number];
@@ -154,6 +160,7 @@ const toTransactionRow = (row: LedgerRow) => {
      * the better answer if a row ever carries one anyway.
      */
     itemName: row.itemName || metaText(meta?.itemName),
+    itemImageUrl: row.itemImageUrl,
     sku: row.itemSku || metaText(meta?.sku),
     actorStaffId: row.actorStaffId,
     /**

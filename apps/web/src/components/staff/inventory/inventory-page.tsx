@@ -13,14 +13,14 @@ import { inventoryItemIdSchema } from "@school-student-teacher-management/db/sch
 import { staffIdSchema } from "@school-student-teacher-management/db/schema/staff";
 import { Button } from "@school-student-teacher-management/ui/components/button";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@school-student-teacher-management/ui/components/tabs";
-import { IconCategory, IconPlus, IconRefresh } from "@tabler/icons-react";
+  IconCategory,
+  IconPackage,
+  IconPackageOff,
+  IconPlus,
+  IconRefresh,
+} from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useRouteContext } from "@tanstack/react-router";
+import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import * as v from "valibot";
@@ -28,6 +28,7 @@ import * as v from "valibot";
 import { CategoryPanel } from "@/components/staff/inventory/category-panel";
 import type { CustodyHoldMode } from "@/components/staff/inventory/custody-dialogs";
 import { CustodyDialogs } from "@/components/staff/inventory/custody-dialogs";
+import { DisposalsPanel } from "@/components/staff/inventory/disposal-dialogs";
 import { RegisterSelectionBar } from "@/components/staff/inventory/inventory-register-states";
 import { InventoryTable } from "@/components/staff/inventory/inventory-table";
 import type {
@@ -39,11 +40,10 @@ import {
   DEFAULT_INVENTORY_FILTERS,
   hasActiveInventoryFilters,
 } from "@/components/staff/inventory/inventory-types";
+import { IssuesPanel } from "@/components/staff/inventory/issue-dialogs";
 import { InventoryItemDialogs } from "@/components/staff/inventory/item-dialogs";
-import {
-  InventoryLifecycleTabs,
-  LIFECYCLE_HEADING_ID,
-} from "@/components/staff/inventory/lifecycle-tabs";
+import { InventoryLedgerTabs } from "@/components/staff/inventory/ledger-views";
+import { StockQuickActions } from "@/components/staff/inventory/lifecycle-tabs";
 import type { QrSheetSelection } from "@/components/staff/inventory/qr-sheet-dialog";
 import { QrSheetDialog } from "@/components/staff/inventory/qr-sheet-dialog";
 import {
@@ -64,8 +64,7 @@ import {
 } from "@/components/staff/inventory/stock-dialogs";
 import { formatApiErrorMessage } from "@/lib/api-error";
 import { downloadExportFile } from "@/lib/download-export";
-import type { InventoryWorkspaceBase } from "@/lib/paths";
-import { useActiveYear, yearPath } from "@/lib/paths";
+import { useActiveYear } from "@/lib/paths";
 import { orpc } from "@/utils/orpc";
 
 /**
@@ -1382,77 +1381,97 @@ export const useInventoryPage = () => {
 };
 
 /**
- * The Records pane's five sub-views — the four lifecycle tabs
- * (`lifecycle-tabs.tsx`) plus the ledger section at their foot — as real path
- * segments rather than `?tab=`/`?subtab=` query state. Each is its own route
- * file (`inventory.loans.tsx`, `inventory.issues.tsx`, `inventory.write-offs.tsx`,
- * `inventory.asset-register.tsx`, `inventory.ledger.tsx`, mirroring the
+ * The page's four real destinations \u2014 the register, and three record pages
+ * that each used to be a tab buried inside one shared "Records" screen \u2014 as
+ * real path segments rather than `?tab=`/`?subtab=` query state. Each is its own route
+ * file (`inventory.issues.tsx`, `inventory.write-offs.tsx`, `inventory.ledger.tsx`,
+ * mirroring the
  * dot-notation convention `teacher-timetable.$staffId.tsx` already sets in this
- * app), so every one of these six views is bookmarkable, shareable and gets its
- * own browser-history entry — the same reasoning the equipment pages' own
+ * app), so every one of these four views is bookmarkable, shareable and gets its
+ * own browser-history entry \u2014 the same reasoning the equipment pages' own
  * `equipment.in-charge.tsx` etc. give for the identical change there.
  */
-export type InventorySection =
-  | "register"
-  | "issues"
-  | "write-offs"
-  | "asset-register"
-  | "ledger";
+export type InventorySection = "register" | "issues" | "write-offs" | "ledger";
 
-/** Which of `InventoryLifecycleTabs`' four `Tabs` values a section maps to. */
-const LIFECYCLE_SUBTAB_OF: Record<
-  Exclude<InventorySection, "register">,
-  "issues" | "write-offs" | "register"
-> = {
-  issues: "issues",
-  "write-offs": "write-offs",
-  "asset-register": "register",
-  // The ledger section sits at the foot of the Records pane regardless of
-  // which lifecycle tab is active above it, so `/ledger` lands on Records
-  // with Issues (the pane's default for records) underneath and scrolls to the
-  // ledger heading — see `scrollToLedger` on `InventoryLifecycleTabs`.
-  ledger: "issues",
-};
 /**
- * The administrator's inventory page: two panes over one URL.
+ * The administrator's inventory page: four real pages behind one tab bar.
  *
- * The two panes below sit around a page that is still markup only: the queries,
+ * The pages below sit around a shell that is still markup only: the queries,
  * the mutations, the dialog state and every handler live in `useInventoryPage`,
- * and the wrapper adds nothing but the tab state above.
+ * and the wrapper adds nothing but the tab state above — for the Register page,
+ * which is the one page still built on that shared hook. Transfers, Disposals,
+ * and the Ledgers each own their query outright
+ * (`IssuesPanel`, `DisposalsPanel`, `InventoryLedgerTabs`),
+ * because none of their reads or writes touch the register's own state and a
+ * shared hook growing a fifth consumer is exactly how a 300-line hook becomes a
+ * 900-line one.
  *
- * ## Why this order, and why two
+ * ## Why four pages, and not one shared "Records" screen
+ *
+ * **This used to be two panes — Register, and a "Records" pane that itself held
+ * three lifecycle tabs (Transfers, Disposals, the Asset register) plus a
+ * Ledgers section glued to the bottom of all three.** The sidebar already had
+ * four separate links into that one screen — "Transfers", "Disposals", an asset
+ * register of its own — each landing on the identical crowded page with a
+ * different tab pre-selected: a "Receive stock" pair of buttons that belonged to
+ * none of the three lifecycles, three tabs that had nothing to do with whichever
+ * one the sidebar link actually promised, and four hundred ledger rows at the
+ * foot of a screen a reader opened to check one transfer. **A sidebar link that
+ * promises "Disposals" and lands on a page still showing Transfers and an asset
+ * register underneath it is not a focused page, whatever the active tab says.**
+ * Each of those four now gets the page the sidebar already promised it: its own
+ * heading, its own description, the one panel that is actually its job, and
+ * nothing else competing for the same screen.
+ *
+ * **The Asset register tab became its own "History" page, then was removed
+ * outright.** It showed one row per physical tag rather than one row per item
+ * line, but every other column — item name, status, condition, location —
+ * was the Register page's own data read a second way, and a reader comparing
+ * the two pages saw the same store described twice. The one thing it could do
+ * that the Register page could not — move a single already-tagged unit
+ * between `available` and `removed` without a delivery or a write-off — is
+ * gone with it; see `app-sidebar.tsx`'s nav comment for why that is a
+ * deliberate narrowing and not an oversight.
+ *
+ * ## The four, in the order the tab bar reads them
  *
  * **1. Register.** The question a clerk opens this page with is "what does the
  * school owns, who is responsible for it, and what can I hand out right now", and
  * the register is the only pane that answers all three in one screen. It goes
  * first so the first paint answers the primary question.
  *
- * **2. Records.** Loans, issues, write-offs, the asset register and the two ledgers.
- * Evidence and outstanding work — the queue that needs chasing, the certificate an
- * audit will ask for, and the forensic tail you read when something is wrong. Second
- * because it is consulted deliberately, and because `lifecycle-tabs.tsx` has already
- * made its own internal ordering argument: the one row that is *wrong right now* (an
- * overdue loan) sorts to the top of its own list.
+ * **2. Issues.** What has permanently left the school — a certificate, not a
+ * queue: nothing on it is chased, and a clerk goes to it to answer "who took the
+ * three projectors, and when".
  *
- * **The third pane, "Ledger", was removed rather than renamed.** The two ledgers are
- * still on the page — at the foot of Records, where `lifecycle-tabs.tsx` heads them
- * and explains what each is for — so nothing became unreachable; what went away is the
- * second mount of the same component. Three panes' worth of meaning, two panes'
- * worth of tabs, and the rule applied is the one worth stating: a component that is
- * rendered in two places on one screen is two components, and the one that is
- * canonical has to be the one that carries the heading.
+ * **3. Disposals.** The two-stage write-off queue — real work, batched and
+ * second-signed, and the one page where a row can be impossible for the reader
+ * to act on (the server refuses self-approval).
+ *
+ * **4. Ledgers.** The two read-only histories — Movements (what happened to the
+ * quantities) and Change log (what happened to the records themselves). Last,
+ * because it is consulted deliberately: the forensic tail a reader reads when
+ * something is wrong, not a screen anybody lands on by accident the way the
+ * foot of the old combined page once was.
+ *
+ * **`StockQuickActions` — "Receive stock" and "Remove from stock" — lives on
+ * the Register page and on Disposals, not on a sixth page of its own.** Both
+ * verbs change `inventoryItem.qty` directly, which is the register's own job;
+ * Disposals keeps a copy because a clerk raising a write-off is often the same
+ * clerk who just found the count was wrong. Transfers does not
+ * repeat it — see `RegisterPaneHeader` and `IssuesPane` for the argument in
+ * full.
  *
  * ## The heading structure, because there used to be three names for one screen
  *
  * The sidebar says "Equipment", the register panel carried an `<h1>Inventory</h1>`,
- * and the Records pane carried an `<h1>Stock movements</h1>` — the page's own name
- * vanishing the moment the user left the register, and two `h1`s inside one document.
- * So: **one `h1`, and it names the page**, above the tab bar where it cannot be
- * unmounted by switching panes. Each pane is a `<section>` with an accessible name —
- * the register's own visible `<h2>`, and an `aria-label` on the Records pane, whose
- * heading belongs to `lifecycle-tabs.tsx`. That last one is the remaining half of
- * this fix and it is not in this file: `lifecycle-tabs.tsx:110` renders its "Stock
- * movements" as an `<h1>`, and it should be an `<h2>` for the outline to be correct.
+ * and the old Records pane carried an `<h1>Stock movements</h1>` — the page's own
+ * name vanishing the moment the user left the register, and two `h1`s inside one
+ * document. So: **one `h1`, and it names the page**, above the tab bar where it
+ * cannot be unmounted by switching pages. Each page below is a `<section>` with
+ * its own visible `<h2>` naming it — "Issues", "Disposals", "Ledgers" — at
+ * the same level as the register's own "Register", a flat,
+ * correct outline under the one `h1`.
  */
 /**
  * The one object the Register pane renders from: everything `useInventoryPage`
@@ -1465,11 +1484,31 @@ const LIFECYCLE_SUBTAB_OF: Record<
 type InventoryPageState = ReturnType<typeof useInventoryPage>;
 
 /**
- * The pane's name and its two page actions.
+ * The pane's name and its page actions.
  *
  * Its own component because the pane is a stack of five concerns and this is the
  * one that is not a filter, a notice or a dialog: it is the pane's identity, and
  * it is the only place on the page that names what the reader is looking at.
+ *
+ * **"Receive stock" and "Remove from stock" live here, and only here and on
+ * Disposals.** They used to sit above all three record pages — Transfers and
+ * Disposals included — because the two counter movements belong
+ * to no *lifecycle*. That argument was right about the lifecycle tabs and wrong
+ * about the register: `stockIn` and `stockOut` change `inventoryItem.qty`
+ * directly, which is exactly what this page is for, and a Transfers
+ * page offering a button that edits a different page's own counters was the
+ * button in the wrong place, not a feature every record page needed. Disposals
+ * keeps its own pair because a clerk raising a write-off is frequently the same
+ * clerk who just found the stock was wrong and needs to correct it before or
+ * after raising the certificate — the one other screen this move genuinely
+ * belongs beside.
+ */
+/**
+ * `StockInDialog` and `StockOutDialog` are already mounted once, in
+ * `RegisterPaneDialogs`, wired to `page.isStockInOpen` / `page.isStockOutOpen`
+ * — the same state the item edit form's "Record stock in"/"Write off stock"
+ * shortcuts open. These two buttons are a second door into that one pair of
+ * dialogs, not a second pair.
  */
 const RegisterPaneHeader = ({ page }: { page: InventoryPageState }) => (
   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1489,6 +1528,24 @@ const RegisterPaneHeader = ({ page }: { page: InventoryPageState }) => (
       </h2>
     </div>
     <div className="flex flex-wrap gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => page.handleStockInOpenChange(true)}
+        data-icon="inline-start"
+      >
+        <IconPackage data-icon="inline-start" />
+        Receive stock
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => page.handleStockOutOpenChange(true)}
+        data-icon="inline-start"
+      >
+        <IconPackageOff data-icon="inline-start" />
+        Remove from stock
+      </Button>
       {/*
         "Categories", not "Store categories". The empty-state copy below tells
         the user to look for "Seed categories", and the button beside it used
@@ -1807,23 +1864,122 @@ const InventoryRegisterPane = ({
   </section>
 );
 
-export const InventoryPage = ({
-  section,
-  base = "/admin",
-}: {
-  section: InventorySection;
-  /**
-   * Which workspace's addresses this copy of the register builds. The same
-   * six routes exist under `/admin/$year/staff/inventory` and
-   * `/inventory-admin/$year/staff/inventory`, and every pane switch navigates,
-   * so a base that stayed hard-coded would drag an Inventory Administrator
-   * back into the administrator's workspace on the first tab click.
-   */
-  base?: InventoryWorkspaceBase;
-}) => {
-  const navigate = useNavigate();
+/**
+ * The Issues page — what has permanently left the school.
+ *
+ * **Named for what it is, not for what a reader might guess it does.** This
+ * page used to be labelled "Transfers" in the sidebar and here, which reads
+ * as moving custody between two people inside the school — exactly the
+ * `TransferCustodyDialog`/`TransferOwnershipDialog` pair already reachable
+ * from a row's own menu on the Register page. What this page actually shows
+ * is `issues.create`'s own certificates: stock that has left the building for
+ * good, with no custodian or owner left to hand it to. Calling two different
+ * things "Transfer" was the confusion, not a naming preference — the fix is
+ * this page keeping the name its own route segment (`inventory.issues.tsx`)
+ * already had.
+ *
+ * `IssuesPanel` owns its own search, date filters and table; what this page
+ * adds is a name and a description, matching every other page. **No
+ * `StockQuickActions` here** — "Receive stock" and "Remove from stock" both
+ * change `inventoryItem.qty` directly, which is the Register page's own job,
+ * and a second door to it on every record page was a button with no natural
+ * home rather than a feature every page needed. See `RegisterPaneHeader` for
+ * where the pair actually lives, and `DisposalsPane` for the one other page
+ * that keeps its own copy.
+ */
+const IssuesPane = () => (
+  <section
+    aria-labelledby="inventory-issues-heading"
+    className="flex flex-col gap-4"
+  >
+    <header className="space-y-2">
+      <h2
+        id="inventory-issues-heading"
+        className="font-heading text-2xl font-semibold"
+      >
+        Issues
+      </h2>
+      <p className="text-muted-foreground max-w-3xl">
+        Every issue on record — who received it, why, and every asset tag that
+        went with it. An issue does not come back: it is a certificate, not a
+        queue, and nothing here is chased.
+      </p>
+    </header>
+    <IssuesPanel />
+  </section>
+);
+
+/**
+ * The Disposals page — the two-stage write-off queue.
+ *
+ * `DisposalsPanel` owns the summary strip, the status presets, the search and
+ * the certificates table; this page is its name and its quick actions, same
+ * as `IssuesPane`.
+ */
+const DisposalsPane = () => {
+  const [isStockInOpen, setIsStockInOpen] = useState(false);
+
+  return (
+    <section
+      aria-labelledby="inventory-disposals-heading"
+      className="flex flex-col gap-4"
+    >
+      <header className="space-y-2">
+        <h2
+          id="inventory-disposals-heading"
+          className="font-heading text-2xl font-semibold"
+        >
+          Disposals
+        </h2>
+        <p className="text-muted-foreground max-w-3xl">
+          Property being destroyed, recycled, auctioned or donated — signed off
+          and then finalised, with a second signature standing between a request
+          and any stock actually moving.
+        </p>
+      </header>
+      <StockQuickActions
+        isStockInOpen={isStockInOpen}
+        onStockInOpenChange={setIsStockInOpen}
+      />
+      <DisposalsPanel />
+    </section>
+  );
+};
+
+/**
+ * The Ledgers page — the two read-only histories, side by side as tabs.
+ *
+ * `InventoryLedgerTabs` owns both queries and both tables; this page is its
+ * name and the one paragraph telling the two tabs apart, matching every
+ * other page's own header.
+ */
+const LedgerPane = () => (
+  <section
+    aria-labelledby="inventory-ledgers-heading"
+    className="flex flex-col gap-4"
+  >
+    <header className="space-y-2">
+      <h2
+        id="inventory-ledgers-heading"
+        className="font-heading text-2xl font-semibold"
+      >
+        Ledgers
+      </h2>
+      <p className="text-muted-foreground max-w-3xl">
+        Two read-only histories, kept apart on purpose.{" "}
+        <strong className="font-medium">Movements</strong> is what happened to
+        the quantities, with the numbers from immediately before and after each
+        one. <strong className="font-medium">Change log</strong> is what
+        happened to the records themselves, field by field, and it keeps the
+        name of the person who made each change even after they have left.
+      </p>
+    </header>
+    <InventoryLedgerTabs />
+  </section>
+);
+
+export const InventoryPage = ({ section }: { section: InventorySection }) => {
   const year = useActiveYear();
-  const tab = section === "register" ? "register" : "records";
   const page = useInventoryPage();
 
   /**
@@ -1861,116 +2017,48 @@ export const InventoryPage = ({
    */
   const registerLabel = `Inventory register, academic year ${year}`;
 
-  const goToTab = useCallback(
-    (next: unknown) => {
-      if (next === tab) {
-        return;
-      }
-
-      void navigate({
-        to:
-          next === "register"
-            ? yearPath(base, year, "staff", "inventory")
-            : yearPath(base, year, "staff", "inventory", "issues"),
-      });
-    },
-    [navigate, tab, year, base]
-  );
-
   return (
-    <Tabs value={tab} onValueChange={goToTab} className="gap-4">
+    <div className="flex flex-col gap-4">
       {/*
-        The page's own name, above the tab bar rather than inside the register pane.
-        An `h1` inside a tab is an `h1` that disappears when the user reads a loan
-        queue, which is the same as having no page title at all.
+        The page's own name. There is no in-page tab bar below it any more —
+        the sidebar already carries "Inventory Management", "Issues",
+        "Disposals" and the rest as four separate links, and a second row of
+        tabs that duplicated the identical four destinations was a second
+        navigation for the same four places, always in sync by construction
+        but never visibly connected to the one a reader actually used to get
+        here. Removing it is not a loss of a feature: every one of the four
+        pages below is still its own real route, still bookmarkable, still
+        reached in one click — from the sidebar, which is also where a reader
+        already is.
       */}
       <header className="space-y-2">
         <h1 className="font-heading text-4xl font-semibold">Inventory</h1>
         <p className="text-muted-foreground max-w-3xl">
           Every item the school owns, who is responsible for it, and who is
-          holding it — with the movements, transfers, disposals and change log
+          holding it — with the movements, issues, disposals and change log
           behind it
         </p>
       </header>
 
       {/**
-       * The line variant at full width, matching the tab set *inside* the Records
-       * pane, so the page reads as one tabbed surface rather than a tab bar with
-       * unrelated controls below it.
+       * Four real pages, one mounted at a time — a plain `switch` on the route
+       * segment rather than a `Tabs` whose trigger row no longer exists. Each
+       * branch still owns its query outright (`IssuesPanel`, `DisposalsPanel`,
+       * `InventoryLedgerTabs`), so the page a reader did
+       * not ask for never has a request in flight — the property `Tabs`
+       * unmounting inactive content used to give for free, kept by construction
+       * here since only one branch of a `switch` ever renders.
        */}
-      <TabsList
-        variant="line"
-        className="border-primary/18 h-auto w-full justify-start gap-0.5 rounded-none border-b p-0"
-      >
-        <TabsTrigger
-          value="register"
-          className="rounded-none border border-b-0 border-transparent px-4 py-2.5 font-semibold after:hidden"
-        >
-          Register
-        </TabsTrigger>
-        <TabsTrigger
-          value="records"
-          className="rounded-none border border-b-0 border-transparent px-4 py-2.5 font-semibold after:hidden"
-        >
-          Records
-        </TabsTrigger>
-      </TabsList>
-
-      {/*
-        `text-base/relaxed` restores the app's default type size, which
-        `TabsContent`'s own base class (`text-xs/relaxed`) would otherwise shrink
-        for every element below that does not set a size of its own. It is the one
-        class added here, and it is here so the register renders at the same size
-        it did before it was mounted inside a tab.
-      */}
-      <TabsContent value="register" className="text-base/relaxed">
+      {section === "register" ? (
         <InventoryRegisterPane
           page={page}
           registerLabel={registerLabel}
           canSelfServe={canSelfServe}
         />
-      </TabsContent>
-
-      {/**
-       * The other pane. `InventoryLifecycleTabs` still owns every query,
-       * filter and empty state — the three props below are only which of its
-       * four `Tabs` values is active and where a tab switch navigates to, now
-       * that those live in the URL path rather than in the pane's own state.
-       * Base UI unmounts an inactive panel, so the loans, issues, write-off,
-       * asset-tag and ledger queries only run once this tab is actually
-       * opened — which is also why the register's first paint is not paying
-       * for them.
-       *
-       * `aria-labelledby`, pointing at the pane's own heading, and this is the
-       * other half of a fix that used to be split across two files. The heading was
-       * an `<h1>` and the section was labelled by the string "Records", so a
-       * screen reader was given a landmark called "Records" containing a
-       * level-one heading called "Stock movements", inside a page whose own
-       * level-one heading is "Inventory": two `h1`s and a landmark name that
-       * matched neither. The heading is now an `<h2>` (see the outline argument in
-       * `lifecycle-tabs.tsx`) and carries an id, so the section can be named by the
-       * element that names itself and the string can go.
-       */}
-      <TabsContent value="records" className="text-base/relaxed">
-        <section aria-labelledby={LIFECYCLE_HEADING_ID}>
-          <InventoryLifecycleTabs
-            activeSubtab={
-              section === "register" ? "issues" : LIFECYCLE_SUBTAB_OF[section]
-            }
-            onSubtabChange={(next) => {
-              // `InventoryLifecycleTabs`' own "register" tab value (its asset
-              // register) is a different word from this page's "register" pane
-              // (the catalog), so the URL segment is spelled out in full
-              // rather than reusing the ambiguous short name.
-              const segment = next === "register" ? "asset-register" : next;
-              void navigate({
-                to: yearPath(base, year, "staff", "inventory", segment),
-              });
-            }}
-            scrollToLedger={section === "ledger"}
-          />
-        </section>
-      </TabsContent>
-    </Tabs>
+      ) : null}
+      {section === "issues" ? <IssuesPane /> : null}
+      {section === "write-offs" ? <DisposalsPane /> : null}
+      {section === "ledger" ? <LedgerPane /> : null}
+    </div>
   );
 };

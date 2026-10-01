@@ -37,7 +37,7 @@ import {
 
 import { inventoryOverseerProcedure } from "../../index";
 import { addDaysIsoDate, todayIsoDate } from "./inventory-calculations";
-import { iso } from "./inventory-database";
+import { iso, itemImageFile } from "./inventory-database";
 
 /**
  * Page size when the caller does not choose one. The history screen renders a
@@ -66,6 +66,11 @@ export interface IssueListItem {
   itemId: string;
   itemName: string;
   itemSku: string;
+  /** The item's own photo — see `inventory-database.ts`'s `itemImageFile`
+   * for why this is a served URL and not a raw storage key. Null for the
+   * overwhelming majority of a school's store, which has never had one
+   * uploaded. */
+  itemImageUrl: string | null;
   qty: number;
   receiverName: string;
   receiverDepartment: string | null;
@@ -247,6 +252,9 @@ export const listIssues = inventoryOverseerProcedure
           itemId: inventoryIssue.itemId,
           itemName: inventoryItem.name,
           itemSku: inventoryItem.sku,
+          itemImageUrl: sql<
+            string | null
+          >`case when ${itemImageFile.id} is null then null else '/api/files/' || ${itemImageFile.id} end`,
           qty: inventoryIssue.qty,
           receiverName: inventoryIssue.receiverName,
           receiverDepartment: inventoryIssue.receiverDepartment,
@@ -264,6 +272,10 @@ export const listIssues = inventoryOverseerProcedure
         // an item. Naming it here rather than returning the ids and letting the
         // UI look them up is what keeps this list one query per concern.
         .innerJoin(inventoryItem, eq(inventoryIssue.itemId, inventoryItem.id))
+        .leftJoin(
+          itemImageFile,
+          eq(inventoryItem.imageFileId, itemImageFile.id)
+        )
         // LEFT, not inner: see the `issuedByName` note on `IssueListItem`. An
         // inner join here would silently delete every historic issue whose
         // storekeeper has since left the school — the rows an audit is most
@@ -336,6 +348,7 @@ export const listIssues = inventoryOverseerProcedure
         itemId: row.itemId,
         itemName: row.itemName,
         itemSku: row.itemSku,
+        itemImageUrl: row.itemImageUrl,
         qty: row.qty,
         receiverName: row.receiverName,
         receiverDepartment: row.receiverDepartment,

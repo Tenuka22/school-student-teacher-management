@@ -151,13 +151,21 @@ export const itemViewSelection = {
   managerName: managerStaff.name,
   custodianName: custodianStaff.name,
   /**
-   * The item's photo, as the static path it was uploaded to — see
-   * `apps/web/src/routes/api/files.upload.ts`. Null whenever `imageFileId`
-   * is null; the left join is what makes an unphotographed item (the
-   * overwhelming majority of a school's store) a row with a null column
-   * rather than a row this selection drops.
+   * The item's photo, as a URL a browser can put straight in an `<img src>`
+   * — but not the MinIO object key itself. `itemImageFile.key` is a path
+   * inside a *private* bucket (see `files.upload.ts`), so this builds the
+   * app's own serving URL instead: `/api/files/<fileId>`, which
+   * `apps/web/src/routes/api/files.$fileId.ts` turns into a short-lived
+   * presigned GET on every request. Built from `itemImageFile.id` rather
+   * than reading `imageFileId` a second time, so this column and
+   * `imageFileId` above can never name two different files. Null whenever
+   * `imageFileId` is null; the left join is what makes an unphotographed
+   * item (the overwhelming majority of a school's store) a row with a null
+   * column rather than a row this selection drops.
    */
-  imageUrl: itemImageFile.key,
+  imageUrl: sql<
+    string | null
+  >`case when ${itemImageFile.id} is null then null else '/api/files/' || ${itemImageFile.id} end`,
 
   uniqueIdCount: sql<number>`(
     select ${count()} from ${inventoryUnit}

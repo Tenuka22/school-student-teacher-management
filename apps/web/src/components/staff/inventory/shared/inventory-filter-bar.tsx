@@ -273,7 +273,7 @@ const CustodianSelect: React.FC<{
       value={value || ALL}
       onValueChange={(next) => onChange(next === ALL ? "" : (next ?? ""))}
     >
-      <SelectTrigger id={id} className="w-[15rem]">
+      <SelectTrigger id={id} className="w-[12rem]">
         <SelectValue placeholder="Anyone">{label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
@@ -624,7 +624,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
               })
             }
           >
-            <SelectTrigger id={statusId} className="w-[10rem]">
+            <SelectTrigger id={statusId} className="w-[8rem]">
               <SelectValue placeholder="Any status">
                 {status === ALL ? "Any status" : itemStatusLabel(status)}
               </SelectValue>
@@ -646,7 +646,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
             value={categoryId || ALL}
             onValueChange={(next) => onChange({ categoryId: next ?? "" })}
           >
-            <SelectTrigger id={categoryId_} className="w-[12rem]">
+            <SelectTrigger id={categoryId_} className="w-[10rem]">
               <SelectValue placeholder="All categories">
                 {categoryId
                   ? (categories.find((c) => c.id === categoryId)?.name ??
@@ -671,7 +671,7 @@ export const InventoryFilterBar: React.FC<InventoryFilterBarProps> = ({
             value={condition || ALL}
             onValueChange={(next) => onChange({ condition: next ?? "" })}
           >
-            <SelectTrigger id={conditionId} className="w-[10rem]">
+            <SelectTrigger id={conditionId} className="w-[8rem]">
               <SelectValue placeholder="Any condition">
                 {condition ? itemConditionLabel(condition) : "Any condition"}
               </SelectValue>

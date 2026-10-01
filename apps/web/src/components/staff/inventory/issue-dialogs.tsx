@@ -51,6 +51,17 @@ export { IssueDialog } from "@/components/staff/inventory/issue-dialog";
 const ISSUE_LIST_LIMIT = 200;
 
 /**
+ * The column labels: deep-green ground, amber small caps — the identical
+ * treatment `inventory-table-frame.tsx`'s own `COLUMN_HEADING` gives the
+ * register, copied by value rather than imported because the two tables share
+ * nothing else (no sort state, no skeleton, no caption builder) and importing
+ * one string constant across that boundary would be a second, smaller coupling
+ * for no real saving.
+ */
+const ISSUE_COLUMN_HEADING =
+  "text-accent h-11 text-xs font-extrabold tracking-[0.16em] uppercase";
+
+/**
  * `isOutstanding` is a reconciliation aid and nothing else.
  *
  * An issue is **terminal**: `inventory_issue` has no `updatedAt`, no status column
@@ -211,114 +222,149 @@ export const IssuesPanel = () => {
 
       {!issuesQuery.isLoading && !issuesQuery.isError && issues.length > 0 ? (
         <>
-          <Table>
-            <TableCaption>
-              {`Every issue on record${total > issues.length ? `, first ${issues.length} of ${total}` : ""}. Every asset tag on an issue is listed in full — this page is the only record of which devices left the building, so nothing on it is shortened.`}
-            </TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead>Received by</TableHead>
-                <TableHead>Purpose</TableHead>
-                <TableHead>Asset tags</TableHead>
-                <TableHead>Issued</TableHead>
-                <TableHead>Expected back</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {issues.map((issue) => (
-                <TableRow key={issue.id}>
-                  <TableCell>
-                    <span className="block font-medium">{issue.itemName}</span>
-                    <span className="text-muted-foreground font-mono text-xs">
-                      {issue.itemSku}
-                    </span>
-                  </TableCell>
-                  {/**
-                   * The quantity cell names the unit rather than printing a bare
-                   * figure. The issue row is the one place a bare `3` is genuinely
-                   * ambiguous: it is the only record of how much of what left the
-                   * building, and it is read months later by somebody who was not
-                   * there.
-                   */}
-                  <TableCell className="text-right font-medium tabular-nums">
-                    {pluralUnits(issue.qty)}
-                  </TableCell>
-                  <TableCell>
-                    <span className="block">{issue.receiverName}</span>
-                    {issue.receiverDepartment ? (
-                      <span className="text-muted-foreground text-xs">
-                        {issue.receiverDepartment}
-                      </span>
-                    ) : null}
-                    {issue.receiverPhone ? (
-                      <span className="text-muted-foreground font-mono text-xs tabular-nums">
-                        {issue.receiverPhone}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="max-w-72">
-                    <span className="line-clamp-2">{issue.purpose}</span>
-                    {issue.note ? (
-                      <span className="text-muted-foreground line-clamp-1 text-xs italic">
-                        {issue.note}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    {/**
-                     * **Every tag, in full.**
-                     *
-                     * This was `summariseTags` — three tags and a `+17 more` — and
-                     * the field's own copy promised the opposite ("the receipt quotes
-                     * them back"). On the one page that exists *only* to record which
-                     * devices left the building and to whom, a shortened tag list is a
-                     * shortened audit trail, and there is nothing else on the row that
-                     * could recover the rest. So the list wraps instead of truncating,
-                     * and the caption says so.
-                     */}
-                    {issue.units.length > 0 ? (
-                      <ul className="font-mono text-xs">
-                        {issue.units.map((unit) => (
-                          <li key={unit.id} className="break-all">
-                            {unit.uniqueNo}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        Counted in bulk — no tags
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className="block tabular-nums">
-                      {formatDateTime(issue.issuedAt)}
-                    </span>
-                    <PartyName
-                      name={issue.issuedByName}
-                      staffId={issue.issuedByStaffId}
-                      emptyLabel="Issued by an account with no staff record"
-                      goneLabel="Issuer no longer on the roll"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {issue.expectedReturnDate ? (
-                      <>
-                        <span className="block tabular-nums">
-                          {formatDate(issue.expectedReturnDate)}
-                        </span>
-                        <OutstandingMarker record={issue} />
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">Not stated</span>
-                    )}
-                  </TableCell>
+          <div className="border-primary/14 flex flex-col gap-3 border p-3">
+            {/*
+              The same dark-green, amber-label header band the register uses
+              (`inventory-table-frame.tsx`'s `COLUMN_HEADING`), applied here by
+              hand rather than shared, because the two tables have nothing else
+              in common — this is the one property a reader has to see repeat
+              for the Records pages to read as the same product as the register
+              they just came from.
+            */}
+            <Table
+              stickyHeader
+              className="[&_[data-slot=table-header]]:[&_th]:bg-primary min-w-[1100px] table-fixed"
+            >
+              <TableCaption>
+                {`Every issue on record${total > issues.length ? `, first ${issues.length} of ${total}` : ""}. Every asset tag on an issue is listed in full — this page is the only record of which devices left the building, so nothing on it is shortened.`}
+              </TableCaption>
+              <TableHeader>
+                <TableRow className="bg-primary hover:bg-primary border-none">
+                  <TableHead className={`${ISSUE_COLUMN_HEADING} w-40`}>
+                    Item
+                  </TableHead>
+                  <TableHead
+                    className={`${ISSUE_COLUMN_HEADING} w-20 text-right`}
+                  >
+                    Qty
+                  </TableHead>
+                  <TableHead className={`${ISSUE_COLUMN_HEADING} w-40`}>
+                    Received by
+                  </TableHead>
+                  <TableHead className={ISSUE_COLUMN_HEADING}>
+                    Purpose
+                  </TableHead>
+                  <TableHead className={`${ISSUE_COLUMN_HEADING} w-40`}>
+                    Asset tags
+                  </TableHead>
+                  <TableHead className={`${ISSUE_COLUMN_HEADING} w-36`}>
+                    Issued
+                  </TableHead>
+                  <TableHead className={`${ISSUE_COLUMN_HEADING} w-32`}>
+                    Expected back
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {issues.map((issue) => (
+                  <TableRow key={issue.id}>
+                    <TableCell>
+                      <span className="block font-medium">
+                        {issue.itemName}
+                      </span>
+                      <span className="text-muted-foreground font-mono text-xs">
+                        {issue.itemSku}
+                      </span>
+                    </TableCell>
+                    {/**
+                     * The quantity cell names the unit rather than printing a bare
+                     * figure. The issue row is the one place a bare `3` is genuinely
+                     * ambiguous: it is the only record of how much of what left the
+                     * building, and it is read months later by somebody who was not
+                     * there.
+                     */}
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {pluralUnits(issue.qty)}
+                    </TableCell>
+                    <TableCell>
+                      <span className="block">{issue.receiverName}</span>
+                      {issue.receiverDepartment ? (
+                        <span className="text-muted-foreground block text-xs">
+                          {issue.receiverDepartment}
+                        </span>
+                      ) : null}
+                      {issue.receiverPhone ? (
+                        <span className="text-muted-foreground block font-mono text-xs tabular-nums">
+                          {issue.receiverPhone}
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="whitespace-normal">
+                      <span className="line-clamp-2">{issue.purpose}</span>
+                      {issue.note ? (
+                        <span className="text-muted-foreground line-clamp-1 text-xs italic">
+                          {issue.note}
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="whitespace-normal">
+                      {/**
+                       * **Every tag, in full.**
+                       *
+                       * This was `summariseTags` — three tags and a `+17 more` — and
+                       * the field's own copy promised the opposite ("the receipt quotes
+                       * them back"). On the one page that exists *only* to record which
+                       * devices left the building and to whom, a shortened tag list is a
+                       * shortened audit trail, and there is nothing else on the row that
+                       * could recover the rest. So the list wraps instead of truncating,
+                       * and the caption says so.
+                       */}
+                      {issue.units.length > 0 ? (
+                        <ul className="font-mono text-xs">
+                          {issue.units.map((unit) => (
+                            <li key={unit.id} className="break-all">
+                              {unit.uniqueNo}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Counted in bulk — no tags
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="block tabular-nums">
+                        {formatDateTime(issue.issuedAt)}
+                      </span>
+                      <span className="block">
+                        <PartyName
+                          name={issue.issuedByName}
+                          staffId={issue.issuedByStaffId}
+                          emptyLabel="Issued by an account with no staff record"
+                          goneLabel="Issuer no longer on the roll"
+                        />
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {issue.expectedReturnDate ? (
+                        <>
+                          <span className="block tabular-nums">
+                            {formatDate(issue.expectedReturnDate)}
+                          </span>
+                          <OutstandingMarker record={issue} />
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Not stated
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
           <p className="text-muted-foreground text-xs">
             Showing {issues.length} of {total} issues on record. Every asset tag

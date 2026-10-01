@@ -20,7 +20,12 @@ export const files = pgTable(
     name: text("name").notNull(),
     size: integer("size").notNull(),
     type: text("type").notNull(),
-    /** Storage-layer key (LMDB in dev, MinIO object key in production). */
+    /**
+     * The MinIO object key — e.g. `inventory/<uuid>.webp` — not a URL.
+     * Never served directly: `apps/web/src/routes/api/files.$fileId.ts` reads
+     * this back and hands out a short-lived presigned URL, because the bucket
+     * itself is private.
+     */
     key: text("key").notNull(),
     userId: text("user_id")
       .notNull()

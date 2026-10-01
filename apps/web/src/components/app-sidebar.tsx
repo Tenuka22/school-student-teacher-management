@@ -517,7 +517,7 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
   // An administrator (and the Leave Administrator) reads the whole leave
   // ledger rather than one reviewer's queue, so the badge counts every
   // request still waiting on a decision. `academicAdmin` no longer reaches
-  // this queue \u2014 leave review is the Leave Administrator's desk now.
+  // this queue — leave review is the Leave Administrator's desk now.
   const openLeavesQuery = useQuery({
     ...orpc.staff.leaves.listLeaveRequests.queryOptions({
       input: { year: selectedYear ?? 0, queue: "all" },
@@ -674,13 +674,24 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
   ];
 
   /**
-   * The register and its five other views, each its own real route under the
+   * The register and its four other views, each its own real route under the
    * `inventory/` layout (`inventory.index.tsx`, `inventory.loans.tsx`,
-   * `inventory.issues.tsx`, `inventory.write-offs.tsx`,
-   * `inventory.asset-register.tsx`, `inventory.ledger.tsx`) rather than one
+   * `inventory.issues.tsx`, `inventory.write-offs.tsx`, `inventory.ledger.tsx`)
+   * rather than one
    * URL with a `?tab=`/`?subtab=` — the same bookmarkable-path-over-query-state
    * change the equipment pages' `equipment.in-charge.tsx` etc. made, for the
    * identical reason.
+   *
+   * **There is no "History"/asset-tag entry here any more.** It used to point at
+   * `inventory.asset-register.tsx`, a unit-level register that repeated the same
+   * item rows, statuses and conditions the Register page already shows — a
+   * second table with a different grain (one row per physical tag rather than
+   * one row per item line) was not a distinct screen, it was the same screen
+   * read twice. The per-tag status move it offered (take a tag off the shelf /
+   * put it back) had no other home and is dropped with the page. It is not
+   * replaced: marking one already-tagged unit "removed" without moving the
+   * item's own quantity through a delivery or a write-off has no screen any
+   * more, and that is a deliberate narrowing, not an oversight.
    *
    * Built from the seat that owns the register: `/inventory-admin/...` for the
    * Inventory Administrator, `/admin/...` for the top admin, who is the only
@@ -692,16 +703,12 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
       url: inventoryRegister("staff", "inventory"),
     },
     {
-      title: "Transfers",
+      title: "Issues",
       url: inventoryRegister("staff", "inventory", "issues"),
     },
     {
       title: "Disposals",
       url: inventoryRegister("staff", "inventory", "write-offs"),
-    },
-    {
-      title: "History",
-      url: inventoryRegister("staff", "inventory", "asset-register"),
     },
     {
       title: "Ledger",

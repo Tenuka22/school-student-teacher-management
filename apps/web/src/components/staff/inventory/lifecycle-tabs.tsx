@@ -1,292 +1,94 @@
 "use client";
 
 /**
- * The container for everything else in this folder: the two counter movements in
- * the header, and the three lifecycle tabs beneath them.
+ * The stock quick actions: "Receive stock" and "Remove from stock", the two
+ * counter movements that belong to no lifecycle.
  *
- * ## Why this tab order, and it is a product decision
- * **1. Issues — what has permanently left the school.**
- * A record, not a task. Nothing chases an issue and nothing can be done about one;
- * it is the certificate that exists because an audit will ask who took the three
- * projectors and when. Second because it is the one tab whose contents are
- * *evidence* rather than work.
+ * Transfers, Disposals and the Asset register each used to share one "Stock
+ * movements" mega-page — one heading, one "Records" tab, three lifecycle tabs
+ * stacked under it, and the two Ledgers tables at the foot of all three. A
+ * reader who opened any one of them got the other two whether they asked for
+ * it or not, and the sidebar's three separate links ("Transfers", "Disposals",
+ * an asset register of its own) all landed on the same crowded screen with a
+ * different tab pre-selected. `inventory-page.tsx` now gives each of those
+ * three sidebar links — plus the Ledgers view — its own real page, built like
+ * the Register pane is: one heading, one description, the one panel that
+ * belongs to it.
  *
- * **2. Write-offs — the two-stage queue.**
- * Real work, but batched and second-signed, so it waits behind the tab whose rows
- * are individually actionable today. It is also the only tab where a row can be
- * **impossible** to act on — the server refuses self-approval — which makes it a
- * poor thing to land a user on first, and is why `DisposalsPanel` now defaults to
- * the *signed-off* queue rather than the awaiting-a-signature one.
+ * What is still shared is this: `stockIn` and `stockOut` both change
+ * `inventoryItem.qty` directly, with no queue and no signature, and neither
+ * belongs to any one lifecycle — which is why this used to be dropped into
+ * Transfers, Disposals and the Asset register's own headers alike. **It no
+ * longer is.** Editing an item's own quantity is the Register page's job, not
+ * a record page's, so `RegisterPaneHeader` in `inventory-page.tsx` builds its
+ * own copy of the same two buttons rather than reaching for this component.
+ * `DisposalsPane` is the one caller left here, kept because a clerk
+ * raising a write-off is frequently the same clerk who just found the count
+ * was wrong and needs to correct it before or after raising the certificate.
+ * Transfers and the Asset register do not offer it at all any more.
  *
- * **3. Asset register — every tracked unit and its tag.**
- * The school's physical inventory, and the least urgent of the three. It is a
- * reference surface: a clerk goes to it to answer "do we have a projector, and
- * which one", not because something needs doing. Last, and deliberately — a
- * register that greets a user with four hundred asset tags is a screen that
- * buries the two rows above it that needed an answer.
- *
- * ## The three empty states, which are the highest-value work in this file
- *
- * Three of them are written here, one lives with the register in
- * `stock-dialogs.tsx` (which owns its own query and so has to decide its own empty
- * state). **They are three different pieces of copy on purpose, and this is the
- * single most valuable thing in the file.** A shared "No data" would be three lies:
- *
- * - An **empty issue list** is also reassuring, and it means something quite
- *    different: nothing has permanently left the building.
- * - An **empty write-off queue** is normal, and the copy has to say which normal:
- *   nothing awaiting a signature is a quiet queue, while nothing finalised ever is
- *   the ordinary condition of a school that has not yet had to destroy anything.
- * - An **empty asset register** is the only one that asks for an action, because
- *   it means no delivery has ever been received.
- *
- * A user who reads an empty screen is being told what state their school is in.
- * "No data" tells them nothing, and three identical empty states on three tabs that
- * mean three different things is worse than no empty state at all.
+ * **The second button is "Remove from stock", not "Write off stock".** The
+ * Disposals page is a two-stage certificate that a principal has to sign — a
+ * clerk destroying a projector was pressing a primary button labelled with the
+ * same word as the request queue one page away, and the irreversible
+ * single-call route was the one wearing the primary style. The description
+ * under the pair says which needs no approval, because "no approval" is the
+ * whole difference between them and a verb is not enough to convey it.
  */
 import { Button } from "@school-student-teacher-management/ui/components/button";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@school-student-teacher-management/ui/components/tabs";
 import { IconPackage, IconPackageOff } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
-import { DisposalsPanel } from "@/components/staff/inventory/disposal-dialogs";
-import { IssuesPanel } from "@/components/staff/inventory/issue-dialogs";
-import { InventoryLedgerTabs } from "@/components/staff/inventory/ledger-views";
 import {
-  AssetRegisterPanel,
   StockInDialog,
   StockOutDialog,
 } from "@/components/staff/inventory/stock-dialogs";
 
-/** The tab values, exported so a route can deep-link into one. */
-export type LifecycleTab = "issues" | "write-offs" | "register";
+export interface StockQuickActionsProps {
+  /**
+   * Lifted out rather than kept as private state, so `DisposalsPane` — this
+   * component's one remaining caller — can decide when the dialog opens
+   * instead of this component deciding for it.
+   */
+  isStockInOpen: boolean;
+  onStockInOpenChange: (open: boolean) => void;
+}
 
-/**
- * The Records pane's heading id, exported so `inventory-page.tsx` can name the
- * `<section>` that wraps this component with the element that names itself
- * instead of with a string.
- */
-export const LIFECYCLE_HEADING_ID = "inventory-records-heading";
-
-/** Which of the four sub-tabs is active, and where a switch navigates — both
- * now owned by the parent route (`inventory-page.tsx`'s `InventoryPage`,
- * fed by real path segments like `.../inventory/loans` rather than a
- * `?subtab=` search param), for the same reason the pane above this one made
- * the identical change: a clerk chasing an overdue loan who bookmarks or
- * refreshes has to land back on the sub-tab they were reading, and a real
- * path survives that better than query state on a client-rendered page.
- * `scrollToLedger` is the one thing that isn't a `Tabs` value at all — the
- * ledger section sits below the tabs regardless of which one is active, so
- * `/inventory/ledger` lands on Issues (the pane's own default) and scrolls
- * past it to the heading below.
- */
-export const InventoryLifecycleTabs = ({
-  activeSubtab,
-  onSubtabChange,
-  scrollToLedger,
-}: {
-  activeSubtab: LifecycleTab;
-  onSubtabChange: (next: LifecycleTab) => void;
-  scrollToLedger: boolean;
+export const StockQuickActions: React.FC<StockQuickActionsProps> = ({
+  isStockInOpen,
+  onStockInOpenChange,
 }) => {
-  const [isStockInOpen, setIsStockInOpen] = useState(false);
   const [isStockOutOpen, setIsStockOutOpen] = useState(false);
-  const ledgerHeadingRef = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    if (!scrollToLedger) {
-      return;
-    }
-
-    /*
-     * The scroll to the ledgers, and it is the one piece of motion in this file.
-     *
-     * **`prefers-reduced-motion` is honoured, and it was not.** `behavior: "smooth"`
-     * was unconditional, so a reader who has asked their operating system for less
-     * motion got a full animated glide down the page every time they opened
-     * `/inventory/ledger` — which is a link, so it is repeatable, and it moves the
-     * whole viewport past four hundred rows of a loan queue. PRODUCT.md makes motion
-     * respect the preference a build requirement rather than a review pass, and
-     * `Loader`'s own skeleton leans on the global guard for the same reason.
-     *
-     * `auto` is not a lesser experience: it is the jump the reader asked for, and
-     * the heading is still scrolled to `block: "start"` either way, so the ledgers
-     * land in the same place on screen.
-     */
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    ledgerHeadingRef.current?.scrollIntoView({
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-      block: "start",
-    });
-  }, [scrollToLedger]);
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-2">
-        {/*
-          **An `<h2>`, not the `<h1>` this used to be.** The page's single `h1` —
-          "Inventory" — is in `inventory-page.tsx`, above the tab bar, precisely so
-          that it survives a change of pane. This heading is the Records pane's own
-          name, so it is a section of that page rather than a second name for it, and
-          two `h1`s in one document is the thing that was wrong: assistive technology
-          reads the outline, and a document with two level-one headings has no way to
-          say which one the page is called.
-
-          The sequence below it is `h1` (page) → `h2` (this pane) → `h2` ("Ledgers").
-          `Ledgers` stays at the same level rather than dropping to an `h3` because it is
-          an **sibling** of this header, not a subsection of it: the two movements
-          and the three lifecycle tabs sit under this heading, and the ledgers are a
-          separate `<section>` after them, not something inside the movements. Two
-          `h2`s under one `h1` is a flat, valid outline; nesting one of them for a
-          relationship the DOM does not have would not be.
-
-          **`text-2xl`, and it used to be `text-4xl`.** This heading is a *section* of
-          the page and the register pane's own `h2` is `text-2xl`; at `text-4xl` this
-          one was the same size as the page's `h1` above it, so the two documents a
-          screen reader navigates by — the page outline and the visual hierarchy — said
-          different things about which text is the title. It also carries
-          `LIFECYCLE_HEADING_ID` so the `<section>` in `inventory-page.tsx` can be
-          named by this element rather than by a string that matched neither heading.
-        */}
-        <h2
-          id={LIFECYCLE_HEADING_ID}
-          className="font-heading text-2xl font-semibold"
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          onClick={() => onStockInOpenChange(true)}
+          data-icon="inline-start"
         >
-          Stock movements
-        </h2>
-        <p className="text-muted-foreground max-w-3xl">
-          Everything the school has given out, written off, or received — and
-          every tagged device behind it. A transfer does not come back; a
-          disposal needs a second signature before any stock moves.
-        </p>
-      </header>
-
-      {/**
-       * The two direct counter movements, in the header rather than on a tab,
-       * because neither of them belongs to a lifecycle.
-       *
-       * `stockIn` and `stockOut` both change `inventoryItem.qty` in a single
-       * call, with no queue and no signature — they are the movements a store does
-       * on the day. Everything under the tabs is a record of something, or a
-       * request for something.
-       *
-       * **The second button is "Remove from stock", not "Write off stock".** The
-       * tab below it is called Write-offs, and it is a two-stage certificate that
-       * a principal has to sign — a clerk destroying a projector was pressing a
-       * primary button labelled with the same word as the request queue one tab
-       * away, and the irreversible single-call route was the one wearing the
-       * primary style. The description under the pair says which needs no
-       * approval, because "no approval" is the whole difference between them and a
-       * verb is not enough to convey it.
-       */}
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            onClick={() => setIsStockInOpen(true)}
-            data-icon="inline-start"
-          >
-            <IconPackage data-icon="inline-start" />
-            Receive stock
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setIsStockOutOpen(true)}
-            data-icon="inline-start"
-          >
-            <IconPackageOff data-icon="inline-start" />
-            Remove from stock
-          </Button>
-        </div>
-        <p className="text-muted-foreground max-w-3xl text-xs">
-          Both of these take effect immediately and need no approval. Property
-          being destroyed, recycled, auctioned or donated goes on the{" "}
-          <span className="font-medium">Disposals</span> tab instead, which
-          waits for a second signature before any stock moves.
-        </p>
+          <IconPackage data-icon="inline-start" />
+          Receive stock
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setIsStockOutOpen(true)}
+          data-icon="inline-start"
+        >
+          <IconPackageOff data-icon="inline-start" />
+          Remove from stock
+        </Button>
       </div>
+      <p className="text-muted-foreground max-w-3xl text-xs">
+        Both of these take effect immediately and need no approval. Property
+        being destroyed, recycled, auctioned or donated goes on the{" "}
+        <span className="font-medium">Disposals</span> page instead, which waits
+        for a second signature before any stock moves.
+      </p>
 
-      <Tabs
-        value={activeSubtab}
-        onValueChange={(next: unknown) => onSubtabChange(next as LifecycleTab)}
-      >
-        <TabsList
-          variant="line"
-          className="border-primary/18 h-auto w-full justify-start gap-0.5 rounded-none border-b p-0"
-        >
-          <TabsTrigger
-            value="issues"
-            className="rounded-none border border-b-0 border-transparent px-4 py-2.5 font-semibold after:hidden"
-          >
-            Transfers
-          </TabsTrigger>
-
-          <TabsTrigger
-            value="write-offs"
-            className="rounded-none border border-b-0 border-transparent px-4 py-2.5 font-semibold after:hidden"
-          >
-            Disposals
-          </TabsTrigger>
-
-          <TabsTrigger
-            value="register"
-            className="rounded-none border border-b-0 border-transparent px-4 py-2.5 font-semibold after:hidden"
-          >
-            History
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="issues" className="space-y-4 pt-4">
-          <IssuesPanel />
-        </TabsContent>
-
-        <TabsContent value="write-offs" className="space-y-4 pt-4">
-          <DisposalsPanel />
-        </TabsContent>
-
-        <TabsContent value="register" className="space-y-4 pt-4">
-          {/**
-           * The register's own empty state lives in `stock-dialogs.tsx` beside its
-           * query — it is the fourth of the four, and the only one that offers an
-           * action. It is reachable from here by this handler rather than owning a
-           * second "Receive stock" button, so the page has exactly one.
-           */}
-          <AssetRegisterPanel onReceiveStock={() => setIsStockInOpen(true)} />
-        </TabsContent>
-      </Tabs>
-
-      <section aria-labelledby="ledger-heading" className="space-y-4">
-        <div className="space-y-2">
-          <h2
-            ref={ledgerHeadingRef}
-            id="ledger-heading"
-            className="font-heading text-2xl font-semibold"
-          >
-            Ledgers
-          </h2>
-          <p className="text-muted-foreground max-w-3xl">
-            Two read-only histories, kept apart on purpose.{" "}
-            <strong className="font-medium">Movements</strong> is what happened
-            to the quantities, with the numbers from immediately before and
-            after each one. <strong className="font-medium">Change log</strong>{" "}
-            is what happened to the records themselves, field by field, and it
-            keeps the name of the person who made each change even after they
-            have left.
-          </p>
-        </div>
-        <InventoryLedgerTabs />
-      </section>
-
-      <StockInDialog open={isStockInOpen} onOpenChange={setIsStockInOpen} />
+      <StockInDialog open={isStockInOpen} onOpenChange={onStockInOpenChange} />
       <StockOutDialog open={isStockOutOpen} onOpenChange={setIsStockOutOpen} />
     </div>
   );

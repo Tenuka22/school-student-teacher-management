@@ -930,9 +930,37 @@ export const InventoryTable = ({
         one declaration rather than an `!important` on every heading. Without it the
         amber column labels would be 3.87:1 on cream.
       */}
+        {/*
+          `table-fixed`, and the widths that go with it in `RegisterTableHeader`.
+          Auto layout left every short-content column — Status, Condition,
+          Location — stretched with dead space, because the browser spreads a
+          `w-full` table's slack across every column with no explicit width.
+          Fixed layout takes each column's width from the header cell instead of
+          guessing from content, so only Asset (the one column with no width set)
+          absorbs the leftover space. The wrapper still scrolls horizontally on a
+          narrow window — nothing here removes that fallback.
+
+          **`min-w-[1184px]` is not decorative — without it, `table-fixed` with
+          a `w-full` table does not keep these pixel widths as *minimums*, it
+          reads them as *ratios* of whatever width the table is squeezed into.**
+          On a laptop-width window this register was rendering two header labels
+          on top of each other ("Asset" overlapping "Responsible"): every column
+          had shrunk below its own nowrap text, which then painted outside its
+          cell into the neighbour's. `1184px` is the sum of every fixed column
+          (`RegisterTableHeader`'s `w-*` classes) plus a working floor for Asset,
+          the one column deliberately left unconstrained so it still absorbs
+          extra room on a wide monitor, and it dropped by the same 96px that
+          came out of the Responsible column when `CustodyFlow` replaced the
+          two stacked `CustodyBadge` chips with one line — the column needs
+          less width the moment it needs less height. Below the min-width the
+          table can no longer shrink, so the wrapper's own `overflow-x-auto`
+          takes over — the real fallback this pattern was always meant to
+          have, rather than columns quietly compressing until their labels are
+          unreadable.
+      */}
         <Table
           stickyHeader
-          className="[&_[data-slot=table-header]]:[&_th]:bg-primary"
+          className="[&_[data-slot=table-header]]:[&_th]:bg-primary min-w-[1184px] table-fixed"
         >
           <TableCaption>{caption}</TableCaption>
           <RegisterTableHeader

@@ -7,6 +7,7 @@ import { Badge } from "@school-student-teacher-management/ui/components/badge";
 import {
   IconBuildingWarehouse,
   IconCircleCheck,
+  IconArrowRight,
   IconPackage,
   IconPackageOff,
   IconTool,
@@ -386,6 +387,119 @@ export const CustodyBadge: React.FC<{
         aria-hidden="true"
         className="text-muted-foreground size-3.5 shrink-0"
       />
+    </span>
+  );
+};
+
+/**
+ * The one sentence `CustodyFlow` reads on focus and on hover — an `if`/`else`
+ * chain rather than a nested ternary, because the three shapes are three
+ * different facts about the row, not three variations of one expression.
+ */
+const custodyFlowSentence = (
+  managerName: string | null,
+  custodianName: string | null
+): string => {
+  if (managerName && custodianName) {
+    return `${managerName} is in charge of this item; ${custodianName} is holding it.`;
+  }
+
+  if (managerName) {
+    return `${managerName} is in charge of this item and nobody is holding it, so it is on a shelf somewhere in the store.`;
+  }
+
+  return `${custodianName} is holding this item, but no teacher has been made accountable for it.`;
+};
+
+/**
+ * `CustodyBadge`'s two facts, on the register's own row, in the space of one
+ * line instead of two stacked badges.
+ *
+ * **Why this is a second component and not a `compact` prop on `CustodyBadge`.**
+ * The item-detail page (`routes/_auth/inventory.$itemId.tsx`) renders the same
+ * pair with room to spare, and the two badges there are the better reading: a
+ * labelled "Manager · \u2026" and "Held by \u2026" pill, each nameable on its own. The
+ * register's own Responsible column is the one place a 200-row table pays for
+ * that pair twice — in height, because two badges stack, and the register's
+ * row height is exactly what every other change to this table has been fighting
+ * to keep down. A `compact` boolean would have meant every reader of
+ * `CustodyBadge` carrying a second layout inside one component; two named
+ * components is the one the register imports and the one the detail page does,
+ * and neither has to read past a prop it does not use.
+ *
+ * **The arrow is the whole idea: who is answerable, then who is holding it,
+ * read left to right the way the two facts are actually related — custody
+ * flows from the manager to whoever has it.** Icons stand in for the words
+ * "Manager" and "Held by" that the stacked badges spell out; the full sentence
+ * is still there for a screen reader, in the same `sr-only` pattern
+ * `GapChip` uses, so nothing spoken is lost by dropping the labels a sighted
+ * reader can infer from position and icon alone.
+ *
+ * **One name, not two, when the manager is also the custodian.** That is the
+ * common case for anything that never leaves the person answerable for it —
+ * a teacher's own projector, say — and an arrow from a name to the same name
+ * is a fact restated, not a fact added. The single name still carries both
+ * icons, so the row does not quietly drop the "this person is also holding it"
+ * half of the sentence.
+ */
+export const CustodyFlow: React.FC<{
+  managerName: string | null;
+  custodianName: string | null;
+}> = ({ managerName, custodianName }) => {
+  if (managerName && custodianName && managerName === custodianName) {
+    return (
+      <span
+        className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs"
+        title={`${managerName} manages this item and is holding it`}
+      >
+        <IconUserCheck
+          aria-hidden="true"
+          className="text-primary size-3.5 shrink-0"
+        />
+        <span className="truncate font-medium">{managerName}</span>
+        <IconPackage
+          aria-hidden="true"
+          className="text-muted-foreground size-3.5 shrink-0"
+        />
+        <span className="sr-only">
+          . Manages this item and is currently holding it.
+        </span>
+      </span>
+    );
+  }
+
+  const fromLabel = managerName ?? "No manager";
+  const toLabel = custodianName ?? "In store";
+  const sentence = custodyFlowSentence(managerName, custodianName);
+
+  return (
+    <span
+      className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs"
+      title={sentence}
+    >
+      <span
+        className={
+          managerName
+            ? "truncate font-medium"
+            : "text-muted-foreground truncate italic"
+        }
+      >
+        {fromLabel}
+      </span>
+      <IconArrowRight
+        aria-hidden="true"
+        className="text-muted-foreground size-3 shrink-0"
+      />
+      <span
+        className={
+          custodianName
+            ? "text-primary truncate font-medium"
+            : "text-muted-foreground truncate italic"
+        }
+      >
+        {toLabel}
+      </span>
+      <span className="sr-only">. {sentence}</span>
     </span>
   );
 };
