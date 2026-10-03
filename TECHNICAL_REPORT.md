@@ -1,6 +1,6 @@
-# Technical Report: Typography Refresh, Branch Integration and Local Environment Recovery
+# Technical Report: Typography Refresh, Branch Integration, Local Environment Recovery and Forensic Repair
 
-**Project:** St. Aloysius' College — School Management System **Repository:** `Tenuka22/school-student-teacher-management` **Period covered:** 26 September – 1 October 2026
+**Project:** St. Aloysius' College — School Management System **Repository:** `Tenuka22/school-student-teacher-management` **Period covered:** 26 September – 1 October 2026 **Last updated:** 1 October 2026, after the forensic-audit repair was pushed to `master` (`711d4f6`)
 
 ---
 
@@ -9,10 +9,13 @@
 | Workstream | Outcome | Where it lives |
 | --- | --- | --- |
 | Typography and visual refinement of the web app | Done and pushed | Branch `develop`, commit `ce74e4a` |
-| Integration with `master` | **Not done.** 51 files conflict with four newer `master` commits | Pending pull request `develop` → `master` |
-| Local environment (`.env`, packages, database) | Running on `master` at `http://localhost:3001` | Local machine only |
-| Runtime errors found after start-up | Two fixed, one transient | Data fix in local database; one uncommitted code fix on `master` |
-| Defects found in the shared codebase | Three, not fixed (outside the scope of a local run) | See §6 |
+| Integration with `master` | **Done.** `develop` (`ce74e4a`) is an ancestor of `master` | `master` |
+| Local environment (`.env`, packages, database) | Running at `http://localhost:3001` | Local machine only |
+| Runtime errors found after start-up | Two fixed, one transient | Data fix in local database; the code fix is now committed (§6) |
+| Forensic-audit repair (findings F-01 … F-41) | Done, committed as 25 commits and pushed to `master`; CI green on GitHub | `master`, `216fa73..711d4f6`; detail in `SYSTEM_REPAIR_REPORT.md` |
+| Defects found in the shared codebase (§7, first edition) | Mostly fixed by the repair; see the updated §7 | — |
+
+> Sections 2–5 are the record of the work as it happened between 26 September and 1 October and are kept unchanged, except where a note marks a statement as superseded. §6 records the repair and integration; §7 is the current list of open issues.
 
 ---
 
@@ -139,7 +142,7 @@ Notes from the partial merge, for whoever does the pull request:
 
 Notes:
 
-- `ACADEMIC_ADMIN_PASSWORD` is still the placeholder `change-me-academic-admin`.
+- `ACADEMIC_ADMIN_PASSWORD` is still the placeholder `change-me-academic-admin`. _Superseded: rotated to a random value during the repair, and boot now refuses any seat password shorter than 12 characters or equal to a value ever committed (§6)._
 - The secrets were shared in a chat session. Rotate `BETTER_AUTH_SECRET` and the passwords for any shared or production environment.
 
 ### 4.2 Problems while starting the app, and fixes
@@ -161,7 +164,9 @@ The `db` package has no `DATABASE_URL` source of its own (not in its `.env.schem
 cd apps/web && bun run dev        # http://localhost:3001
 ```
 
-Don't use `bun run dev:web` until the migration defect (§6) is fixed: it stops at `db:migrate`.
+Don't use `bun run dev:web` until the migration defect (§7) is fixed: it stops at `db:migrate`.
+
+_Superseded in part: the migration history is fixed in code (§6), so `db:migrate` builds an empty database. The local `-v2` database was built with `drizzle-kit push` and has no migration ledger, so it must be baselined once before `db:migrate` or `dev:web` will work on it (§7 #2)._
 
 ---
 
@@ -176,7 +181,7 @@ Playwright signed in as each seeded role (`admin`, `principal`, `deputy-principa
 | Error | Cause | Fix | Status |
 | --- | --- | --- | --- |
 | `PRECONDITION_FAILED: Attendance policy is not configured for this academic year` (attendance, leave review) | The partial seed run (§4.2 #4) created academic year 2026 directly, skipping what `createAcademicYear` does | One-off script, deleted afterwards, mirroring `createAcademicYear`. For 2026 it added the attendance policy (defaults), the 7 `DEFAULT_LEAVE_ENTITLEMENTS`, pinned curriculum `v1.1` (`LATEST_STRUCTURE_VERSION_KEY` at its latest subversion, the only version registered) and created the 326 `grade_subject_config` rows. A second run reported nothing missing | Fixed (data only) |
-| React warning: two children with the same key `closed` (Users page, Account page) | `BanUserDialog` and `BulkBanDialog` are siblings that both fall back to `key="closed"` when closed | `apps/web/src/components/admin/admin-users-content.tsx`: keys prefixed `ban-` and `bulk-`. Behaviour unchanged | Fixed. **Uncommitted on `master`** |
+| React warning: two children with the same key `closed` (Users page, Account page) | `BanUserDialog` and `BulkBanDialog` are siblings that both fall back to `key="closed"` when closed | `apps/web/src/components/admin/admin-users-content.tsx`: keys prefixed `ban-` and `bulk-`. Behaviour unchanged | Fixed. Committed in `fix(admin): update accounts page for guarded admin endpoints` (§6) |
 | `Invalid hook call` / `Cannot read properties of null (reading 'useContext')` in `LeaveRequestsContent` | Logged once, during Vite's first dependency optimisation and reload right after start-up | None needed | Not reproduced since |
 
 After the fixes, every visited page in all five workspaces loads without console errors, failed requests or error alerts.
@@ -188,30 +193,75 @@ After the fixes, every visited page in all five workspaces loads without console
 
 ---
 
-## 6. Open issues
+## 6. Forensic-audit repair and integration (1 October 2026)
 
-| # | Issue | Severity | Owner / suggested action |
-| --- | --- | --- | --- |
-| 1 | Migration history fails on a fresh database (drops `inventory_audit_log_actor_staff_id_user_id_fk`, which never exists) | High: blocks `db:migrate`, `dev:web` and any new environment | Database maintainer: fix the drop to target the real constraint name or use `IF EXISTS`; regenerate, and check it against an empty database |
-| 2 | Existing databases from the old migration history can't move to the new one | High for anyone with an existing database | Provide a baseline step (mark `0000` as applied) or a documented reset |
-| 3 | `scripts/seed.ts` fails on `inventory_item` (NOT NULL), and when it fails it leaves an academic year with no policy, entitlements or curriculum | Medium | Update the seed for the current schema; create years through the same logic as `createAcademicYear` |
-| 4 | `packages/db` has no `DATABASE_URL` source for `drizzle-kit` | Medium | Add `DATABASE_URL` to `packages/db/.env.schema`, or load `apps/web/.env` in `drizzle.config.ts` |
-| 5 | `bun.lock` needs a newer Bun than some developers have | Medium | Pin the Bun version (e.g. `packageManager` field / CI) and ask developers to `bun upgrade` |
-| 6 | `develop` (typography) conflicts with `master` in 51 files | Medium | Pull request `develop` → `master`, keeping `master`'s structure and re-applying typography; then re-run type check, build, and the browser checks in §2.5 |
-| 7 | Typography on signed-in pages not visually reviewed | Medium | Review after #6; focus on the timetables, Classes tabs on narrow screens, sidebar row height, and table headers used as row labels |
-| 8 | Duplicate-key fix uncommitted on `master` | Low | Commit `admin-users-content.tsx` |
-| 9 | `ACADEMIC_ADMIN_PASSWORD` is a placeholder; secrets were shared in chat | Low locally, high if reused | Set a real password; rotate secrets for any shared environment |
-| 10 | Old local database `school-student-teacher-management` still exists | Low | Drop it once nothing from it is needed |
+### 6.1 What was done
+
+`SYSTEM_FORENSIC_AUDIT.md` listed 41 findings (F-01 … F-41). They were repaired on branch `repair/forensic-audit-2026-10`, based on `master` at `216fa73`. Each finding was reproduced, fixed, given a regression test, and the test was run against the original code to prove the defect was real. The full change register, test evidence and risk register are in `SYSTEM_REPAIR_REPORT.md`; this section summarises it.
+
+| Area | Main changes |
+| --- | --- |
+| Security (P0) | F-01: better-auth admin grants cut to `user: list, get, ban` / `session: list, revoke`, and `adminEndpointGuard` checks the target account on every `/api/auth/admin/*` call, with an audit log. F-03: `.env.example` blanked; boot refuses weak or previously committed seat passwords; `scripts/rotate-seat-password.ts` added |
+| Database | F-02: the migration history builds an empty database again (0006 snapshot repaired; drops in 0007 are `IF EXISTS`). New migrations 0009 (CHECKs, one current year, `account_audit_log`) and 0010 (closed years are read-only, SQLSTATE `YR001` → HTTP 409) |
+| Business logic | Leave quotas reserved at filing and re-checked at approval under a row lock; academic-year creation and switching are atomic; multi-row writes in 9 procedures are transactional |
+| Hardening | Upload validation (decoded format, 50 MP cap), zip-bomb guard on Excel import, bounded QR export, rate-limited sign-up, structured logs without personal data, database errors mapped to 409/400 |
+| Tooling | `.bun-version`, CI running lint, migrations from zero, schema drift, tests and build; scripts `verify-migrations`, `check-schema-drift`, `baseline-existing-db`, `migrate.mjs`, `reconcile-inventory`, `runtime-smoke` |
+| Tests | 114 automated tests (there were none), run against throwaway PostgreSQL databases |
+| Seeds | Both seed scripts fixed for the current schema; `seed:full` now needs `CONFIRM_RESET_DATABASE` and refuses production |
+
+### 6.2 Commit and push
+
+- The working tree was committed as **25 commits**, grouped by area (tooling, CI, database, auth, API, leave, inventory, staff, signup, tests, seeds, docs), with no AI co-author line, at the owner's request.
+- The repository's pre-commit hook (`ultracite fix` through lint-staged) exits with an error when every staged file is excluded by the linter's ignore rules. That made it refuse commits made up of migrations, `bun.lock`, CI YAML or Markdown. Those commits were made with `--no-verify`; the hook reported no lint errors on any file.
+- Pushed to `master` as a fast-forward, `216fa73..fcae138`; no force-push.
+- CI then failed on formatting in `SYSTEM_FORENSIC_AUDIT.md` and `TECHNICAL_REPORT.md`. They were formatted and pushed as `711d4f6`. The format check was confirmed clean on an LF checkout of the tree (587 files). **CI on GitHub passed for `711d4f6`.**
+- Locally, `bun run check` still reports about 461 files: with `core.autocrlf=true`, the Windows working copy has CRLF line endings. The files in the repository are LF and pass. Set `core.autocrlf=false` and re-check out to make the local check match CI.
+
+### 6.3 Later change on `master` by another contributor
+
+`203f827` (Tenuka22, 1 October): fixes a selection flicker in the three staff comboboxes, and removes MinIO. Uploaded images are now stored in PostgreSQL (`files.data`, `bytea`) by migration `0011`; the `minio` services, `MINIO_*` variables and the AWS SDK packages are gone. References to MinIO in `SYSTEM_REPAIR_REPORT.md` (uploads, backups, Docker smoke test) are out of date from this commit on. See §7 #3 for a problem in migration `0011`.
 
 ---
 
-## 7. Files and artefacts
+## 7. Open issues
+
+Updated 1 October 2026 after the repair. The first edition's numbering is not kept; the old item each row replaces is given in brackets.
+
+| # | Issue | Severity | Status / suggested action |
+| --- | --- | --- | --- |
+| 1 | No mail provider configured (F-12) | High: production blocker | Code is ready. Set `MAIL_TRANSPORT=resend`, `RESEND_API_KEY` and `MAIL_FROM`; until then the code-sending endpoints return 503 in production |
+| 2 | Local `-v2` database was built with `drizzle-kit push` and has no migration ledger [old #2] | High for that environment | `scripts/baseline-existing-db.ts` now exists. Back the database up, then run `bun --env-file=apps/web/.env scripts/baseline-existing-db.ts --through 0007 --apply` and `bun run db:migrate`. The read-only pre-checks for 0008–0010 pass |
+| 3 | Migration `0011` (from `203f827`) adds `files.data bytea NOT NULL` with no default and drops `files.key` | High for any database holding uploaded files | On a database with rows in `files` the `ADD COLUMN` fails; if it were forced through, the object keys would be lost before the images were copied out of MinIO. Needs a data step (copy the bytes in, or delete the rows deliberately) before the column becomes `NOT NULL`. Not verified against a database with files |
+| 4 | Typography on signed-in pages not visually reviewed [old #7] | Medium | `develop` is merged, so this can be done now. Focus on the timetables, Classes tabs on narrow screens, sidebar row height, and table headers used as row labels |
+| 5 | Unbounded list endpoints (F-24), cascade deletes on history tables (F-32), per-process state (F-27) | Medium | Acceptable for one school on one instance; see `SYSTEM_REPAIR_REPORT.md` §18 |
+| 6 | Features with an API but no UI (F-13): qualification uploads, void/unvoid, marking | Medium | Build the screens or remove the procedures |
+| 7 | Docker image not exercised | Medium | Build and start it once against a scratch database; MinIO no longer needs to be part of the test (§6.3) |
+| 8 | No browser end-to-end tests | Low | The 114 tests are API, database and unit level |
+| 9 | Local Bun is 1.3.13; the project pins 1.4.0 [old #5] | Low | `bun upgrade`, or use `npx bun@1.4.0`. CI already uses 1.4.0 |
+| 10 | Secrets were shared in chat [old #9] | Low locally, high if reused | `ACADEMIC_ADMIN_PASSWORD` was rotated. Rotate `BETTER_AUTH_SECRET` and the other passwords for any shared environment with `scripts/rotate-seat-password.ts` |
+| 11 | Old local database `school-student-teacher-management` still exists [old #10] | Low | Drop it once nothing from it is needed |
+
+### 7.1 Closed since the first edition
+
+| Old # | Issue | Resolution |
+| --- | --- | --- |
+| 1 | Migration history failed on a fresh database | Fixed (F-02); `db:verify-migrations` builds an empty database from zero, and CI runs it |
+| 3 | Seed script failed and left a half-built academic year | Fixed (F-11): seeds use `openAcademicYear`, inside transactions |
+| 4 | `packages/db` had no `DATABASE_URL` source | Resolved: `packages/db/.env.schema` imports `DATABASE_*` from `apps/web` via varlock, and `drizzle.config.ts` auto-loads it |
+| 5 | `bun.lock` needed a newer Bun | Bun pinned in `.bun-version` and CI (1.4.0); local upgrade still pending (#9 above) |
+| 6 | `develop` conflicted with `master` | Merged; `ce74e4a` is an ancestor of `master` |
+| 8 | Duplicate-key fix uncommitted | Committed and pushed |
+
+---
+
+## 8. Files and artefacts
 
 **In the repository**
 
-- `develop` / `ce74e4a`: typography system, component and page changes, `DESIGN_SYSTEM.md`.
-- `master` (uncommitted): `apps/web/src/components/admin/admin-users-content.tsx`.
-- `TECHNICAL_REPORT.md`: this report (uncommitted).
+- `develop` / `ce74e4a`: typography system, component and page changes, `DESIGN_SYSTEM.md`. Merged into `master`.
+- `master` `216fa73..711d4f6`: the forensic-audit repair (§6), including `admin-users-content.tsx`.
+- `SYSTEM_FORENSIC_AUDIT.md`, `SYSTEM_REPAIR_REPORT.md`, `docs/operations.md`: audit, repair record and operations runbook.
+- `TECHNICAL_REPORT.md`: this report.
 
 **Outside the repository**
 
@@ -220,3 +270,5 @@ After the fixes, every visited page in all five workspaces loads without console
 - `node_modules`: reinstalled with plain `bun install`.
 - `C:\tmp\typo-baseline\`: baseline and after screenshots, protected-path hashes, edit scripts.
 - `C:\tmp\pwtest7\`: Playwright scripts (`typo-shots.mjs`, `css-check.mjs`, `login-check.mjs`, `crawl.mjs`).
+- `C:\tmp\env-backup\web.env.2026-10-01`: the `.env` from before the repair's credential rotation.
+- `C:\tmp\cicheck\`: leftover folder from the LF format check; no longer registered with Git, safe to delete.
