@@ -1,6 +1,7 @@
 import { ORPCError, os } from "@orpc/server";
 
 import type { Context } from "./context";
+import { auditPrivilegedProcedures } from "./lib/audit";
 import {
   PG_CHECK_VIOLATION,
   PG_CLOSED_YEAR,
@@ -94,7 +95,13 @@ const mapDatabaseErrors = o.middleware(async ({ next }) => {
   }
 });
 
-export const publicProcedure = o.use(mapDatabaseErrors);
+/**
+ * The audit middleware is outermost so it records refusals by every guard
+ * below it, and sees errors after `mapDatabaseErrors` has given them a code.
+ */
+export const publicProcedure = o
+  .use(auditPrivilegedProcedures)
+  .use(mapDatabaseErrors);
 
 // ─── Auth middleware ─────────────────────────────────────────────────────────
 
@@ -188,17 +195,14 @@ export const adminOnlyProcedure = publicProcedure.use(requireRole("admin"));
 /**
  * Assigning or removing a staff member's position for a year \u2014 Deputy or
  * Assistant Principal, Sectional Head, Head of Department, or plain teacher.
- * `admin`, `principal`, and the seeded `academicAdmin` seat: a Deputy
- * Principal is this year's appointment of a real member of staff, not a
- * login of their own, so handing the position to someone is the academic
- * desk's or the Principal's call to make, not only the top administrator's.
+ * `admin`, `principal`, and the seeded `academicAdmin` seat.
  *
  * `vicePrincipal` is deliberately absent \u2014 a sitting Deputy Principal does
- * not get to appoint (or remove) another one, or themselves. Assigning the
- * `principal` position itself is narrower still: `assign-position.ts` and
- * `remove-position.ts` refuse it from `academicAdmin` in the handler, since
- * handing someone the Principal's own seat is not the academic desk's
- * decision to make about the person it reports to.
+ * not get to appoint (or remove) another one, or themselves. The leadership
+ * positions are narrower still: `assertMayManagePosition` refuses them to
+ * `academicAdmin` in the handler, because a leadership position promotes the
+ * holder into `ADMIN_ROLES`, above the academic desk, and the desk also
+ * creates staff and receives their initial password (Z2).
  */
 export const positionManagerProcedure = publicProcedure.use(
   requireRole("admin", "principal", "academicAdmin")

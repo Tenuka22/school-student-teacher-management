@@ -39,8 +39,8 @@ export type PositionType = keyof typeof POSITION_TYPES;
  * `leadershipRoleForPosition`) on assignment, and demoted back to `teacher`
  * when the last one is removed. Any number of staff may hold `vicePrincipal`
  * or `assistantPrincipal` in the same year \u2014 assigned manually by the
- * Administrator, the Principal, or the Academic Administrator via
- * `assignPosition`.
+ * Administrator or the Principal via `assignPosition`. The Academic
+ * Administrator may not assign these (`assertMayManagePosition`).
  */
 export const LEADERSHIP_POSITION_KEYS: ReadonlySet<string> = new Set([
   "principal",

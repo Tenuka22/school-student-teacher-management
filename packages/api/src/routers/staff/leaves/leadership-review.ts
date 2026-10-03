@@ -182,8 +182,8 @@ const PRINCIPAL_POSITIONS = new Set(["principal"]);
  * nowhere else to get it from. **The Deputy Principal has no such
  * shortcut.** There is no seeded deputy-principal account any more: a
  * Deputy is a real member of staff holding a current-year `vicePrincipal` or
- * `assistantPrincipal` `staffPosition` row, assigned by the Administrator,
- * the Principal, or the Academic Administrator (see `assignPosition`). This
+ * `assistantPrincipal` `staffPosition` row, assigned by the Administrator
+ * or the Principal (see `assignPosition`). This
  * also means any number of staff can hold the position at once \u2014
  * `isDeputy` is computed per caller from their own position rows, not from a
  * single global seat.
@@ -278,6 +278,16 @@ export const recommendLeave = protectedProcedure
 
     if (!record) {
       throw new ORPCError("NOT_FOUND", { message: "Leave request not found" });
+    }
+
+    // A recommendation is a second person's judgement (Z3). A Deputy who is
+    // also a teacher files leave like anyone else; another Deputy, or the
+    // Principal directly, decides it.
+    if (authority.staffId !== null && record.staffId === authority.staffId) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "You cannot recommend your own leave request; another Deputy or the Principal decides it",
+      });
     }
 
     if (record.finalizedAt) {

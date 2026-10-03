@@ -1,4 +1,5 @@
 import { isSeededAccount } from "@school-student-teacher-management/auth/roles";
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from "@school-student-teacher-management/db/schema/primitives";
 import {
   Dialog,
   DialogContent,
@@ -7,6 +8,7 @@ import {
   DialogTitle,
 } from "@school-student-teacher-management/ui/components/dialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -76,6 +78,10 @@ const Field = ({
  *
  * The email route is deliberately only offered to a signed-in member: it
  * changes *this* account, and the code proves control of the address on file.
+ *
+ * Either route ends the account's other sessions on the server (A1). A
+ * change keeps this device signed in with a fresh session; a reset by code
+ * ends this session too, so the dialog sends the person to sign in again.
  */
 export const PasswordDialog = ({
   open,
@@ -84,6 +90,7 @@ export const PasswordDialog = ({
   username,
 }: PasswordDialogProps) => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("current-password");
   const [currentPassword, setCurrentPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -158,8 +165,12 @@ export const PasswordDialog = ({
         throw new Error("New passwords do not match");
       }
 
-      if (newPassword.length < 8) {
-        throw new Error("New password must be at least 8 characters");
+      // The server's floor (better-auth `minPasswordLength`) is the same
+      // constant; this only saves a round trip.
+      if (newPassword.length < ACCOUNT_PASSWORD_MIN_LENGTH) {
+        throw new Error(
+          `New password must be at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`
+        );
       }
 
       if (mode === "current-password") {
@@ -171,37 +182,34 @@ export const PasswordDialog = ({
         if (changeError) {
           throw new Error(changeError.message ?? "Could not change password");
         }
-        return;
+        return "changed" as const;
       }
 
-      // Prove the code, then set the new password as this signed-in user.
-      const { error: otpError } =
-        await authClient.emailOtp.checkVerificationOtp({
-          email,
-          otp,
-          type: "forget-password",
-        });
-
-      if (otpError) {
-        throw new Error(otpError.message ?? "That code is not valid");
-      }
-
-      const { error: changeError } = await authClient.changePassword({
-        newPassword,
-        // Better Auth allows omitting the current password when the caller
-        // has just proved control of the address.
-        currentPassword: "",
+      // The code is the proof. This used to check the code and then call
+      // `changePassword` with an empty current password, which better-auth
+      // verifies against the stored hash, so the route could never succeed.
+      const { error: resetError } = await authClient.emailOtp.resetPassword({
+        email,
+        otp,
+        password: newPassword,
       });
 
-      if (changeError) {
-        throw new Error(changeError.message ?? "Could not change password");
+      if (resetError) {
+        throw new Error(resetError.message ?? "Could not reset password");
       }
+      return "reset" as const;
     },
-    onSuccess: () => {
+    onSuccess: async (outcome) => {
       codeCooldown.clear();
-      toast.success("Password changed");
       reset();
       onOpenChange(false);
+      if (outcome === "reset") {
+        toast.success("Password reset. Sign in with your new password.");
+        await queryClient.invalidateQueries({ queryKey: ["auth"] });
+        await navigate({ to: "/login" });
+        return;
+      }
+      toast.success("Password changed. Other devices have been signed out.");
     },
     onError: (changeError: Error) => {
       setError(changeError.message);
@@ -329,7 +337,7 @@ export const PasswordDialog = ({
                 id="new-password"
                 type="password"
                 required
-                minLength={8}
+                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
@@ -342,7 +350,7 @@ export const PasswordDialog = ({
                 id="confirm-new-password"
                 type="password"
                 required
-                minLength={8}
+                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}

@@ -5,7 +5,7 @@ How to deploy, upgrade, back up and look after this system. Written after the Oc
 ## Runtime and tools
 
 - **Bun 1.4.0** exactly (`.bun-version`, `packageManager`). The lockfile is version 2 and older Bun cannot read it. If your installed Bun is older and you do not want to upgrade it globally, `npx -y bun@1.4.0 install --frozen-lockfile` runs the pinned version once.
-- PostgreSQL 17 or 18. MinIO (or any S3) for item photos.
+- PostgreSQL 17 or 18. Item photos are stored in PostgreSQL (`files.data`) since migration 0011; MinIO is no longer used.
 - `apps/web/.env` from `apps/web/.env.example`. Every secret ships blank.
 
 ## Setting up a fresh environment
@@ -41,6 +41,57 @@ bun run db:migrate
 
 The development database `school-student-teacher-management-v2` matched `0000..0007` exactly on 1 October 2026, and every pre-flight of 0008–0010 passed against it (no open loans, one current year, no invalid leave or timetable rows). It was **not** upgraded during the repair; back it up and run the three commands above.
 
+## Migration 0011: photos from MinIO into PostgreSQL
+
+0011 replaces `files.key` (a MinIO object key) with `files.data` (the bytes). It refuses, with a count and **without changing anything**, while any `files` row has no bytes or bytes whose length differs from its recorded `size`. An empty `files` table migrates straight through. With photos in it:
+
+1. Back up the database **and** the MinIO bucket.
+2. Put the old object-store settings in a **separate** file, not `apps/web/.env`. Leftover `MINIO_*` lines in `apps/web/.env` are undeclared since 203f827, and varlock's leak scanner then aborts any response that happens to contain one of their values (e.g. `MINIO_USE_SSL=false`), which breaks pages in production. Remove them from `apps/web/.env`.
+3. Dry run, then copy:
+   ```sh
+   bun --env-file=apps/web/.env --env-file=minio.env scripts/backfill-file-bytes.ts
+   bun --env-file=apps/web/.env --env-file=minio.env scripts/backfill-file-bytes.ts --apply
+   ```
+   The script adds `files.data` as a nullable column, copies each object whose length matches the row, never overwrites bytes already copied and never deletes anything. It lists every row it could not fill and exits 1.
+4. For each listed row decide by hand: find the object and re-run, or (only if the photo is truly gone) delete that `files` row and clear any `inventory_item` photo that points at it.
+5. `bun run db:migrate`. If interrupted at any point, re-run from step 3: every step is idempotent and 0011 is all-or-nothing.
+
+## Database roles
+
+The app must not connect as a superuser (D1). One-time setup, as a superuser:
+
+```sql
+CREATE ROLE sms_owner LOGIN PASSWORD '<generated>';   -- migrations
+CREATE ROLE sms_app   LOGIN PASSWORD '<generated>';   -- the server
+CREATE ROLE sms_backup LOGIN PASSWORD '<generated>';  -- optional: pg_dump only
+GRANT pg_read_all_data TO sms_backup;
+ALTER DATABASE "<db>" OWNER TO sms_owner;
+-- then, for an existing database, as a superuser:
+REASSIGN OWNED BY postgres TO sms_owner;   -- run inside <db> only
+```
+
+Then, connected as `sms_owner`:
+
+```sh
+MIGRATION_DATABASE_URL=postgres://sms_owner:…@host/db bun run db:migrate
+MIGRATION_DATABASE_URL=postgres://sms_owner:…@host/db bun scripts/db-roles.ts --app sms_app --apply
+```
+
+Set `DATABASE_URL` to `sms_app` and `MIGRATION_DATABASE_URL` to `sms_owner`; `scripts/migrate.mjs` uses the latter. `sms_app` gets row access only: no DDL, no `TRUNCATE`, no access to the migration ledger, and `account_audit_log` is insert/select only. `packages/api/test/least-privilege.test.ts` runs the app this way. `REASSIGN OWNED` has not been exercised on a populated database here; try it on a restored copy first.
+
+## Rotating secrets
+
+Never paste a secret into chat, a ticket or a commit. Generate with `openssl rand -base64 48`.
+
+| Secret | How | Consequence |
+| --- | --- | --- |
+| `BETTER_AUTH_SECRET` | Change it in the environment and restart. | Session cookies are signed with it: **every user is signed out** and must sign in again (verified by `security-remediation.test.ts`). Pending email-verification links stop working. Then `DELETE FROM session;` as the owner to remove the now-useless rows. |
+| Seat passwords | `scripts/rotate-seat-password.ts <username>` (below). | That seat is signed out everywhere. |
+| Database passwords | `ALTER ROLE sms_app PASSWORD '…'`, update `DATABASE_URL`, restart; same for `sms_owner`. | Brief outage between the two steps. |
+| `RESEND_API_KEY` | Create a new key in Resend, update the env, restart, revoke the old key. | None if done in that order. |
+
+The development secrets shared in a chat session in September 2026 must be treated as public: rotate all of the above for any environment that ever used them.
+
 ## Backups and restore
 
 Nothing in the repository schedules backups; the deployment must.
@@ -53,7 +104,7 @@ createdb sams_restore
 pg_restore --no-owner --dbname=sams_restore sams-YYYY-MM-DD.dump
 ```
 
-Back up the MinIO bucket (`mc mirror local/<bucket> <backup-target>`) on the same schedule: `files` rows point at its objects. Test a restore at least once a term; a backup never restored is a hope, not a backup.
+Item photos are in the database since migration 0011, so the dump above includes them. Test a restore at least once a term; a backup never restored is a hope, not a backup.
 
 ## Seeded seats and passwords
 
@@ -67,7 +118,7 @@ Sign-in codes, verification, password reset and teacher self-registration need m
 
 ## Logs
 
-Every API error is one JSON line: `level`, `time`, `requestId`, `userId`, `path`, and for database errors only the SQLSTATE and constraint — never the SQL or its parameters. The client receives the same `x-request-id` header, so a user can quote it. Account administration is recorded in the `account_audit_log` table (who, against whom, allowed or denied).
+Every API error is one JSON line: `level`, `time`, `requestId`, `userId`, `path`, and for database errors only the SQLSTATE and constraint — never the SQL or its parameters. The client receives the same `x-request-id` header, so a user can quote it. Account administration is recorded in the `account_audit_log` table (who, against whom, allowed or denied), and so are the privileged procedures (`action` = `rpc:staff.updateStaff` etc., listed in `packages/api/src/lib/audit.ts`), including refused calls. `detail` carries the target id, the request id and, on failure, the error code — never the submitted values.
 
 ## Inventory integrity
 
@@ -81,7 +132,14 @@ Read-only. Exits 1 and lists every item whose stored quantity differs from the s
 
 This app is built for one server process. These are held in process memory and are therefore **per instance**: better-auth's rate limiter, the sign-up rate limiter (`packages/api/src/lib/rate-limit.ts`), the OTP send throttle and the inventory event publisher. Running several instances multiplies the limits by the instance count and splits live events. Move them to PostgreSQL or Redis before scaling out.
 
-Behind a reverse proxy, configure it to set `X-Forwarded-For` and configure better-auth's `advanced.ipAddress` so its rate limiter can tell clients apart; without that, better-auth logs that it falls back to one shared bucket.
+## Network: TLS, proxy and client addresses
+
+Intended topology: Internet → TLS-terminating reverse proxy (nginx, Caddy) → the app on a private port → PostgreSQL on a private network. The app port must not be reachable except from the proxy.
+
+- **Public origin.** Set `BETTER_AUTH_URL` to the `https://` address users type. HSTS and `upgrade-insecure-requests` are sent only when it is `https://` and `NODE_ENV=production` (`apps/web/src/lib/security-headers.ts`).
+- **Client address.** `TRUSTED_PROXY_HOPS` is the number of proxies you run in front of the app. With 0 (the default) `X-Forwarded-For` is ignored and the socket address is used. With one proxy, set it to 1 and make the proxy **overwrite** the header with the peer address (`proxy_set_header X-Forwarded-For $remote_addr;` in nginx), which is also the only form better-auth's own rate limiter trusts (it accepts a single-entry header).
+- **Body sizes.** The app refuses RPC bodies over 8 MB, auth bodies over 64 KB and photo uploads over 8 MB itself; set the proxy's limit (`client_max_body_size 9m`) to match so large bodies are refused before they are buffered.
+- These were reasoned from the code, not tested through a real proxy: no proxy was available during the remediation.
 
 ## Time
 

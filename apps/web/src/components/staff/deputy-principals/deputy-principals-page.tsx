@@ -52,16 +52,21 @@ const DeputyPrincipalsSkeleton = () => (
  * member of staff holding a current-year `vicePrincipal` or
  * `assistantPrincipal` `staffPosition` row (see `packages/auth/src/admin.ts`
  * and `resolveAuthority` in `leadership-review.ts`). Any number of staff may
- * hold either seat at once, and each is assigned here by the Administrator,
- * the Principal, or the Academic Administrator — the three roles
- * `positionManagerProcedure` admits. A Deputy **recommends** leave; only the
+ * hold either seat at once, and each is assigned here by the Administrator
+ * or the Principal. The Academic Administrator sees the same roster read-only
+ * (`canManage={false}`): `assertMayManagePosition` refuses it the leadership
+ * positions, because appointing a Deputy promotes the holder above the
+ * academic desk (Z2). A Deputy **recommends** leave; only the
  * Principal **finalises** it (`recommendLeave` / `finalizeLeave`) — assigning
  * the position here does not change that split.
  */
 export const DeputyPrincipalsPage = ({
   academicYear,
+  canManage = true,
 }: {
   academicYear: number;
+  /** False renders the roster without assign/remove controls. */
+  canManage?: boolean;
 }) => {
   const queryClient = useQueryClient();
 
@@ -204,7 +209,7 @@ export const DeputyPrincipalsPage = ({
       <DeputyTable
         academicYear={academicYear}
         deputies={deputies}
-        onRemove={setRemoveTarget}
+        onRemove={canManage ? setRemoveTarget : undefined}
         staffById={staffById}
       />
     );
@@ -220,16 +225,21 @@ export const DeputyPrincipalsPage = ({
               Who holds leave-review authority for {academicYear}. A Deputy or
               Assistant Principal recommends a leave request; only the Principal
               finalises it. Any number of staff may hold either seat.
+              {canManage
+                ? ""
+                : " Only the Administrator or the Principal may change who holds these positions."}
             </CardDescription>
           </div>
-          <Button
-            disabled={!year?.id}
-            onClick={() => setAssignOpen(true)}
-            type="button"
-          >
-            <IconUserPlus aria-hidden="true" />
-            Assign deputy
-          </Button>
+          {canManage ? (
+            <Button
+              disabled={!year?.id}
+              onClick={() => setAssignOpen(true)}
+              type="button"
+            >
+              <IconUserPlus aria-hidden="true" />
+              Assign deputy
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent>{body()}</CardContent>
       </Card>

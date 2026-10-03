@@ -6,7 +6,9 @@ import { orpc } from "@/utils/orpc";
 
 const DeputyPrincipalsRoute = () => {
   const { year } = Route.useParams();
-  return <DeputyPrincipalsPage academicYear={Number(year)} />;
+  // Read-only here: leadership positions are the Administrator's or the
+  // Principal's to assign (`assertMayManagePosition`, Z2).
+  return <DeputyPrincipalsPage academicYear={Number(year)} canManage={false} />;
 };
 
 export const Route = createFileRoute(

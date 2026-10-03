@@ -12,10 +12,7 @@ import * as v from "valibot";
 
 import { publicProcedure } from "../../index";
 import { isUniqueViolation, pgErrorOf } from "../../lib/db-errors";
-import {
-  clientAddressOf,
-  createFixedWindowLimiter,
-} from "../../lib/rate-limit";
+import { createFixedWindowLimiter } from "../../lib/rate-limit";
 
 const nicSchema = v.pipe(
   v.string(),
@@ -100,9 +97,9 @@ export const resetSignupRateLimits = () => {
   SIGNUPS_OVERALL.reset();
 };
 
-const assertSignupAllowed = (headers: Headers | undefined) => {
+const assertSignupAllowed = (clientAddress: string | undefined) => {
   const wait = Math.max(
-    SIGNUPS_PER_ADDRESS.hit(clientAddressOf(headers)),
+    SIGNUPS_PER_ADDRESS.hit(clientAddress ?? "unknown"),
     SIGNUPS_OVERALL.hit("all")
   );
   if (wait > 0) {
@@ -115,7 +112,7 @@ const assertSignupAllowed = (headers: Headers | undefined) => {
 export const signupStaff = publicProcedure
   .input(v.variant("accountType", [teacherSignupSchema, userSignupSchema]))
   .handler(async ({ input, context }) => {
-    assertSignupAllowed(context.headers);
+    assertSignupAllowed(context.clientAddress);
     const email = input.email.toLowerCase();
 
     const [existingEmail] = await context.db

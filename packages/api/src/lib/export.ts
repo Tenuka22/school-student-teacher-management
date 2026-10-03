@@ -144,6 +144,21 @@ const toExportFilename = (
   return base.toLowerCase().endsWith(extension) ? base : `${base}${extension}`;
 };
 
+/**
+ * Text a spreadsheet may read as a formula: `=`, `+`, `-`, `@`, or a leading
+ * tab or carriage return (I1).
+ *
+ * exceljs writes every JS string as a shared-string cell, never a formula, so
+ * opening an export executes nothing. What it does not stop is Excel turning
+ * the text into a live formula when someone edits the cell, or when the sheet
+ * is re-saved as CSV and opened again. Such cells get the Text number format,
+ * which keeps the value exactly as typed and keeps it text on edit. The usual
+ * alternative — prefixing an apostrophe — would change the data itself, and
+ * every phone number here starts with `+94`.
+ */
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/u;
+const TEXT_NUMBER_FORMAT = "@";
+
 /** Builds a real .xlsx workbook (one worksheet per entry) and returns it base64-encoded. */
 export const buildExcelExport = async (
   filename: string,
@@ -165,7 +180,16 @@ export const buildExcelExport = async (
     }));
     worksheet.getRow(1).font = { bold: true };
     for (const row of sheet.rows) {
-      worksheet.addRow(row);
+      const added = worksheet.addRow(row);
+      // oxlint-disable-next-line unicorn/no-array-for-each -- exceljs exposes no iterator over a row's cells
+      added.eachCell((cell) => {
+        if (
+          typeof cell.value === "string" &&
+          FORMULA_TRIGGER.test(cell.value)
+        ) {
+          cell.numFmt = TEXT_NUMBER_FORMAT;
+        }
+      });
     }
   }
 

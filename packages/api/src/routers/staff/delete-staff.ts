@@ -1,9 +1,5 @@
 import { ORPCError } from "@orpc/server";
 import {
-  isPrivilegedRole,
-  isSeededAccount,
-} from "@school-student-teacher-management/auth/roles";
-import {
   class_,
   classTeacherAssignmentHistory,
 } from "@school-student-teacher-management/db/schema/academics";
@@ -37,9 +33,7 @@ import { and, eq, ne, or } from "drizzle-orm";
 import * as v from "valibot";
 
 import { requireStaffPermission } from "../../index";
-
-/** `ensureBootstrapAccount` gives every seeded seat this id prefix. */
-const SEEDED_STAFF_ID_PREFIX = "seed-staff-";
+import { staffProtectionOf } from "../../lib/staff-protection";
 
 export const deleteStaff = requireStaffPermission("delete")
   .input(v.object({ id: staffIdSchema }))
@@ -67,23 +61,17 @@ export const deleteStaff = requireStaffPermission("delete")
 
       // The seeded seats are configuration, not people: deleting one removes
       // the login it is linked to, including the top administrator's (F-15).
-      if (existing.id.startsWith(SEEDED_STAFF_ID_PREFIX)) {
+      const protection = await staffProtectionOf(db, existing);
+      if (protection.isSeededSeat) {
         throw new ORPCError("FORBIDDEN", {
           message: "The seeded institutional accounts cannot be deleted",
         });
       }
-      if (existing.userId) {
-        const [login] = await db
-          .select({ role: user.role, username: user.username })
-          .from(user)
-          .where(eq(user.id, existing.userId))
-          .limit(1);
-        if (isPrivilegedRole(login?.role) || isSeededAccount(login?.username)) {
-          throw new ORPCError("FORBIDDEN", {
-            message:
-              "This staff member holds an administrative login; remove the role before deleting the record",
-          });
-        }
+      if (protection.holdsAdministrativeLogin) {
+        throw new ORPCError("FORBIDDEN", {
+          message:
+            "This staff member holds an administrative login; remove the role before deleting the record",
+        });
       }
 
       const probes = [

@@ -39,12 +39,6 @@ env:
   ACADEMIC_ADMIN_NAME: Academic Administrator
   LEAVE_ADMIN_PASSWORD: ci-placeholder-leave-1
   LEAVE_ADMIN_NAME: Leave Administrator
-  MINIO_ENDPOINT: localhost
-  MINIO_PORT: "9000"
-  MINIO_USE_SSL: "false"
-  MINIO_ACCESS_KEY: ci-placeholder
-  MINIO_SECRET_KEY: ci-placeholder
-  MINIO_BUCKET: ci
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

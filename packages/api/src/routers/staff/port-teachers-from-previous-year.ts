@@ -1,3 +1,4 @@
+import { leadershipRoleForPosition } from "@school-student-teacher-management/auth";
 import {
   academicYear,
   academicYearIdSchema,
@@ -30,7 +31,7 @@ export const portTeachersFromPreviousYear = academicProcedure
       .where(eq(academicYear.id, input.toAcademicYearId));
 
     if (!targetYear) {
-      return { ported: 0, skipped: 0 };
+      return { ported: 0, skipped: 0, skippedLeadership: 0 };
     }
 
     const [previousYear] = await context.db
@@ -41,7 +42,7 @@ export const portTeachersFromPreviousYear = academicProcedure
       .limit(1);
 
     if (!previousYear) {
-      return { ported: 0, skipped: 0 };
+      return { ported: 0, skipped: 0, skippedLeadership: 0 };
     }
 
     const excludeSet = new Set<string>(input.excludeStaffIds);
@@ -51,7 +52,22 @@ export const portTeachersFromPreviousYear = academicProcedure
       .from(staffPosition)
       .where(eq(staffPosition.academicYearId, previousYear.id));
 
-    const toPort = previousPositions.filter((p) => !excludeSet.has(p.staffId));
+    // Leadership positions promote their holder into `ADMIN_ROLES` once the
+    // year is current, so they carry over only for the Administrator or the
+    // Principal — the same rule as `assignPosition` (Z2). Without this the
+    // academic desk could re-appoint a Deputy the Principal had removed.
+    const mayPortLeadership = ["admin", "principal"].includes(
+      context.session.user.role ?? ""
+    );
+    const notExcluded = previousPositions.filter(
+      (p) => !excludeSet.has(p.staffId)
+    );
+    const toPort = mayPortLeadership
+      ? notExcluded
+      : notExcluded.filter(
+          (p) => leadershipRoleForPosition(p.position) === null
+        );
+    const skippedLeadership = notExcluded.length - toPort.length;
 
     const existingTarget = await context.db
       .select({
@@ -90,5 +106,6 @@ export const portTeachersFromPreviousYear = academicProcedure
     return {
       ported: rowsToInsert.length,
       skipped: toPort.length - rowsToInsert.length,
+      skippedLeadership,
     };
   });

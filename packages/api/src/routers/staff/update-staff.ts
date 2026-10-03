@@ -11,6 +11,7 @@ import { pick } from "valibot";
 
 import { requireStaffPermission } from "../../index";
 import { isUniqueViolation } from "../../lib/db-errors";
+import { staffProtectionOf } from "../../lib/staff-protection";
 
 const EDITABLE_STAFF_FIELDS = [
   "name",
@@ -59,6 +60,31 @@ export const updateStaff = requireStaffPermission("update")
     }
 
     /**
+     * An administrative login is administered by `admin` alone (Z1). The
+     * `staff` grant reaches the Academic Administrator and, through the
+     * `ADMIN_ROLES` bypass, the leadership seats; without this check any of
+     * them could rewrite the top administrator's NIC and with it the login
+     * username, locking the seat out. Same target rule as `adminEndpointGuard`.
+     */
+    const protection = await staffProtectionOf(context.db, existing);
+    if (
+      protection.holdsAdministrativeLogin &&
+      context.session.user.role !== "admin"
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "This staff member holds an administrative login; only the Administrator may edit the record",
+      });
+    }
+    // A seeded seat signs in with a fixed username and carries a placeholder
+    // NIC; changing the NIC would rename the login out from under the seat.
+    if (protection.isSeededSeat && input.nic !== existing.nic) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "The NIC of a seeded institutional account cannot be changed",
+      });
+    }
+
+    /**
      * There used to be a guard here: "A NIC cannot be removed while the staff
      * account is linked". It was guarding against `staff.nic` being nullable, and
      * the column is `NOT NULL` now — a member of staff has an identity whether
@@ -83,7 +109,14 @@ export const updateStaff = requireStaffPermission("update")
     let record: typeof staff.$inferSelect | undefined;
     try {
       record = await context.db.transaction(async (tx) => {
-        if (existing.userId && typeof input.nic === "string") {
+        // Only a changed NIC moves the login: `nic` is required on every
+        // update, so keying on its presence rewrote the username of every
+        // record saved, and a seeded seat's fixed username with it.
+        if (
+          existing.userId &&
+          typeof input.nic === "string" &&
+          input.nic !== existing.nic
+        ) {
           const nextUsername = usernameForNic(input.nic);
           const [usernameOwner] = await tx
             .select({ id: user.id })

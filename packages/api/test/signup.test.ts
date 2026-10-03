@@ -36,7 +36,7 @@ const anonymousFrom = (address: string) =>
       db: harness.db,
       auth: harness.auth,
       session: null,
-      headers: new Headers({ "x-forwarded-for": address }),
+      clientAddress: address,
     },
   });
 

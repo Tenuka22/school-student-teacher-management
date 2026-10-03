@@ -22,7 +22,8 @@ interface DeputyTableProps {
   academicYear: number;
   deputies: DeputyAssignment[];
   staffById: Map<string, StaffLite>;
-  onRemove: (assignment: DeputyAssignment) => void;
+  /** Omitted for a read-only roster: no Actions column is rendered. */
+  onRemove?: (assignment: DeputyAssignment) => void;
 }
 
 /** The current-year holders of the Deputy/Assistant Principal seats. */
@@ -37,8 +38,8 @@ export const DeputyTable = ({
       <Empty className="border border-dashed">
         <EmptyTitle>No deputy or assistant principal yet</EmptyTitle>
         <EmptyDescription>
-          Nobody holds a leave-review seat for {academicYear}. Assign one to
-          start the recommend/finalise chain.
+          Nobody holds a leave-review seat for {academicYear}.
+          {onRemove ? " Assign one to start the recommend/finalise chain." : ""}
         </EmptyDescription>
       </Empty>
     );
@@ -50,9 +51,11 @@ export const DeputyTable = ({
         <TableRow>
           <TableHead scope="col">Staff member</TableHead>
           <TableHead scope="col">Position</TableHead>
-          <TableHead className="text-right" scope="col">
-            Actions
-          </TableHead>
+          {onRemove ? (
+            <TableHead className="text-right" scope="col">
+              Actions
+            </TableHead>
+          ) : null}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -76,17 +79,19 @@ export const DeputyTable = ({
               <TableCell>
                 <Badge variant="secondary">{label}</Badge>
               </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  aria-label={`Remove ${member?.name ?? "this staff member"} as ${label}`}
-                  onClick={() => onRemove(row)}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <IconX aria-hidden="true" />
-                </Button>
-              </TableCell>
+              {onRemove ? (
+                <TableCell className="text-right">
+                  <Button
+                    aria-label={`Remove ${member?.name ?? "this staff member"} as ${label}`}
+                    onClick={() => onRemove(row)}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <IconX aria-hidden="true" />
+                  </Button>
+                </TableCell>
+              ) : null}
             </TableRow>
           );
         })}

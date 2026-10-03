@@ -9,6 +9,10 @@ import { appRouter } from "@school-student-teacher-management/api/routers/index"
 import { createFileRoute } from "@tanstack/react-router";
 
 import { createContext } from "../../../context";
+import {
+  MAX_RPC_BODY_BYTES,
+  refuseOversizedBody,
+} from "../../../lib/request-limits";
 
 /**
  * Errors are logged as one structured line each, keyed by the request id the
@@ -68,6 +72,10 @@ const withRequestId = (response: Response, requestId: string) => {
 
 const handle = async ({ request }: { request: Request }) => {
   const requestId = crypto.randomUUID();
+  const refused = refuseOversizedBody(request, MAX_RPC_BODY_BYTES);
+  if (refused) {
+    return withRequestId(refused, requestId);
+  }
   // One context per request: it used to be built twice for every reference
   // request (two session lookups).
   const context: ApiContext = {

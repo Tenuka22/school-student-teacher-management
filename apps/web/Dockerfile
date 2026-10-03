@@ -24,6 +24,12 @@ EXPOSE 3001
 
 # SSR chunks require workspace dependencies at runtime
 WORKDIR /app/apps/web
+# The server ran as root (INFRA1). `node` is the unprivileged user the base
+# image ships; the copied tree stays root-owned, so the process can read the
+# app but not rewrite it. Nothing writes to the filesystem at runtime: photos
+# live in Postgres. Untested here (no Docker on the remediation machine) —
+# build and start the image once before relying on it.
+USER node
 # Migrate, then serve. A failed migration stops the container instead of
 # starting a release against the wrong schema.
 CMD ["sh", "-c", "node /app/scripts/migrate.mjs && exec node .output/server/index.mjs"]

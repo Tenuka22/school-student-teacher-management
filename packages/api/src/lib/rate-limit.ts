@@ -65,10 +65,38 @@ export const createFixedWindowLimiter = (
   };
 };
 
-/** The client address as the request reports it; `"unknown"` when absent. */
+/**
+ * The client's address, trusting `X-Forwarded-For` only as far as the
+ * deployment's own proxies wrote it (INFRA2).
+ *
+ * This used to take the **leftmost** `X-Forwarded-For` entry — the one the
+ * client itself supplies — so a script could send a fresh value with every
+ * request and never meet the per-address sign-up limit.
+ *
+ * - `trustedProxyHops: 0` (the default, and the right value when nothing sits
+ *   in front of the server): the headers are ignored and the socket's peer
+ *   address is the client.
+ * - `trustedProxyHops: N`: there are exactly N proxies we run in front of the
+ *   app, each appending the address it received from. The client is the
+ *   address the outermost of them saw: the Nth entry from the right. Entries
+ *   further left were written by the client and are ignored. A request with
+ *   fewer than N entries did not come through the proxies; its socket address
+ *   is used instead.
+ */
 export const clientAddressOf = (
-  headers: Headers | null | undefined
+  headers: Headers | null | undefined,
+  {
+    socketAddress,
+    trustedProxyHops = 0,
+  }: { socketAddress?: string | null; trustedProxyHops?: number } = {}
 ): string => {
-  const forwarded = headers?.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || headers?.get("x-real-ip")?.trim() || "unknown";
+  const fallback = socketAddress?.trim() || "unknown";
+  if (trustedProxyHops <= 0) {
+    return fallback;
+  }
+  const entries = (headers?.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return entries.at(-trustedProxyHops) ?? fallback;
 };

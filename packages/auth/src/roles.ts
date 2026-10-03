@@ -114,6 +114,18 @@ export const isSeededAccount = (username: string | null | undefined): boolean =>
     (username ?? "").toLowerCase() as (typeof SEEDED_USERNAMES)[number]
   );
 
+/**
+ * `ensureBootstrapAccount` gives every seeded seat's `staff` row this id
+ * prefix (`seed-staff-admin`, …). The row is configuration, not a person: its
+ * NIC is a placeholder and its login username is fixed, so the staff
+ * procedures refuse to delete it or rewrite its identity.
+ */
+export const SEEDED_STAFF_ID_PREFIX = "seed-staff-";
+
+/** True for a seeded seat's `staff.id` (see `SEEDED_STAFF_ID_PREFIX`). */
+export const isSeededStaffId = (staffId: string | null | undefined): boolean =>
+  (staffId ?? "").startsWith(SEEDED_STAFF_ID_PREFIX);
+
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 export type LeadershipRole = (typeof LEADERSHIP_ROLES)[number];
 export type StaffRole = (typeof STAFF_ROLES)[number];

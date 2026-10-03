@@ -5,6 +5,8 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
+import { BASE_SECURITY_HEADERS } from "./src/lib/security-headers";
+
 export default defineConfig({
   server: {
     port: 3001,
@@ -33,6 +35,12 @@ export default defineConfig({
     tanstackStart(),
     nitro({
       preset: "node-server",
+      // Static assets never reach `server/middleware/security-headers.ts`
+      // (Nitro serves them first), so they get the environment-independent
+      // headers here. Everything else gets the full set from the middleware.
+      routeRules: {
+        "/**": { headers: { ...BASE_SECURITY_HEADERS } },
+      },
       // `serverDir` is where Nitro scans for tasks; nothing is scanned without
       // it, so the scheduled sweep below would silently never run.
       serverDir: "./server",

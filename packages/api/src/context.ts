@@ -38,6 +38,11 @@ export interface Context {
    * SSR loaders and tests.
    */
   headers?: Headers;
+  /**
+   * The caller's address as the deployment trusts it (`clientAddressOf`,
+   * honouring `TRUSTED_PROXY_HOPS`). Absent for in-process calls.
+   */
+  clientAddress?: string;
   /** Correlates log lines with the `x-request-id` response header. */
   requestId?: string;
 }

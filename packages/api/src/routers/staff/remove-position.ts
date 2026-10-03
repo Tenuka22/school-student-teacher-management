@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import * as v from "valibot";
 
 import { positionManagerProcedure } from "../../index";
+import { assertMayManagePosition } from "./position-authority";
 import { reconcilePositionDerivedRoles } from "./set-current-year";
 
 export const removePosition = positionManagerProcedure
@@ -26,15 +27,11 @@ export const removePosition = positionManagerProcedure
         });
       }
 
-      if (
-        existing.position === "principal" &&
-        context.session.user.role === "academicAdmin"
-      ) {
-        throw new ORPCError("FORBIDDEN", {
-          message:
-            "Only the Administrator or Principal may remove the Principal position.",
-        });
-      }
+      assertMayManagePosition(
+        context.session.user.role,
+        existing.position,
+        "remove"
+      );
 
       const [targetYear] = await tx
         .select({

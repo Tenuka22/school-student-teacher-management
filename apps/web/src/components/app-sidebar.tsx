@@ -637,8 +637,9 @@ const useSidebarNav = (user: AppSidebarProps["user"]) => {
       ? [{ title: "Teacher Requests", url: principal("teacher-requests") }]
       : []),
     // Assigning the Deputy/Assistant Principal `staffPosition` is the
-    // Administrator's, the Academic Administrator's, or the Principal's call
-    // (`positionManagerProcedure`) \u2014 not the sitting Deputy's own, so this
+    // Administrator's or the Principal's call (`assertMayManagePosition`;
+    // the Academic Administrator sees the roster read-only) \u2014 not the
+    // sitting Deputy's own, so this
     // entry is Principal-only, same gate as Teacher Requests above.
     ...(isPrincipal
       ? [

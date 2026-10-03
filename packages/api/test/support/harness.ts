@@ -48,7 +48,8 @@ export const TEST_PASSWORDS = {
 
 export type SeatUsername = keyof typeof TEST_PASSWORDS;
 
-const authConfig: AuthConfig = {
+/** The auth configuration every harness uses; exported for rotation tests. */
+export const TEST_AUTH_CONFIG: AuthConfig = {
   BETTER_AUTH_URL: BASE_URL,
   BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-0001",
   ADMIN_PASSWORD: TEST_PASSWORDS.admin,
@@ -91,8 +92,8 @@ export const createHarness = async (): Promise<Harness> => {
 
   const db = createDb({ DATABASE_URL: scratch.toString() } as never);
   await migrate(db, { migrationsFolder: MIGRATIONS });
-  const auth = createAuth(authConfig, db);
-  await ensureBootstrapUsers(db, authConfig);
+  const auth = createAuth(TEST_AUTH_CONFIG, db);
+  await ensureBootstrapUsers(db, TEST_AUTH_CONFIG);
   const sql = new Pool({ connectionString: scratch.toString(), max: 4 });
 
   return {

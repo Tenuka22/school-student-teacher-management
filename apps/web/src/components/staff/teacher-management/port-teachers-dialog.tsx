@@ -103,9 +103,21 @@ export const PortTeachersDialog = ({
       const result = (await portMutation.mutateAsync({
         toAcademicYearId: academicYearId,
         excludeStaffIds: [...excluded],
-      } as never)) as { ported: number; skipped: number };
+      } as never)) as {
+        ported: number;
+        skipped: number;
+        skippedLeadership: number;
+      };
 
       await queryClient.invalidateQueries();
+
+      // The academic desk does not carry Deputy or Principal positions over;
+      // say so rather than let them disappear silently.
+      if (result.skippedLeadership > 0) {
+        toast.info(
+          `${result.skippedLeadership} leadership position${plural(result.skippedLeadership)} (Deputy, Assistant Principal or Principal) were not carried over. The Administrator or the Principal assigns those.`
+        );
+      }
 
       if (result.ported === 0) {
         toast.info(

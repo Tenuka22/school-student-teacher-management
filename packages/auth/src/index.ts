@@ -1,5 +1,9 @@
 import type { Database } from "@school-student-teacher-management/db";
 import * as schema from "@school-student-teacher-management/db/schema/auth";
+import {
+  ACCOUNT_PASSWORD_MAX_LENGTH,
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+} from "@school-student-teacher-management/db/schema/primitives";
 import { betterAuth } from "better-auth";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -33,6 +37,7 @@ import {
   vicePrincipal,
 } from "./permissions";
 import { PRIVILEGED_ROLES, isPrivilegedRole } from "./roles";
+import { forceSessionRevocationOnPasswordChange } from "./session-revocation";
 
 export {
   academicAdmin,
@@ -162,6 +167,12 @@ const buildAuthOptions = (
     schema,
   }),
   trustedOrigins: [env.BETTER_AUTH_URL],
+  // The username plugin's availability probe answers, without a session,
+  // whether a username exists — and a staff username is the person's NIC
+  // (`usernameForNic`), so it was a NIC lookup open to anyone (A3). Nothing
+  // in the app calls it; `signupStaff` checks uniqueness itself, behind its
+  // rate limit.
+  disabledPaths: ["/is-username-available"],
   advanced: {
     cookiePrefix: AUTH_COOKIE_PREFIX,
   },
@@ -179,11 +190,27 @@ const buildAuthOptions = (
   // procedure, which validates NIC and staff details; better-auth's
   // `/sign-up/email` was a second, unvalidated door that nothing in the UI
   // used, so it is closed.
-  emailAndPassword: { enabled: true, disableSignUp: true },
+  //
+  // The length bounds are the ones `signupStaff` enforces (`accountPasswordSchema`),
+  // so a password change or reset cannot set a shorter password than sign-up
+  // accepts; better-auth's own default floor is 8 (A2). Sign-in does not check
+  // the length, so an existing shorter password still signs in.
+  //
+  // A password reset ends every session of the account (A1): the person who
+  // stole a session is exactly who a reset is meant to lock out. A password
+  // change does the same through `forceSessionRevocationOnPasswordChange`.
+  emailAndPassword: {
+    enabled: true,
+    disableSignUp: true,
+    minPasswordLength: ACCOUNT_PASSWORD_MIN_LENGTH,
+    maxPasswordLength: ACCOUNT_PASSWORD_MAX_LENGTH,
+    revokeSessionsOnPasswordReset: true,
+  },
   hooks: {
-    before: createAuthMiddleware((ctx) => {
+    before: createAuthMiddleware(async (ctx) => {
       mailAvailabilityGuard(ctx.path);
-      return adminEndpointGuard(ctx, database);
+      await adminEndpointGuard(ctx, database);
+      return forceSessionRevocationOnPasswordChange(ctx);
     }),
     after: createAuthMiddleware((ctx) =>
       recordAdminEndpointCall(ctx, database)
@@ -306,7 +333,13 @@ const buildAuthOptions = (
     // the extra session tokens in a multi-session cookie, so signing in as a
     // second account no longer signs the first one out.
     multiSession({ maximumSessions: 5 }),
-    username({ usernameValidator: isAllowedUsername }),
+    // A username is the person's NIC (`usernameForNic`) or a seat's fixed
+    // name, and `isSeededAccount` keys the seat protections on it. It used to
+    // be changeable by its owner through `/update-user`, so a seat could
+    // rename itself out of those protections and anyone could claim another
+    // person's NIC as their login. Only `updateStaff` renames a login now,
+    // by a direct write when an administrator corrects the NIC.
+    username({ usernameValidator: isAllowedUsername, immutableUsername: true }),
     tanstackStartCookies(),
   ],
 });

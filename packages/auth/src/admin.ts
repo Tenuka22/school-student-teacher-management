@@ -13,6 +13,7 @@ import { hashPassword } from "better-auth/crypto";
 import { and, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 
 import type { AuthConfig } from "./index";
+import { SEEDED_STAFF_ID_PREFIX } from "./roles";
 import { assertSeatPasswords } from "./seat-password-policy";
 
 /** Position key for the Principal's own seeded seat. */
@@ -286,8 +287,9 @@ interface EnsureBootstrapAccountConfig {
  * before inserting. This departs from that deliberately: the conflict target
  * here is `userId`, and a deterministic id is what makes "same person across
  * boots" a property of the data rather than of the order of two statements.
+ * The prefix itself lives in `./roles`, beside `isSeededAccount`, so the API's
+ * staff guards read the same value.
  */
-const SEEDED_STAFF_ID_PREFIX = "seed-staff-";
 
 /**
  * The category a seeded seat's `staff` row carries, and the reason the row stays

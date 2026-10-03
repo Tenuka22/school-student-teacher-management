@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { pick } from "valibot";
 
 import { positionManagerProcedure } from "../../index";
+import { assertMayManagePosition } from "./position-authority";
 import { reconcilePositionDerivedRoles } from "./set-current-year";
 
 export const assignPosition = positionManagerProcedure
@@ -20,15 +21,11 @@ export const assignPosition = positionManagerProcedure
     ])
   )
   .handler(async ({ input, context }) => {
-    if (
-      input.position === "principal" &&
-      context.session.user.role === "academicAdmin"
-    ) {
-      throw new ORPCError("FORBIDDEN", {
-        message:
-          "Only the Administrator or Principal may assign the Principal position.",
-      });
-    }
+    assertMayManagePosition(
+      context.session.user.role,
+      input.position,
+      "assign"
+    );
 
     /**
      * The position and the role it implies are written together or not at
